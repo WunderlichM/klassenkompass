@@ -88,6 +88,7 @@ function body(c) {
       <div class="card-head">
         <div><p class="eyebrow">Dein Raum</p><h2>${esc(layout.name)} <span class="badge">${present} anwesend</span></h2></div>
         <div class="tools no-print">
+          <button class="btn primary" data-act="mix">${icon('shuffle')} Neu mischen</button>
           <div class="seg" role="group" aria-label="Ansicht">
             <button class="${view === 'plan' ? 'on' : ''}" data-act="view" data-v="plan" title="Sitzplan">${icon('grid', 16)}</button>
             <button class="${view === 'list' ? 'on' : ''}" data-act="view" data-v="list" title="Gruppenliste">${icon('list', 16)}</button>
@@ -97,8 +98,8 @@ function body(c) {
         </div>
       </div>
       <p class="print-only print-title">${esc(c.name)} · ${esc(layout.name)} · ${new Date().toLocaleDateString('de-DE')}</p>
-      ${c.plan && !current ? `<p class="notice no-print">Anwesenheit oder Einstellungen wurden geändert. Verteile neu, damit der Plan passt.</p>` : ''}
-      <div class="room-wrap">${c.plan ? (view === 'plan' ? room(c) : groupList(c)) : `<div class="room-empty"><p>Noch keine Verteilung.</p><button class="btn primary" data-act="mix">${icon('shuffle')} Zufällig verteilen</button></div>`}</div>
+      ${c.plan && !current ? `<p class="notice no-print">Anwesenheit oder Einstellungen wurden geändert. Mische neu, damit der Plan passt.</p>` : ''}
+      <div class="room-wrap">${c.plan ? (view === 'plan' ? room(c) : groupList(c)) : `<div class="room-empty"><p>Noch keine Verteilung.</p></div>`}</div>
       ${c.plan ? `<p class="hint no-print">${icon('check', 14)} Die Farben zeigen die Gruppen – auch im Sitzplan.</p>` : ''}
     </div>
     <aside class="side no-print">
@@ -123,8 +124,8 @@ function body(c) {
       </div>
       <div class="card">
         <button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button>
+        <p class="muted small-text center">Alle Einstellungen werden automatisch gespeichert.</p>
       </div>
-      <div class="sticky-action"><button class="btn primary big full" data-act="mix">${icon('shuffle')} Zufällig verteilen</button><p class="muted small-text center">Alle Einstellungen werden automatisch gespeichert.</p></div>
     </aside>
   </div>`;
 }

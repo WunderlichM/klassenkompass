@@ -97,7 +97,6 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 /* Arbeitsbereich */
 .work-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
-.sticky-action { margin-top: 14px; } .sticky-action p { margin: 6px 0 0; }
 .student-list { list-style: none; margin: 10px 0 8px; padding: 0; max-height: 300px; overflow: auto; border-top: 1px solid var(--line); }
 .student-list li { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
 .student-list li.off .name { text-decoration: line-through; color: var(--muted); }
