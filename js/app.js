@@ -4,12 +4,14 @@ import { esc, icon, logo, dialog, confirmDialog, toast, downloadFile } from './u
 import * as technik from './technik.js';
 import * as sport from './sport.js';
 import * as screen from './screen.js';
+import * as quiz from './quiz.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
 
-export const VERSION = '1.5.0';
+export const VERSION = '1.6.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
+  quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
 
 let unmount = null, installEvent = null;
@@ -24,6 +26,7 @@ function shell() {
     <nav class="nav" aria-label="Bereiche">
       <a href="#/" data-route="">${icon('technik', 16)}<span>Technik</span></a>
       <a href="#/sport" data-route="sport">${icon('sport', 16)}<span>Sport</span></a>
+      <a href="#/quiz" data-route="quiz">${icon('cards', 16)}<span>Quiz</span></a>
       <a href="#/bildschirm" data-route="bildschirm">${icon('screen', 16)}<span>Bildschirm</span></a>
     </nav>
     <div class="top-tools">
@@ -57,7 +60,7 @@ function navigate() {
 function menuDialog() {
   const s = store.get(), size = new Blob([JSON.stringify(s)]).size;
   dialog({ title: 'Daten und Hilfe', submit: null, cancel: 'Schließen', body: `
-    <p class="muted">Alle Klassen, Sportgruppen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
+    <p class="muted">Alle Klassen, Sportgruppen, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
     <div class="menu-grid">
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
       ${sync.supported && account.status().state === 'off' ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
@@ -77,7 +80,7 @@ function menuDialog() {
       file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); importFile(f); };
       el.querySelector('[data-m=reset]').onclick = async () => {
         close();
-        if (!(await confirmDialog('Alles zurücksetzen', 'Alle Klassen, Sportgruppen, Turniere, Ranglisten und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
+        if (!(await confirmDialog('Alles zurücksetzen', 'Alle Klassen, Sportgruppen, Turniere, Ranglisten, Quizfragen und -ergebnisse und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
         store.replaceState(store.freshState()); navigate(); toast('Zurückgesetzt.');
       };
     } });
@@ -90,15 +93,15 @@ async function importFile(f) {
     incoming = store.parseImport(await f.text());
   } catch (e) { return toast('Import nicht möglich: ' + (e instanceof SyntaxError ? 'Die Datei ist keine gültige JSON-Datei.' : e.message), { kind: 'warn' }); }
   const nC = incoming.technik.classes.length, nG = incoming.sport.groups.length, nW = incoming.screen.widgets.length;
-  const hasDemoOnly = store.get().technik.classes.every(c => c.demo) && store.get().sport.groups.every(g => g.demo);
+  const hasDemoOnly = store.get().technik.classes.every(c => c.demo) && store.get().sport.groups.every(g => g.demo) && store.get().quiz.sets.every(t => t.demo) && store.get().quiz.classes.every(c => c.demo);
   dialog({ title: 'Daten importieren', submit: 'Importieren', body: `
-    <p>Gefunden: <b>${nC}</b> Klasse(n), <b>${nG}</b> Sportgruppe(n)${nW ? `, Bildschirm mit ${nW} Objekt(en)` : ''}.</p>
+    <p>Gefunden: <b>${nC}</b> Klasse(n), <b>${nG}</b> Sportgruppe(n)${incoming.quiz.sets.length ? `, ${incoming.quiz.sets.length} Fragensatz/-sätze` : ''}${nW ? `, Bildschirm mit ${nW} Objekt(en)` : ''}.</p>
     <label class="check"><input type="radio" name="mode" value="merge" ${hasDemoOnly ? '' : 'checked'}> Zu den vorhandenen Daten hinzufügen <small class="muted">(gleiche Einträge werden aktualisiert)</small></label>
     <label class="check"><input type="radio" name="mode" value="replace" ${hasDemoOnly ? 'checked' : ''}> Vorhandene Daten ersetzen</label>
     ${nW ? '<label class="check"><input type="checkbox" name="screen" checked> Bildschirm übernehmen</label>' : ''}`,
     onSubmit: fd => {
       const replace = fd.get('mode') === 'replace', withScreen = fd.get('screen') === 'on';
-      const base = replace ? { ...store.freshState(), technik: { classes: [], activeId: null }, sport: { groups: [], activeId: null } } : store.get();
+      const base = replace ? { ...store.freshState(), technik: { classes: [], activeId: null }, sport: { groups: [], activeId: null }, quiz: { classes: [], sets: [], sessions: [], activeClassId: null, activeSetId: null } } : store.get();
       const next = store.mergeInto(base, incoming, { replaceScreen: withScreen });
       if (replace && !withScreen) next.screen = store.get().screen;
       store.replaceState(next); navigate(); toast('Import abgeschlossen.');
@@ -114,6 +117,7 @@ function helpDialog() {
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, Trennungsregeln festlegen und „Zufällig verteilen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
+      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Antwortkarten drucken (40 Stück, für alle Klassen gleich), Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Fragensatz anlegen, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
@@ -126,12 +130,14 @@ function helpDialog() {
       <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Weder der Betreiber noch Supabase können die Namen lesen.</li>
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
+      <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
     <h3>Datenschutzhinweise im Einzelnen</h3>
     <ul class="help-list">
-      <li><b>Welche Daten:</b> Vornamen, optional Klasse (Sport), Klassen- und Gruppennamen, Sitzpläne, Teams, Ergebnisse und Einstellungen. Mit Konto zusätzlich die E-Mail-Adresse.</li>
+      <li><b>Welche Daten:</b> Vornamen, optional Klasse (Sport), Klassen- und Gruppennamen, Sitzpläne, Teams, Ergebnisse, Quizfragen und Quizantworten je Kind sowie Einstellungen. Mit Konto zusätzlich die E-Mail-Adresse.</li>
+      <li><b>Live-Quiz mit Konto:</b> Während ein Quiz läuft, tauschen Beamer-Gerät und Handy über Supabase die aktuelle Frage, die Kartennummern und die gescannten Antwortbuchstaben aus – ebenfalls auf dem Gerät verschlüsselt, ohne Schülernamen. Beim Beenden wird dieser Zwischenstand gelöscht, spätestens nach einem Tag.</li>
       <li><b>Wozu:</b> ausschließlich zur Unterrichtsorganisation der angemeldeten Lehrkraft.</li>
       <li><b>Wo:</b> im Browser (Websitedaten) des Geräts. Mit Konto zusätzlich verschlüsselt bei Supabase (Rechenzentrum Frankfurt) als Auftragsverarbeiter.</li>
       <li><b>Abruf der App:</b> Die App wird über GitHub Pages ausgeliefert. Dabei verarbeitet GitHub technisch notwendig die IP-Adresse und Browserangaben, um die Seite auszuliefern und abzusichern. Die App selbst setzt keine Cookies und lädt nichts von fremden Servern nach.</li>
@@ -192,6 +198,7 @@ function tour({ force = false } = {}) {
     { ic: logo(34), title: 'Willkommen bei KlassenKompass', html: `<p>Deine Helfer für den Unterricht an einem Ort:</p>
       <ul class="tour-list"><li>${icon('technik')}<span><b>Technik</b> – Klassen anlegen, Sitzplan und Gruppen per Zufall verteilen.</span></li>
       <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere „jeder gegen jeden“ und Ranglisten.</span></li>
+      <li>${icon('cards')}<span><b>Quiz</b> – Kartenquiz: Kinder heben Antwortkarten, das Handy scannt die ganze Klasse.</span></li>
       <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Intervalltimer und QR-Codes groß zeigen.</span></li></ul>
       <p class="muted small-text">Zum Ausprobieren sind eine Demoklasse und eine Demogruppe mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },
     { ic: icon('check', 30), title: 'Deine Daten', html: `<ul class="help-list">
@@ -264,7 +271,7 @@ document.getElementById('status').onclick = async () => {
 
 // ---------- Sync-Datei ----------
 const fmt = iso => iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
-const summary = data => `${data?.technik?.classes?.length ?? 0} Klasse(n), ${data?.sport?.groups?.length ?? 0} Sportgruppe(n)`;
+const summary = data => `${data?.technik?.classes?.length ?? 0} Klasse(n), ${data?.sport?.groups?.length ?? 0} Sportgruppe(n), ${data?.quiz?.sets?.length ?? 0} Fragensatz/-sätze`;
 
 function chooseVersion(raw, { title, intro }) {
   return new Promise(resolve => {

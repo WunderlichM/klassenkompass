@@ -25,9 +25,18 @@ export function defaultScreen() {
     { id: uid(), type: 'qr', label: 'Unterrichtsmaterial', x: 834, y: 114, width: 278, height: 354, content: '' },
   ] };
 }
+export function demoQuiz() {
+  const cls = { id: uid(), name: 'Demoklasse', demo: true, students: DEMO_NAMES.map((name, i) => ({ id: uid(), name, card: i + 1 })) };
+  const q = (text, options, correct) => ({ id: uid(), text, options, correct });
+  const set = { id: uid(), title: 'Demo: Werkzeugkunde', demo: true, questions: [
+    q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
+    q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
+    q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
+  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id };
+}
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
-  return { schema: SCHEMA, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id }, screen: defaultScreen(), welcomed: false };
+  return { schema: SCHEMA, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
 }
 
 let state;
@@ -110,6 +119,35 @@ function normScreen(s) {
     x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
+const CARD_MAX = 40;
+function normQuiz(q) {
+  if (!q || typeof q !== 'object') return demoQuiz();
+  const classes = (Array.isArray(q.classes) ? q.classes : []).map(c => {
+    const used = new Set();
+    const students = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id && str(s.name)).slice(0, CARD_MAX).map(s => {
+      let card = int(s.card, 1, CARD_MAX, 0); if (!card || used.has(card)) card = 0; if (card) used.add(card);
+      return { id: String(s.id), name: str(s.name, 40), card };
+    });
+    students.forEach(s => { if (!s.card) { let n = 1; while (used.has(n)) n++; s.card = n; used.add(n); } });
+    return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, students };
+  });
+  const normQ = x => {
+    const options = (Array.isArray(x?.options) ? x.options : []).map(o => str(o, 120)).slice(0, 4);
+    while (options.length < 2) options.push('');
+    const correct = Number.isInteger(x?.correct) && x.correct >= 0 && x.correct < options.length ? x.correct : null;
+    return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct };
+  };
+  const sets = (Array.isArray(q.sets) ? q.sets : []).map(t => ({ id: String(t?.id || uid()), title: str(t?.title, 80) || 'Fragensatz', demo: !!t?.demo,
+    questions: (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map(normQ) }));
+  const sessions = (Array.isArray(q.sessions) ? q.sessions : []).slice(-200).map(x => ({ id: String(x?.id || uid()), device: str(x?.device, 40), classId: String(x?.classId || ''), className: str(x?.className, 60),
+    setId: String(x?.setId || ''), title: str(x?.title, 80), date: str(x?.date, 10), index: int(x?.index, 0, 99, 0), reveal: !!x?.reveal, done: !!x?.done,
+    students: (Array.isArray(x?.students) ? x.students : []).map(s => ({ id: String(s.id), name: str(s.name, 40), card: int(s.card, 1, CARD_MAX, 0) })),
+    questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y),
+      answers: Object.fromEntries(Object.entries(y?.answers || {}).filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 4)) })) }));
+  return { classes, sets, sessions,
+    activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
+    activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
+}
 export function normalize(raw) {
   const fresh = freshState();
   if (!raw || typeof raw !== 'object') return fresh;
@@ -118,7 +156,7 @@ export function normalize(raw) {
   return { schema: SCHEMA,
     technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null },
     sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null },
-    screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
+    quiz: normQuiz(raw.quiz), screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
 }
 
 // ---------- Export / Import ----------
@@ -129,14 +167,14 @@ export function exportJson() {
 // Liest eigene Sicherungen und das Format der früheren ChatGPT-App
 export function parseImport(text) {
   const raw = JSON.parse(text);
-  if (raw?.app === 'KlassenKompass' && raw.data) return normalize(raw.data);
+  if (raw?.app === 'KlassenKompass' && raw.data) return normalize({ quiz: { classes: [], sets: [] }, ...raw.data });
   const legacyClasses = raw?.classes ?? raw?.technik;
   const legacyGroups = raw?.groups ?? raw?.sport;
   if (Array.isArray(legacyClasses) || Array.isArray(legacyGroups) || raw?.screen) {
     const classes = (Array.isArray(legacyClasses) ? legacyClasses : []).map(r => r?.data ?? r);
     const groups = (Array.isArray(legacyGroups) ? legacyGroups : []).map(r => r?.data ?? r);
     const screen = raw?.screen?.data ?? raw?.screen;
-    const result = normalize({ technik: { classes }, sport: { groups }, screen, welcomed: true });
+    const result = normalize({ technik: { classes }, sport: { groups }, quiz: { classes: [], sets: [] }, screen, welcomed: true });
     if (!screen) result.screen.widgets = [];
     return result;
   }
@@ -151,6 +189,10 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.sport.groups = merge(next.sport.groups, incoming.sport.groups);
   if (incoming.technik.classes.length) next.technik.activeId = incoming.technik.classes[0].id;
   if (incoming.sport.groups.length) next.sport.activeId = incoming.sport.groups[0].id;
+  const iq = incoming.quiz, nq = next.quiz;
+  nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions);
+  if (!nq.classes.some(c => c.id === nq.activeClassId)) nq.activeClassId = nq.classes[0]?.id ?? null;
+  if (!nq.sets.some(t => t.id === nq.activeSetId)) nq.activeSetId = nq.sets[0]?.id ?? null;
   if (replaceScreen) next.screen = incoming.screen;
   next.welcomed = true;
   return next;

@@ -115,6 +115,22 @@ export async function init({ conflict, changed }) {
   set('ok'); syncNow();
 }
 
+// ---------- Live-Quiz: kurzlebige, ebenfalls verschlüsselte Daten zwischen zwei Geräten desselben Kontos ----------
+// part = 'control' (Gerät, das das Quiz zeigt) oder 'scans' (Gerät, das scannt). Jede Seite schreibt nur ihren Teil.
+export async function liveGet(part) {
+  if (!loggedIn() || !navigator.onLine) return null;
+  const rows = await call(`/rest/v1/live_quiz?select=${part},${part}_iv,updated_at&user_id=eq.${session.user.id}`);
+  const row = rows?.[0];
+  if (!row || !row[part]) return null;
+  return decrypt({ ciphertext: row[part], iv: row[part + '_iv'] });
+}
+export async function livePut(part, obj) {
+  if (!loggedIn()) return;
+  const payload = obj ? await encrypt(obj) : { ciphertext: null, iv: null };
+  await call('/rest/v1/rpc/set_live_quiz', { method: 'POST', body: { p_part: part, p_ciphertext: payload.ciphertext, p_iv: payload.iv } });
+}
+export async function liveClear() { if (loggedIn()) await call('/rest/v1/rpc/clear_live_quiz', { method: 'POST', body: {} }); }
+
 // ---------- Abgleich ----------
 async function pull() {
   const rows = await call(`/rest/v1/vaults?select=ciphertext,iv,version,updated_at&user_id=eq.${session.user.id}`);
@@ -184,7 +200,7 @@ export async function login(email, password, { register = false, decide } = {}) 
   try { row = await pull(); } catch (e) { throw new Error(friendly(e)); }
   if (row) {
     const remote = await decrypt(row);
-    const s = store.get(), localHasOwn = s.technik.classes.some(c => !c.demo) || s.sport.groups.some(g => !g.demo);
+    const s = store.get(), localHasOwn = s.technik.classes.some(c => !c.demo) || s.sport.groups.some(g => !g.demo) || s.quiz.classes.some(c => !c.demo) || s.quiz.sets.some(t => !t.demo);
     const choice = localHasOwn ? await decide(remote) : 'remote';
     if (choice === 'local') { meta.version = row.version; dirty = true; meta.dirty = true; saveMeta(); }
     else apply(remote, row.version);

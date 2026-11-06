@@ -63,3 +63,62 @@ grant execute on function public.delete_my_account() to authenticated;
 create or replace function public.ping()
 returns text language sql stable as $$ select 'ok'::text $$;
 grant execute on function public.ping() to anon, authenticated;
+
+-- ---------- Kartenquiz live (ab Version 1.6.0) ----------
+-- Ein Gerät zeigt das Quiz (control), ein anderes scannt die Karten (scans). Beide gehören zum selben Konto.
+-- Gespeichert wird je Konto höchstens eine Zeile; beide Teile sind auf dem Gerät verschlüsselt (wie der Tresor).
+create table if not exists public.live_quiz (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  control    text,
+  control_iv text,
+  scans      text,
+  scans_iv   text,
+  updated_at timestamptz not null default now(),
+  constraint live_size check (coalesce(length(control), 0) <= 300000 and coalesce(length(scans), 0) <= 300000)
+);
+
+alter table public.live_quiz enable row level security;
+
+drop policy if exists "eigenes Live-Quiz lesen" on public.live_quiz;
+create policy "eigenes Live-Quiz lesen" on public.live_quiz for select to authenticated using ((select auth.uid()) = user_id);
+revoke insert, update, delete on public.live_quiz from anon, authenticated;
+
+create or replace function public.set_live_quiz(p_part text, p_ciphertext text, p_iv text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then raise exception 'nicht angemeldet' using errcode = '28000'; end if;
+  if p_part = 'control' then
+    insert into public.live_quiz (user_id, control, control_iv) values (v_uid, p_ciphertext, p_iv)
+    on conflict (user_id) do update set control = excluded.control, control_iv = excluded.control_iv, updated_at = now();
+  elsif p_part = 'scans' then
+    insert into public.live_quiz (user_id, scans, scans_iv) values (v_uid, p_ciphertext, p_iv)
+    on conflict (user_id) do update set scans = excluded.scans, scans_iv = excluded.scans_iv, updated_at = now();
+  else
+    raise exception 'unbekannter Teil';
+  end if;
+  -- Aufräumen: Live-Daten, die seit einem Tag nicht mehr benutzt wurden
+  delete from public.live_quiz where updated_at < now() - interval '1 day';
+end;
+$$;
+revoke all on function public.set_live_quiz(text, text, text) from public, anon;
+grant execute on function public.set_live_quiz(text, text, text) to authenticated;
+
+create or replace function public.clear_live_quiz()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then raise exception 'nicht angemeldet'; end if;
+  delete from public.live_quiz where user_id = auth.uid();
+end;
+$$;
+revoke all on function public.clear_live_quiz() from public, anon;
+grant execute on function public.clear_live_quiz() to authenticated;

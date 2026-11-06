@@ -1,6 +1,6 @@
 # KlassenKompass
 
-Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Turniere & Ranglisten** (Sport) und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer und QR-Codes.
+Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Turniere & Ranglisten** (Sport), ein **Kartenquiz** (Quiz) und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer und QR-Codes.
 
 - Läuft im Browser auf PC, Tablet und Handy und lässt sich als App installieren.
 - Handy und Tablett: große Tippflächen, kein Zoom beim Antippen von Feldern, Dialoge von unten. Im Bildschirm stehen die Objekte auf dem Handy untereinander („Ansicht: Alles anzeigen“ zeigt die freie Anordnung); am Tablett lassen sie sich mit dem Finger an der Kopfzeile verschieben.
@@ -17,10 +17,17 @@ Adresse: **https://wunderlichm.github.io/klassenkompass/**
 
 Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die App (später wieder über „Hilfe“). Der Knopf „Installieren“ oben rechts zeigt die Anleitung für iPhone/iPad, Android und PC bzw. startet die Installation direkt. Solange ein Timer, eine Stoppuhr oder ein Intervalltimer läuft, bleibt der Bildschirm des Geräts an.
 
+## Kartenquiz
+
+- 40 Antwortkarten (für alle Klassen gleich) unter Quiz → „Karten drucken“ (1, 2 oder 4 pro A4-Seite). Jede Karte trägt ein eigenes 7 × 7-Muster; die Kante, die oben ist, ist die Antwort (A–D).
+- Die Erkennung (`js/detect.js`) läuft vollständig im Browser, ohne Bibliothek: örtlicher Schwellwert, zusammenhängende Flächen, Viereck, Raster abtasten, Code mit Prüfabstand (`js/cards.js`, mindestens 7 Felder Unterschied auch gedreht). Kamerabilder werden nicht gespeichert.
+- Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.
+- Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).
+
 ## Technik der Konten
 
 - `js/config.js`: Supabase-URL und öffentlicher Publishable Key.
-- `supabase/setup.sql`: Tabelle `vaults` (ein verschlüsselter Block je Konto, Row Level Security), Funktion `save_vault` mit Versionsprüfung, `delete_my_account`, `ping`.
+- `supabase/setup.sql`: Tabelle `vaults` (ein verschlüsselter Block je Konto, Row Level Security), Funktion `save_vault` mit Versionsprüfung, `delete_my_account`, `ping`; ab 1.6.0 zusätzlich Tabelle `live_quiz` mit `set_live_quiz` und `clear_live_quiz` für das Live-Quiz. Das Skript kann gefahrlos erneut ausgeführt werden.
 - In Supabase ist „Confirm email“ ausgeschaltet (der kostenlose Mailversand erreicht keine fremden Adressen).
 - `.github/workflows/keepalive.yml` ruft alle drei Tage `ping` auf, damit das kostenlose Projekt nicht pausiert.
 

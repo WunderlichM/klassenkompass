@@ -37,6 +37,10 @@ const ICONS = {
   repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
   install: '<path d="M12 3v12M7 10l5 5 5-5"/><rect x="3" y="17" width="18" height="4" rx="1"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  forward: '<path d="M9 5l7 7-7 7"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  cards: '<rect x="3" y="6" width="12" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/><path d="M7 10h4v4H7z"/>',
 };
 // Logo: Kompass (Ring, Nadel mit goldener Nordspitze); Hintergrund kommt aus der Bereichsfarbe
 export const logo = (size = 24) => `<svg width="${size}" height="${size}" viewBox="8 8 48 48" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#f2b84b"/><circle cx="32" cy="32" r="2.4" fill="var(--accent)"/></svg>`;
