@@ -10,7 +10,7 @@ import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 
-export const VERSION = '1.8.3';
+export const VERSION = '1.8.6';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
