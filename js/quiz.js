@@ -36,7 +36,8 @@ export function mount(el) {
   root.onchange = onChange;
   draw();
   homeTimer = setInterval(pollHome, 4000); pollHome();
-  return () => { off(); removeEventListener('kk-images', onImages); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; root.onclick = root.onchange = null; root = null; };
+  document.addEventListener('visibilitychange', onVisible);
+  return () => { off(); removeEventListener('kk-images', onImages); document.removeEventListener('visibilitychange', onVisible); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; keepAwake(false); root.onclick = root.onchange = null; root = null; };
 }
 
 function draw() {
@@ -45,7 +46,21 @@ function draw() {
   if (s) { drawRun(s); startScanPoll(); syncControl(s); checkAuto(s); }
   else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId); if (p) drawPodium(p); else { podiumId = null; drawHome(); } }
   images.hydrate(root);
+  keepAwake(!!(s || podiumId));
 }
+
+// ---------- Bildschirm anlassen, solange ein Quiz läuft oder das Podium steht (Screen Wake Lock) ----------
+// Der Browser gibt die Sperre frei, sobald die Seite verdeckt ist; beim Zurückkehren wird sie neu angefordert.
+let wakeLock = null, wakePending = false;
+function keepAwake(want) {
+  if (!('wakeLock' in navigator)) return;
+  const held = wakeLock && !wakeLock.released;
+  if (want && !held && !wakePending && document.visibilityState === 'visible') {
+    wakePending = true;
+    navigator.wakeLock.request('screen').then(l => { wakeLock = l; if (!root || !(running() || podiumId)) keepAwake(false); }).catch(() => {}).finally(() => { wakePending = false; });
+  } else if (!want && held) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+function onVisible() { if (document.visibilityState === 'visible' && root) keepAwake(!!(running() || podiumId)); }
 
 // Automatisch auflösen, sobald alle anwesenden Kinder geantwortet haben (je Frage nur einmal)
 function checkAuto(s) {

@@ -15,7 +15,7 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 
 Adresse: **https://wunderlichm.github.io/klassenkompass/**
 
-Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die App (später wieder über „Hilfe“). Der Knopf „Installieren“ oben rechts zeigt die Anleitung für iPhone/iPad, Android und PC bzw. startet die Installation direkt. Solange ein Timer, eine Stoppuhr oder ein Intervalltimer läuft, bleibt der Bildschirm des Geräts an.
+Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die App (später wieder über „Hilfe“). Der Knopf „Installieren“ oben rechts zeigt die Anleitung für iPhone/iPad, Android und PC bzw. startet die Installation direkt. Solange ein Timer, eine Stoppuhr oder ein Intervalltimer läuft oder ein Kartenquiz (inkl. Podium) angezeigt wird, bleibt der Bildschirm des Geräts an.
 
 ## Kartenquiz
 
