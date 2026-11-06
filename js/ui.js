@@ -38,6 +38,8 @@ const ICONS = {
   install: '<path d="M12 3v12M7 10l5 5 5-5"/><rect x="3" y="17" width="18" height="4" rx="1"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
 };
+// Logo: Kompass (Ring, Nadel mit goldener Nordspitze); Hintergrund kommt aus der Bereichsfarbe
+export const logo = (size = 24) => `<svg width="${size}" height="${size}" viewBox="8 8 48 48" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#f2b84b"/><circle cx="32" cy="32" r="2.4" fill="var(--accent)"/></svg>`;
 export const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 let toastTimer;
@@ -110,6 +112,12 @@ export const PALETTE = [
   { bg: '#e3edf7', border: '#a7c4de', ink: '#3b607e', dot: '#7fa8cb' },
   { bg: '#f5e4e9', border: '#ddaab9', ink: '#854656', dot: '#c68499' },
   { bg: '#f3efd6', border: '#d8cd8b', ink: '#766524', dot: '#bdaf63' },
+  { bg: '#dff1f0', border: '#9fd0cc', ink: '#2f6a66', dot: '#5fb0aa' },
+  { bg: '#f8e1df', border: '#e4a9a3', ink: '#8f3a32', dot: '#d4746b' },
+  { bg: '#e5e6f8', border: '#b0b4e6', ink: '#3f4590', dot: '#7d84d0' },
+  { bg: '#ebf3d9', border: '#c2d896', ink: '#55692a', dot: '#98b75a' },
+  { bg: '#efe6dc', border: '#cdb8a0', ink: '#6b5038', dot: '#a88a6a' },
+  { bg: '#e8eaed', border: '#bcc2ca', ink: '#444c57', dot: '#8a939f' },
 ];
 export const pal = i => PALETTE[i % PALETTE.length];
 export const palStyle = i => { const p = pal(i); return `--g-bg:${p.bg};--g-border:${p.border};--g-ink:${p.ink};--g-dot:${p.dot}`; };

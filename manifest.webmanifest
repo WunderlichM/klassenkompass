@@ -2,7 +2,7 @@
   "id": "./",
   "name": "KlassenKompass · Unterricht organisieren",
   "short_name": "KlassenKompass",
-  "description": "Sitzpläne, Gruppen, Sportteams, Turniere und Unterrichtsbildschirm – offline und ohne Konto.",
+  "description": "Sitzpläne, Gruppen, Sportteams, Turniere und Unterrichtsbildschirm – auch offline, auf Wunsch mit Konto auf allen Geräten.",
   "lang": "de",
   "start_url": "./",
   "scope": "./",

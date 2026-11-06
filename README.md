@@ -11,7 +11,9 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 
 ## Nutzen
 
-Einfach den Link öffnen. Im Browser über „Installieren“ (Chrome/Edge) bzw. „Zum Home-Bildschirm“ (Safari) als App hinzufügen.
+Adresse: **https://wunderlichm.github.io/klassenkompass/**
+
+Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die App (später wieder über „Hilfe“). Der Knopf „Installieren“ oben rechts zeigt die Anleitung für iPhone/iPad, Android und PC bzw. startet die Installation direkt. Solange ein Timer, eine Stoppuhr oder ein Intervalltimer läuft, bleibt der Bildschirm des Geräts an.
 
 ## Technik der Konten
 

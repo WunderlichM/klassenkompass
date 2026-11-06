@@ -1,13 +1,13 @@
 // App-Rahmen: Navigation, Datenmenü, Installation, Offline-Betrieb
 import * as store from './store.js';
-import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
+import { esc, icon, logo, dialog, confirmDialog, toast, downloadFile } from './ui.js';
 import * as technik from './technik.js';
 import * as sport from './sport.js';
 import * as screen from './screen.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
@@ -20,7 +20,7 @@ function routeKey() { const k = location.hash.replace(/^#\/?/, '').split('?')[0]
 function shell() {
   document.getElementById('app').innerHTML = `
   <header class="topbar no-present">
-    <a class="brand" href="#/"><span class="logo">${icon('grid', 20)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
+    <a class="brand" href="#/"><span class="logo">${logo(26)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
     <nav class="nav" aria-label="Bereiche">
       <a href="#/" data-route="">${icon('technik', 16)}<span>Technik</span></a>
       <a href="#/sport" data-route="sport">${icon('sport', 16)}<span>Sport</span></a>
@@ -28,19 +28,15 @@ function shell() {
     </nav>
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
-      <button class="btn ghost sm" id="install-btn" hidden title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
+      <button class="btn ghost sm" id="install-btn" ${isInstalled() ? 'hidden' : ''} title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
       <button class="icon-btn" id="menu-btn" aria-label="Daten und Hilfe" title="Daten und Hilfe">${icon('gear')}</button>
     </div>
   </header>
   <main id="view" tabindex="-1"></main>
-  <footer class="foot no-present no-print">KlassenKompass ${VERSION} · Alle Daten bleiben in diesem Browser auf diesem Gerät · <button class="link" id="foot-help">Hilfe &amp; Datenschutz</button></footer>`;
+  <footer class="foot no-present no-print">KlassenKompass ${VERSION} · <span id="foot-store">${footStore()}</span> · <button class="link" id="foot-help">Hilfe &amp; Datenschutz</button></footer>`;
   document.getElementById('menu-btn').onclick = menuDialog;
   document.getElementById('foot-help').onclick = helpDialog;
-  document.getElementById('install-btn').onclick = async () => {
-    if (!installEvent) return;
-    installEvent.prompt(); await installEvent.userChoice.catch(() => {}); installEvent = null;
-    document.getElementById('install-btn').hidden = true;
-  };
+  document.getElementById('install-btn').onclick = install;
 }
 
 function navigate() {
@@ -110,7 +106,10 @@ async function importFile(f) {
 }
 
 function helpDialog() {
-  dialog({ title: 'KlassenKompass – Hilfe & Datenschutz', submit: null, cancel: 'Schließen', wide: true, body: `
+  dialog({ title: 'KlassenKompass – Hilfe & Datenschutz', submit: null, cancel: 'Schließen', wide: true,
+    onOpen: (el, close) => { el.querySelector('[data-h=tour]').onclick = () => { close(); tour({ force: true }); }; el.querySelector('[data-h=install]').onclick = () => { close(); installGuide(); }; },
+    body: `
+    <p class="help-actions"><button type="button" class="btn ghost sm" data-h="tour">${icon('help', 16)} Einführung ansehen</button> <button type="button" class="btn ghost sm" data-h="install">${icon('install', 16)} App installieren – Anleitung</button></p>
     <h3>So funktioniert es</h3>
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, Trennungsregeln festlegen und „Zufällig verteilen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
@@ -119,7 +118,7 @@ function helpDialog() {
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
       <li><b>Ohne Konto, mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
-      <li><b>Als App nutzen:</b> Im Browser „Installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen. Danach funktioniert KlassenKompass auch ohne Internet.</li>
+      <li><b>Als App nutzen:</b> Oben rechts auf ${icon('install', 14)} tippen – dort steht die Anleitung für iPhone, Android und PC. Danach funktioniert KlassenKompass auch ohne Internet.</li>
     </ul>
     <h3>Datenschutz</h3>
     <ul class="help-list">
@@ -132,21 +131,100 @@ function helpDialog() {
     </ul>` });
 }
 
-function welcome() {
-  if (store.get().welcomed) return;
-  dialog({ title: 'Willkommen bei KlassenKompass', submit: 'Los geht’s', cancel: null, body: `
-    <p>Sitzpläne und Gruppen für Technik, Teams und Turniere für Sport sowie ein Unterrichtsbildschirm mit Timern – an einem Ort.</p>
-    <ul class="help-list"><li>Zum Ausprobieren sind eine <b>Demoklasse</b> und eine <b>Demogruppe</b> mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</li>
-    <li>Deine Daten bleiben <b>nur auf diesem Gerät</b>. Kein Konto, kein Server.</li>
-    <li>Über das Zahnrad oben rechts kannst du Daten <b>exportieren und importieren</b>.</li></ul>`,
-    onOpen: () => store.update(s => { s.welcomed = true; }, { silent: true }) });
+// ---------- Installation ----------
+function isInstalled() { return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true; }
+function platform() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+async function install() {
+  if (installEvent) {
+    installEvent.prompt();
+    const choice = await installEvent.userChoice.catch(() => null); installEvent = null;
+    if (choice?.outcome === 'accepted') { document.getElementById('install-btn').hidden = true; return; }
+  }
+  installGuide();
+}
+const GUIDES = {
+  ios: { title: 'iPhone und iPad', steps: [
+    'Die Seite in <b>Safari</b> öffnen (in Chrome geht es genauso).',
+    'Unten (iPad: oben rechts) auf das <b>Teilen-Symbol</b> tippen – das Quadrat mit dem Pfeil nach oben.',
+    'Nach unten wischen und <b>„Zum Home-Bildschirm“</b> wählen. Steht es nicht in der Liste: ganz unten „Aktionen bearbeiten“ und dort hinzufügen.',
+    'Falls angezeigt, „Als Web-App öffnen“ eingeschaltet lassen. Dann oben rechts auf <b>„Hinzufügen“</b> tippen.',
+    'KlassenKompass liegt jetzt als Symbol auf dem Home-Bildschirm.'] },
+  android: { title: 'Android', steps: [
+    'Die Seite in <b>Chrome</b> öffnen.',
+    'Oben rechts auf <b>⋮</b> (drei Punkte) tippen.',
+    '<b>„App installieren“</b> bzw. <b>„Zum Startbildschirm hinzufügen“</b> wählen und mit <b>„Installieren“</b> bestätigen.',
+    'KlassenKompass erscheint auf dem Startbildschirm und in der App-Übersicht.',
+    '<span class="muted">Samsung Internet: Menü ☰ → „Seite hinzufügen zu“ → „Startbildschirm“.</span>'] },
+  desktop: { title: 'PC und Mac', steps: [
+    '<b>Chrome oder Edge:</b> rechts in der Adressleiste auf das Installieren-Symbol (Bildschirm mit Pfeil) klicken und bestätigen.',
+    'Kein Symbol zu sehen? <b>Chrome:</b> ⋮ → „Streamen, speichern und teilen“ → „Seite als App installieren“. <b>Edge:</b> ··· → „Apps“ → „Diese Seite als App installieren“.',
+    '<b>Safari am Mac:</b> Menü „Ablage“ → „Zum Dock hinzufügen“.',
+    'Firefox kann keine Apps installieren – dort einfach ein Lesezeichen setzen.'] },
+};
+function installGuide() {
+  const p = platform(), g = GUIDES[p], others = Object.entries(GUIDES).filter(([k]) => k !== p);
+  dialog({ title: 'KlassenKompass als App installieren', submit: null, cancel: 'Schließen', body: `
+    <p class="muted">Als App startet KlassenKompass vom Home-Bildschirm wie jede andere App, im eigenen Fenster und auch ohne Internet.</p>
+    <h3>${esc(g.title)}</h3><ol class="help-list steps">${g.steps.map(t => `<li>${t}</li>`).join('')}</ol>
+    ${others.map(([, o]) => `<details class="guide-more"><summary>Anleitung für ${esc(o.title)}</summary><ol class="help-list steps">${o.steps.map(t => `<li>${t}</li>`).join('')}</ol></details>`).join('')}` });
+}
+
+// ---------- Einführung beim ersten Start ----------
+function footStore() { return account.status().state !== 'off' ? 'Mit Konto verschlüsselt synchronisiert' : 'Daten liegen in diesem Browser auf diesem Gerät'; }
+function tour({ force = false } = {}) {
+  if (!force && store.get().welcomed) return;
+  const steps = [
+    { ic: logo(34), title: 'Willkommen bei KlassenKompass', html: `<p>Deine Helfer für den Unterricht an einem Ort:</p>
+      <ul class="tour-list"><li>${icon('technik')}<span><b>Technik</b> – Klassen anlegen, Sitzplan und Gruppen per Zufall verteilen.</span></li>
+      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere „jeder gegen jeden“ und Ranglisten.</span></li>
+      <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Intervalltimer und QR-Codes groß zeigen.</span></li></ul>
+      <p class="muted small-text">Zum Ausprobieren sind eine Demoklasse und eine Demogruppe mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },
+    { ic: icon('check', 30), title: 'Deine Daten', html: `<ul class="help-list">
+      <li>Bitte <b>nur Vornamen</b> eintragen (bei Sport optional die Klasse).</li>
+      <li>Ohne Konto bleibt alles <b>nur in diesem Browser auf diesem Gerät</b>. Werden die Browserdaten gelöscht, sind auch deine Klassen weg.</li>
+      <li>Über das Zahnrad oben rechts kannst du jederzeit eine Sicherung exportieren und wieder importieren.</li></ul>` },
+    ...(account.enabled ? [{ ic: icon('user', 30), title: 'Konto erstellen – empfohlen', html: `<p>Mit einem kostenlosen Konto sind deine Daten <b>gesichert</b> und auf <b>allen deinen Geräten gleich</b> – PC in der Schule, Laptop zu Hause, Tablet und Handy.</p>
+      <ul class="help-list"><li>Die Daten werden auf deinem Gerät mit deinem Passwort <b>verschlüsselt</b>. Niemand sonst kann die Namen lesen.</li>
+      <li>Darum gilt: <b>Passwort gut merken</b> – vergessen heißt, die Daten im Konto sind verloren.</li></ul>
+      <p><button type="button" class="btn primary" data-t="account">${icon('user', 16)} Jetzt Konto erstellen</button> <button type="button" class="btn ghost" data-t="login">Ich habe schon ein Konto</button></p>
+      <p class="muted small-text">Du kannst das auch später über das Zahnrad → „Konto &amp; Synchronisierung“ machen.</p>` }] : []),
+    ...(isInstalled() ? [] : [{ ic: icon('install', 30), title: 'Als App installieren', html: `<p>Installiert startet KlassenKompass vom Home-Bildschirm bzw. Desktop wie eine normale App und funktioniert auch ohne Internet.</p>
+      <p><button type="button" class="btn primary" data-t="install">${icon('install', 16)} So geht’s</button></p>
+      <p class="muted small-text">Später jederzeit über den Knopf ${icon('install', 14)} oben rechts.</p>` }]),
+  ];
+  let i = 0;
+  const body = () => { const st = steps[i]; return `
+    <div class="tour-step"><div class="tour-ic">${st.ic}</div><h3>${esc(st.title)}</h3>${st.html}</div>
+    <div class="tour-nav"><span class="tour-dots">${steps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</span>
+      ${i ? '<button type="button" class="btn ghost sm" data-t="back">Zurück</button>' : '<button type="button" class="btn ghost sm" data-t="skip">Überspringen</button>'}
+      <button type="button" class="btn primary sm" data-t="next">${i === steps.length - 1 ? 'Los geht’s' : 'Weiter'}</button></div>`; };
+  dialog({ title: 'Kurze Einführung', submit: null, cancel: null, body: `<div data-tour>${body()}</div>`,
+    onOpen: (el, close) => {
+      el.addEventListener('close', () => store.update(s => { s.welcomed = true; }, { silent: true }));
+      el.classList.add('tour');
+      const wrap = el.querySelector('[data-tour]');
+      wrap.onclick = e => {
+        const t = e.target.closest('[data-t]')?.dataset.t; if (!t) return;
+        if (t === 'next') { if (i === steps.length - 1) return close(); i++; }
+        else if (t === 'back') i--;
+        else if (t === 'skip') return close();
+        else if (t === 'account' || t === 'login') { close(); return accountDialog(t === 'account' ? 'register' : 'login'); }
+        else if (t === 'install') { close(); return install(); }
+        wrap.innerHTML = body();
+      };
+    } });
 }
 
 // ---------- Start ----------
 shell();
 addEventListener('hashchange', navigate);
 navigate();
-welcome();
+tour();
 function renderStatus() {
   const el = document.getElementById('status'); if (!el) return;
   const err = store.storageError(), ac = account.status(), st = ac.state !== 'off' ? { ...ac, fileName: ac.email } : sync.status();
@@ -161,6 +239,7 @@ function renderStatus() {
   else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = (ac.state !== 'off' ? 'Konto: ' : 'Sync-Datei: ') + st.fileName; }
   else { html = `${icon('check', 14)} Auf diesem Gerät gespeichert`; title = 'Alle Daten bleiben auf diesem Gerät'; }
   el.className = 'status ' + cls; el.innerHTML = html; el.title = title;
+  const fs = document.getElementById('foot-store'); if (fs && fs.textContent !== footStore()) fs.textContent = footStore();
 }
 setInterval(renderStatus, 2000);
 document.getElementById('status').onclick = async () => {
@@ -235,10 +314,10 @@ function remoteChoice(remote, { title, intro }) {
   });
 }
 
-function accountDialog() {
+function accountDialog(startMode = 'login') {
   const st = account.status();
   if (st.state === 'off' || st.state === 'login') {
-    let mode = st.email ? 'login' : 'login';
+    let mode = st.email ? 'login' : startMode;
     const body = () => `
       <div class="seg wide-seg" role="tablist"><button type="button" data-mode="login" class="${mode === 'login' ? 'on' : ''}">Anmelden</button><button type="button" data-mode="register" class="${mode === 'register' ? 'on' : ''}">Neues Konto</button></div>
       ${st.error && st.state === 'login' ? `<p class="notice">${esc(st.error)}</p>` : ''}
@@ -299,7 +378,7 @@ sync.init({
   conflict: raw => chooseVersion(raw, { title: 'Sync-Konflikt', intro: 'Auf einem anderen PC und auf diesem Gerät wurde seit dem letzten Abgleich etwas geändert. Welcher Stand soll gelten?' }).then(c => { if (c === 'file') setTimeout(navigate); return c; }),
 });
 
-addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; const b = document.getElementById('install-btn'); if (b) b.hidden = false; });
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; const b = document.getElementById('install-btn'); if (b) b.hidden = isInstalled(); });
 addEventListener('appinstalled', () => { const b = document.getElementById('install-btn'); if (b) b.hidden = true; toast('KlassenKompass wurde installiert.'); });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -311,7 +390,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       });
     });
   }).catch(() => {});
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; store.saveNow(); location.reload(); } });
+  // Nur bei einem Update neu laden – nicht beim allerersten Besuch (sonst verschwindet z. B. die Einführung)
+  let reloaded = false; const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; store.saveNow(); location.reload(); } });
 }
 navigator.storage?.persist?.().catch(() => {});

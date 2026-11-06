@@ -37,7 +37,7 @@ export function mount(el) {
   addEventListener('resize', fit);
   draw();
   raf = requestAnimationFrame(tick);
-  return () => { off(); cancelAnimationFrame(raf); removeEventListener('resize', fit); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
+  return () => { off(); cancelAnimationFrame(raf); keepAwake(false); removeEventListener('resize', fit); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
 }
 
 function draw() {
@@ -173,8 +173,26 @@ export function ivState(w, now) {
 }
 
 function tick() {
-  updateLive(Date.now(), true);
+  const now = Date.now();
+  updateLive(now, true);
+  keepAwake(anyRunning(now));
   raf = requestAnimationFrame(tick);
+}
+
+// ---------- Bildschirm anlassen, solange etwas läuft (Screen Wake Lock) ----------
+let wakeLock = null, wakePending = false, wakeRetryAt = 0;
+function anyRunning(now) {
+  return scr().widgets.some(w => w.type === 'timer' ? w.endsAt !== null && w.endsAt > now
+    : w.type === 'interval' ? w.startedAt !== null && ivState(w, now).stage !== 'finished'
+    : w.type === 'stopwatch' ? w.startedAt !== null : false);
+}
+function keepAwake(want) {
+  if (!('wakeLock' in navigator)) return;
+  const held = wakeLock && !wakeLock.released;
+  if (want && !held && !wakePending && Date.now() >= wakeRetryAt && document.visibilityState === 'visible') {
+    wakePending = true;
+    navigator.wakeLock.request('screen').then(l => { wakeLock = l; }).catch(() => { wakeRetryAt = Date.now() + 15000; }).finally(() => { wakePending = false; });
+  } else if (!want && held) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 
 function updateLive(now, withSound) {
@@ -245,6 +263,8 @@ function addWidget(kind) {
   Object.assign(w, freeSpot(w.width, w.height));
   selected = w.id;
   store.update(s => { s.screen.widgets.push(w); });
+  // Handy: neues Objekt sichtbar machen, weil es in der Liste irgendwo einsortiert wird
+  if (isStack()) requestAnimationFrame(() => root?.querySelector(`[data-wid="${CSS.escape(w.id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 async function onClick(e) {

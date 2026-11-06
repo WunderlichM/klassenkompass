@@ -256,6 +256,18 @@ textarea.input { resize: vertical; min-height: 80px; }
 .tone-row { display: flex; gap: 6px; } .tone-row .select { flex: 1; width: auto; }
 details summary { cursor: pointer; font-size: 13.5px; font-weight: 600; margin: 8px 0; }
 .help-list { padding-left: 18px; } .help-list li { margin-bottom: 7px; }
+.help-list.steps li { padding-left: 2px; } .help-list.steps li::marker { font-weight: 700; color: var(--accent); }
+.guide-more { margin-top: 6px; } .guide-more summary { cursor: pointer; color: var(--accent-dark); font-weight: 600; font-size: 14px; }
+.help-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px; }
+dialog.tour footer, dialog.tour .form-error[hidden] { display: none; }
+.tour-step { min-height: 300px; }
+.tour-ic { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--accent); color: #fff; margin: 4px 0 12px; }
+.tour-step h3 { font-size: 18px !important; margin: 0 0 8px !important; }
+.tour-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
+.tour-list li { display: flex; gap: 10px; align-items: flex-start; } .tour-list .ic { flex: none; margin-top: 2px; color: var(--accent); }
+.tour-nav { display: flex; align-items: center; gap: 8px; padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line); }
+.tour-dots { display: flex; gap: 6px; margin-right: auto; } .tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); } .tour-dots i.on { background: var(--accent); }
+.tour-step .btn { margin: 2px 4px 2px 0; }
 
 /* Präsentation */
 body.presenting .no-present, body.presenting .topbar, body.presenting .foot, body.presenting .side, body.presenting .page-head, body.presenting .tabs-row .tabs { display: none !important; }
@@ -296,11 +308,16 @@ dialog.modal footer { display: flex; justify-content: flex-end; gap: 8px; paddin
 .stack-hint { display: none; }
 .stage-wrap.stack { overflow: visible; height: auto !important; }
 .stage-wrap.stack .stage { width: auto !important; height: auto !important; transform: none !important; margin: 0 !important; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
-.stage-wrap.stack .widget { position: relative; left: auto !important; top: auto !important; width: auto !important; height: 230px !important; flex: none; }
-.stage-wrap.stack .widget.circle, .stage-wrap.stack .widget.egg { height: 340px !important; }
-.stage-wrap.stack .widget.qr { height: 330px !important; }
-.stage-wrap.stack .widget.interval { height: 380px !important; }
-.stage-wrap.stack .widget.people { height: 470px !important; }
+.stage-wrap.stack .widget { position: relative; left: auto !important; top: auto !important; width: auto !important; height: auto !important; flex: none; container-type: inline-size; }
+.stage-wrap.stack .w-body { padding-top: 14px; padding-bottom: 16px; }
+.stage-wrap.stack .timer.digital .time { font-size: min(26cqw, 110px); }
+.stage-wrap.stack .stopwatch:not(.people) .time { font-size: min(17cqw, 72px); }
+.stage-wrap.stack .interval .time { font-size: min(22cqw, 96px); }
+.stage-wrap.stack .circle-timer { width: min(66cqw, 260px); }
+.stage-wrap.stack .circle-timer .time { font-size: min(12cqw, 48px); }
+.stage-wrap.stack .egg-timer { width: min(48cqw, 190px); }
+.stage-wrap.stack .timer.egg .time { font-size: min(15cqw, 60px); }
+.stage-wrap.stack .qr-box { width: min(70cqw, 280px); }
 .stage-wrap.stack .w-head, .stage-wrap.stack .w-body { cursor: default; }
 .stage-wrap.stack .w-head, .stage-wrap.stack .w-resize { touch-action: auto; }
 .stage-wrap.stack .w-resize { display: none; }
