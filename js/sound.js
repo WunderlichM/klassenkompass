@@ -32,9 +32,9 @@ export const DEFAULT_INTERVAL_TONES = { start: 'start', pause: 'pause', roundPau
 export const INTERVAL_TONE_LABELS = { start: 'Trainingsbeginn', pause: 'Satzpause', roundPause: 'Rundenpause', finish: 'Trainingsende', countdown: 'Countdown (3, 2, 1)' };
 
 export function play(id, volume = 0.6) { (TONES[id] || TONES.beep).play(Math.max(0, Math.min(1, volume)) * 0.5); }
-// Endton der Timer: kräftiges Weckersignal (je Sekunde drei Pieptöne, 8 Sekunden lang).
+// Endton der Timer: kräftiges Weckersignal (je Sekunde drei Pieptöne, 5 Sekunden lang).
 // Er wird im Voraus auf der Audio-Uhr eingeplant und erklingt daher auch, wenn das Fenster im Hintergrund liegt.
-export const ALARM_SECONDS = 8;
+export const ALARM_SECONDS = 5;
 export function scheduleAlarm(delaySec = 0, seconds = ALARM_SECONDS) {
   const c = ac(); if (!c || c.state !== 'running') return null;
   const comp = c.createDynamicsCompressor(), out = c.createGain();
