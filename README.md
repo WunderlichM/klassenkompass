@@ -9,6 +9,7 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 - **Mit Konto (optional):** Zahnrad → „Konto & Synchronisierung“. Die Daten werden auf dem Gerät mit dem eigenen Passwort verschlüsselt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort) und in Supabase (Frankfurt) gespeichert. Der Server sieht weder Passwort noch Namen. Passwort vergessen = Daten im Konto verloren.
 - Keine externen Bibliotheken, keine Analyse, keine Werbung. QR-Codes werden direkt im Browser erzeugt.
 - Breitbild: Ab etwa 1800 px Breite nutzt die App mehr Platz, ab 2600 px (z. B. 3440 × 1440) werden Schrift und Sitzplätze größer. Im Bildschirm lässt sich das Format 21:9 wählen.
+- Dark Mode: Zahnrad → „Design“ → Automatisch (folgt dem Gerät), Hell oder Dunkel. Die Wahl gilt nur für das jeweilige Gerät (`js/theme.js`, localStorage) und wird nicht abgeglichen. Druck, Antwortkarten und QR-Codes bleiben immer hell.
 - Sitzplan: Jeder Tisch trägt Farbe und Nummer seiner Gruppe (G1, G2 …), darüber steht eine Legende.
 
 ## Nutzen

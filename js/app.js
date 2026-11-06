@@ -9,8 +9,9 @@ import * as sync from './sync.js';
 import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
+import * as theme from './theme.js';
 
-export const VERSION = '1.9.1';
+export const VERSION = '1.10.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -51,11 +52,16 @@ function navigate() {
   document.body.className = document.body.className.replace(/\bt-\w+\b/g, '').trim() + ' ' + r.cls;
   document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.route === key));
   document.title = `KlassenKompass · ${r.title}`;
-  document.querySelector('meta[name=theme-color]').setAttribute('content', r.theme);
+  setThemeColor();
   const view = document.getElementById('view');
   unmount = r.mod.mount(view);
   view.focus({ preventScroll: true });
   scrollTo(0, 0);
+}
+
+// Farbe der Statusleiste (Handy, installierte App): Bereichsfarbe, im Dark Mode dunkel
+function setThemeColor() {
+  document.querySelector('meta[name=theme-color]').setAttribute('content', theme.isDark() ? '#1c1e25' : ROUTES[routeKey()].theme);
 }
 
 // ---------- Datenmenü ----------
@@ -66,6 +72,8 @@ function menuDialog() {
     <div class="menu-grid">
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
       ${sync.supported && account.status().state === 'off' ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
+      <div class="menu-item theme-item">${icon('moon')}<span><b>Design</b><small>Automatisch folgt der Einstellung des Geräts. Gilt nur für dieses Gerät.</small></span>
+        <div class="seg" role="group" aria-label="Design">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button type="button" data-theme-opt="${v}" class="${theme.get() === v ? 'on' : ''}" aria-pressed="${theme.get() === v}">${l}</button>`).join('')}</div></div>
       <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
       <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
@@ -79,6 +87,10 @@ function menuDialog() {
         try { const pics = await images.pack(images.idsIn(store.get().quiz)); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o, null, 1); } } catch {}
         downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, text); toast('Sicherung heruntergeladen.');
       };
+      el.querySelectorAll('[data-theme-opt]').forEach(b => b.onclick = () => {
+        theme.set(b.dataset.themeOpt);
+        el.querySelectorAll('[data-theme-opt]').forEach(o => { const on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+      });
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
       const sb = el.querySelector('[data-m=sync]'); if (sb) sb.onclick = () => { close(); syncDialog(); };
@@ -128,6 +140,7 @@ function helpDialog() {
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ oder die Sync-Datei auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
+      <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
       <li><b>Ohne Konto, mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
@@ -248,6 +261,7 @@ function tour({ force = false } = {}) {
 
 // ---------- Start ----------
 shell();
+theme.init(() => { if (document.querySelector('meta[name=theme-color]')) setThemeColor(); });
 addEventListener('hashchange', navigate);
 navigate();
 tour();
