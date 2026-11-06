@@ -175,10 +175,14 @@ function room(c) {
     return `<div class="room omnibus">${front}${legend(c)}<div class="rows">${tables.map((t, i) => deskTable(c, t, `Tisch ${i + 1}`)).join('')}</div><div class="back">Hinten</div></div>`;
   }
   if (L === 'gruppen') {
+    // Gruppentisch aus zusammengeschobenen Zweiertischen: zwei Längsseiten gegenüber,
+    // ein übrig bleibender Tisch steht quer an der Stirnseite
     return `<div class="room gruppen">${front}<div class="islands">${c.plan.groups.map((g, gi) => {
-      const half = Math.ceil(g.length / 2), top = g.slice(0, half), bottom = g.slice(half);
-      while (bottom.length < top.length) bottom.push(null);
-      return `<div class="island" style="${palStyle(gi)}"><small>Gruppe ${gi + 1} · ${g.length}</small><div class="row">${top.map(id => seat(c, id, gi)).join('')}</div><div class="board" style="--n:${half}"></div><div class="row">${bottom.map(id => seat(c, id, gi)).join('')}</div></div>`;
+      const pairs = [];
+      for (let i = 0; i < g.length; i += 2) pairs.push([g[i], g[i + 1] ?? null]);
+      const end = pairs.length > 1 && pairs.length % 2 ? pairs.pop() : null, half = Math.ceil(pairs.length / 2);
+      const desk = p => `<div class="table grouped"><div class="pair">${seat(c, p[0], gi) + seat(c, p[1], gi)}</div></div>`;
+      return `<div class="island" style="${palStyle(gi)}"><small><b class="gtag">G${gi + 1}</b>Gruppe ${gi + 1} · ${g.length}</small><div class="cluster${end ? ' has-end' : ''}"><div class="side top">${pairs.slice(0, half).map(desk).join('')}</div>${pairs.length > half ? `<div class="side bottom">${pairs.slice(half).map(desk).join('')}</div>` : ''}${end ? `<div class="end">${desk(end)}</div>` : ''}</div></div>`;
     }).join('')}</div><div class="back">Hinten</div></div>`;
   }
   if (L === 'uform') {

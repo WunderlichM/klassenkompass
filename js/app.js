@@ -8,7 +8,7 @@ import * as quiz from './quiz.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
 
-export const VERSION = '1.6.2';
+export const VERSION = '1.6.3';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
