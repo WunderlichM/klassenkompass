@@ -4,14 +4,22 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 
 - Läuft im Browser auf PC, Tablet und Handy und lässt sich als App installieren.
 - Funktioniert nach dem ersten Öffnen auch ohne Internet.
-- **Keine Anmeldung, kein Server:** Alle Daten bleiben im Browser des jeweiligen Geräts. Übertragen und Sichern über „Daten exportieren / importieren“ (Zahnrad oben rechts).
+- **Ohne Konto:** Alle Daten bleiben im Browser des jeweiligen Geräts. Übertragen und Sichern über „Daten exportieren / importieren“ (Zahnrad oben rechts).
+- **Mit Konto (optional):** Zahnrad → „Konto & Synchronisierung“. Die Daten werden auf dem Gerät mit dem eigenen Passwort verschlüsselt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort) und in Supabase (Frankfurt) gespeichert. Der Server sieht weder Passwort noch Namen. Passwort vergessen = Daten im Konto verloren.
 - Keine externen Bibliotheken, keine Analyse, keine Werbung. QR-Codes werden direkt im Browser erzeugt.
 
 ## Nutzen
 
 Einfach den Link öffnen. Im Browser über „Installieren“ (Chrome/Edge) bzw. „Zum Home-Bildschirm“ (Safari) als App hinzufügen.
 
-## Mehrere PCs abgleichen (Sync-Datei)
+## Technik der Konten
+
+- `js/config.js`: Supabase-URL und öffentlicher Publishable Key.
+- `supabase/setup.sql`: Tabelle `vaults` (ein verschlüsselter Block je Konto, Row Level Security), Funktion `save_vault` mit Versionsprüfung, `delete_my_account`, `ping`.
+- In Supabase ist „Confirm email“ ausgeschaltet (der kostenlose Mailversand erreicht keine fremden Adressen).
+- `.github/workflows/keepalive.yml` ruft alle drei Tage `ping` auf, damit das kostenlose Projekt nicht pausiert.
+
+## Mehrere PCs abgleichen ohne Konto (Sync-Datei)
 
 Zahnrad → „Sync-Datei einrichten“ → „Neue Sync-Datei anlegen“ und die Datei in einem Ordner speichern, den Google Drive für Desktop (oder OneDrive/Dropbox) abgleicht. Auf jedem weiteren PC „Vorhandene Sync-Datei wählen“. Änderungen werden automatisch geschrieben; beim Öffnen und alle 20 Sekunden prüft die App, ob ein anderer PC etwas geändert hat. Haben zwei PCs gleichzeitig geändert, fragt die App, welcher Stand gilt. Funktioniert in Chrome und Edge am PC; Handy und Tablet nutzen Export/Import.
 
