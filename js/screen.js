@@ -61,7 +61,7 @@ function draw() {
     <div class="dock no-present">
       <div class="add-row">${ADD.map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>
       <div class="dock-row">
-        <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte untereinander. „Alles anzeigen“ zeigt die Anordnung wie am Bildschirm.</span>
+        <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte groß untereinander; „Große Ansicht“ füllt den ganzen Bildschirm. Die freie Anordnung zeigen PC und Tablet.</span>
         <span class="swatches" role="group" aria-label="Hintergrund">${['mint', 'paper', 'night'].map(b => `<button class="swatch sw-${b} ${s.background === b ? 'on' : ''}" data-act="bg" data-bg="${b}" title="${{ mint: 'Mint', paper: 'Papier', night: 'Nacht' }[b]}"></button>`).join('')}</span>
         <label class="small-text" title="21:9 nutzt Ultrawide-Bildschirme (z. B. 3440 × 1440) ohne Ränder">Format <select class="select sm" id="format"><option value="std" ${s.format !== 'wide' ? 'selected' : ''}>16:9</option><option value="wide" ${s.format === 'wide' ? 'selected' : ''}>21:9 Breitbild</option></select></label>
         <label class="small-text">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${String(s.zoom) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -72,14 +72,16 @@ function draw() {
   updateLive(Date.now(), false);
 }
 
-// Handy: Objekte untereinander statt verkleinerter Bühne (nur bei Ansicht „Automatisch“)
+// Handy: Objekte groß untereinander statt verkleinerter 16:9-Bühne – immer, unabhängig von der
+// (mitsynchronisierten) Ansicht-Einstellung des PCs; in der großen Ansicht füllen sie den Bildschirm.
 const isStack = () => root?.querySelector('#stage-wrap')?.classList.contains('stack');
+const isPhone = () => (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) && Math.min(innerWidth, innerHeight) < 600;
 
 function fit() {
   const wrap = root?.querySelector('#stage-wrap'), stage = root?.querySelector('#stage'); if (!wrap || !stage) return;
   const z = scr().zoom, availW = wrap.clientWidth;
   const presenting = document.body.classList.contains('presenting');
-  const stack = z === 'auto' && availW < 640;
+  const stack = isPhone() || (availW < 640 && (z === 'auto' || presenting));
   wrap.classList.toggle('stack', stack);
   root.querySelector('.screen')?.classList.toggle('stacked', stack);
   if (stack) {
