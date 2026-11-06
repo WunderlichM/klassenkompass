@@ -3,6 +3,7 @@
 Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Turniere & Ranglisten** (Sport) und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer und QR-Codes.
 
 - Läuft im Browser auf PC, Tablet und Handy und lässt sich als App installieren.
+- Handy und Tablett: große Tippflächen, kein Zoom beim Antippen von Feldern, Dialoge von unten. Im Bildschirm stehen die Objekte auf dem Handy untereinander („Ansicht: Alles anzeigen“ zeigt die freie Anordnung); am Tablett lassen sie sich mit dem Finger an der Kopfzeile verschieben.
 - Funktioniert nach dem ersten Öffnen auch ohne Internet.
 - **Ohne Konto:** Alle Daten bleiben im Browser des jeweiligen Geräts. Übertragen und Sichern über „Daten exportieren / importieren“ (Zahnrad oben rechts).
 - **Mit Konto (optional):** Zahnrad → „Konto & Synchronisierung“. Die Daten werden auf dem Gerät mit dem eigenen Passwort verschlüsselt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort) und in Supabase (Frankfurt) gespeichert. Der Server sieht weder Passwort noch Namen. Passwort vergessen = Daten im Konto verloren.

@@ -7,7 +7,7 @@ import * as screen from './screen.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };

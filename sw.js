@@ -1,5 +1,5 @@
 // Service Worker: speichert die App für den Offline-Betrieb.
-const VERSION = 'kk-1.2.0';
+const VERSION = 'kk-1.3.0';
 const FILES = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/store.js', 'js/engine.js', 'js/ui.js', 'js/technik.js', 'js/sport.js', 'js/screen.js', 'js/qr.js', 'js/sound.js', 'js/sync.js', 'js/account.js', 'js/config.js',
   'icons/favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'];

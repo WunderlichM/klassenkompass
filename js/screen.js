@@ -60,7 +60,7 @@ function draw() {
     <div class="dock no-present">
       <div class="add-row">${ADD.map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>
       <div class="dock-row">
-        <span class="muted small-text">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span>
+        <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte untereinander. „Alles anzeigen“ zeigt die Anordnung wie am Bildschirm.</span>
         <span class="swatches" role="group" aria-label="Hintergrund">${['mint', 'paper', 'night'].map(b => `<button class="swatch sw-${b} ${s.background === b ? 'on' : ''}" data-act="bg" data-bg="${b}" title="${{ mint: 'Mint', paper: 'Papier', night: 'Nacht' }[b]}"></button>`).join('')}</span>
         <label class="small-text">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${String(s.zoom) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
@@ -70,13 +70,24 @@ function draw() {
   updateLive(Date.now(), false);
 }
 
+// Handy: Objekte untereinander statt verkleinerter Bühne (nur bei Ansicht „Automatisch“)
+const isStack = () => root?.querySelector('#stage-wrap')?.classList.contains('stack');
+
 function fit() {
   const wrap = root?.querySelector('#stage-wrap'), stage = root?.querySelector('#stage'); if (!wrap || !stage) return;
   const z = scr().zoom, availW = wrap.clientWidth;
   const presenting = document.body.classList.contains('presenting');
-  const availH = presenting ? innerHeight - 24 : Math.max(320, innerHeight - wrap.getBoundingClientRect().top - 150);
+  const stack = z === 'auto' && availW < 640;
+  wrap.classList.toggle('stack', stack);
+  root.querySelector('.screen')?.classList.toggle('stacked', stack);
+  if (stack) {
+    scale = 1; stage.style.transform = 'none'; stage.style.marginLeft = '0'; wrap.style.height = ''; wrap.classList.remove('scroll-x');
+    return;
+  }
+  const vh = window.visualViewport?.height || innerHeight;
+  const availH = presenting ? vh - 24 : Math.max(320, vh - wrap.getBoundingClientRect().top - 150);
   if (z === 'fit' || presenting) scale = Math.min(availW / SCREEN_W, availH / SCREEN_H);
-  else if (z === 'auto') scale = Math.max(availW < 700 ? 0.62 : 0.4, Math.min(availW / SCREEN_W, 1.6));
+  else if (z === 'auto') scale = Math.max(0.4, Math.min(availW / SCREEN_W, 1.6));
   else scale = Number(z) || 1;
   stage.style.transform = `scale(${scale})`;
   wrap.style.height = SCREEN_H * scale + 'px';
@@ -86,7 +97,7 @@ function fit() {
 
 // ---------- Widgets ----------
 function frame(w, inner, cls = '') {
-  return `<div class="widget ${cls} ${selected === w.id ? 'selected' : ''}" data-wid="${esc(w.id)}" tabindex="0" style="left:${w.x}px;top:${w.y}px;width:${w.width}px;height:${w.height}px">
+  return `<div class="widget ${cls} ${selected === w.id ? 'selected' : ''}" data-wid="${esc(w.id)}" tabindex="0" style="left:${w.x}px;top:${w.y}px;width:${w.width}px;height:${w.height}px;order:${Math.round(w.y / 20) * 10000 + Math.round(w.x)}">
     <div class="w-head" data-drag><span class="w-title">${esc(w.label || '')}</span>
       <span class="w-tools"><button class="icon-btn xs" data-act="settings" title="Einstellungen">${icon('gear', 15)}</button><button class="icon-btn xs" data-act="remove" title="Entfernen">${icon('trash', 15)}</button></span></div>
     <div class="w-body">${inner}</div><div class="w-resize" data-resize title="Größe ändern"></div></div>`;
@@ -305,9 +316,9 @@ document.addEventListener('submit', e => {
 
 // Ziehen und Größe ändern
 function onPointerDown(e) {
-  const wEl = e.target.closest('[data-wid]'); if (!wEl || e.button > 0) return;
+  const wEl = e.target.closest('[data-wid]'); if (!wEl || e.button > 0 || isStack()) return;
   const resize = e.target.closest('[data-resize]');
-  const onFree = e.target.closest('[data-drag]') || (e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label'));
+  const onFree = e.target.closest('[data-drag]') || (e.pointerType !== 'touch' && e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label'));
   if (!resize && !onFree) return;
   if (e.target.closest('button')) return;
   e.preventDefault();
@@ -394,7 +405,7 @@ function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
       <li><b>Hinzufügen:</b> Unten Timer, Stoppuhr, Intervalltimer oder QR-Code wählen (bis zu 30 Objekte).</li>
-      <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus, Finger oder Stift. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
+      <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter.</li>

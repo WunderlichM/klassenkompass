@@ -33,8 +33,23 @@ export function mount(root) {
   root.onclick = e => onClick(e, root);
   root.onchange = e => onChange(e);
   root.oninput = e => { if (e.target.id === 'student-search') { search = e.target.value; drawStudents(root); } };
+  const onResize = () => fitRoom(root);
+  addEventListener('resize', onResize);
   render();
-  return () => { off(); root.onclick = root.onchange = root.oninput = null; };
+  return () => { off(); removeEventListener('resize', onResize); root.onclick = root.onchange = root.oninput = null; };
+}
+
+// Sitzplan auf schmalen Bildschirmen (Handy) verkleinern statt waagerecht scrollen
+function fitRoom(root) {
+  const wrap = root.querySelector('.room-wrap'), room = wrap?.querySelector('.room'); if (!room) return;
+  room.style.zoom = '';
+  if (document.body.classList.contains('presenting') && innerWidth > 900) return;
+  const cs = getComputedStyle(wrap), avail = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  // Breite aus allen Plätzen bestimmen (zentrierte Reihen ragen sonst links unbemerkt hinaus)
+  let lo = Infinity, hi = -Infinity;
+  room.querySelectorAll('.seat, .desk, .table, .island').forEach(el => { const r = el.getBoundingClientRect(); lo = Math.min(lo, r.left); hi = Math.max(hi, r.right); });
+  const need = Math.max(room.scrollWidth, hi - lo + 8);
+  if (need > avail + 1) room.style.zoom = String(Math.max(0.5, avail / need));
 }
 
 function draw(root) {
@@ -58,6 +73,7 @@ function draw(root) {
     ${c ? body(c) : `<div class="card empty"><p>Lege deine erste Klasse an. Gespeichert werden nur Vornamen.</p><button class="btn primary" data-act="new-class">${icon('plus')} Neue Klasse</button></div>`}
   </section>`;
   drawStudents(root);
+  fitRoom(root);
 }
 
 function body(c) {
