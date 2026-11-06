@@ -636,3 +636,5 @@ body.presenting .p1 .pod-step { height: 34vh; } body.presenting .p2 .pod-step { 
   .pod-card { padding: 22px 10px 0; } .podium { gap: 6px; min-height: 320px; }
   .p1 .pod-step { height: 170px; } .p2 .pod-step { height: 125px; } .p3 .pod-step { height: 90px; }
 }
+.tile.absent { opacity: .5; border-style: dashed; background: transparent; } .tile.absent small { font-size: 11px; }
+.quiz-run .card-head.small .tools { gap: 2px 16px; } .quiz-run .card-head.small .check { margin: 0; font-size: 13px; }

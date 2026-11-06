@@ -32,7 +32,7 @@ export function demoQuiz() {
     q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
     q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
     q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
-  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id };
+  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true };
 }
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
@@ -126,10 +126,10 @@ function normQuiz(q) {
     const used = new Set();
     const students = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id && str(s.name)).slice(0, CARD_MAX).map(s => {
       let card = int(s.card, 1, CARD_MAX, 0); if (!card || used.has(card)) card = 0; if (card) used.add(card);
-      return { id: String(s.id), name: str(s.name, 40), card };
+      return { id: String(s.id), name: str(s.name, 40), card, ...(s.srcId ? { srcId: str(s.srcId, 60) } : {}) };
     });
     students.forEach(s => { if (!s.card) { let n = 1; while (used.has(n)) n++; s.card = n; used.add(n); } });
-    return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, students };
+    return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, src: str(c?.src, 80), students };
   });
   const normQ = x => {
     const options = (Array.isArray(x?.options) ? x.options : []).map(o => str(o, 120)).slice(0, 4);
@@ -142,9 +142,10 @@ function normQuiz(q) {
   const sessions = (Array.isArray(q.sessions) ? q.sessions : []).slice(-200).map(x => ({ id: String(x?.id || uid()), device: str(x?.device, 40), classId: String(x?.classId || ''), className: str(x?.className, 60),
     setId: String(x?.setId || ''), title: str(x?.title, 80), date: str(x?.date, 10), index: int(x?.index, 0, 99, 0), reveal: !!x?.reveal, done: !!x?.done,
     students: (Array.isArray(x?.students) ? x.students : []).map(s => ({ id: String(s.id), name: str(s.name, 40), card: int(s.card, 1, CARD_MAX, 0) })),
+    absent: (Array.isArray(x?.absent) ? x.absent : []).map(String),
     questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y),
       answers: Object.fromEntries(Object.entries(y?.answers || {}).filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 4)) })) }));
-  return { classes, sets, sessions,
+  return { classes, sets, sessions, autoReveal: q.autoReveal !== false,
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }

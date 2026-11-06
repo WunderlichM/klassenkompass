@@ -14,6 +14,8 @@ const Q = () => store.get().quiz;
 const cls = () => Q().classes.find(c => c.id === Q().activeClassId) || null;
 const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
+const present = s => s.students.filter(x => !s.absent?.includes(x.id));
+const autoDone = new Set();
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
 let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null;
@@ -32,8 +34,17 @@ export function mount(el) {
 function draw() {
   if (!root) return;
   const s = running();
-  if (s) { drawRun(s); startScanPoll(); syncControl(s); }
+  if (s) { drawRun(s); startScanPoll(); syncControl(s); checkAuto(s); }
   else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId); if (p) drawPodium(p); else { podiumId = null; drawHome(); } }
+}
+
+// Automatisch auflösen, sobald alle anwesenden Kinder geantwortet haben (je Frage nur einmal)
+function checkAuto(s) {
+  if (Q().autoReveal === false || s.reveal) return;
+  const q = s.questions[s.index], pres = present(s);
+  if (!pres.length || autoDone.has(q.id) || pres.some(x => q.answers[x.id] === undefined)) return;
+  autoDone.add(q.id);
+  setTimeout(() => updateRun(x => { if (x.questions[x.index].id === q.id) x.reveal = true; }), 800);
 }
 
 // ======================================================================
@@ -88,6 +99,7 @@ function drawHome() {
         </div>
       </div>
     </div>
+    ${technikMissing().length ? `<p class="notice">${technikMissing().length} Technik-Klasse(n) (${technikMissing().map(c => esc(c.name)).join(', ')}) sind noch nicht im Quiz. <button class="link" data-act="import-technik"><b>Jetzt übernehmen</b></button></p>` : ''}
     ${live.remote ? `<div class="card live-banner"><div><b>${icon('camera', 18)} Live-Quiz auf einem anderen Gerät</b><span class="muted">${esc(live.remote.className)} · Frage ${live.remote.index + 1}/${live.remote.total}</span></div><button class="btn primary big" data-act="scan-remote">${icon('camera')} Karten scannen</button></div>` : ''}
     <div class="work-grid">
       <div>
@@ -130,7 +142,7 @@ function drawHome() {
             <li>Karten einmal drucken (am besten auf festem Papier) und austeilen. Jedes Kind bekommt seine Nummer.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
-            <li>„Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
+            <li>Sobald alle erfasst sind, wird automatisch aufgelöst (abschaltbar). Fehlt ein Kind, im Quiz auf seinen Namen tippen → „Fehlt heute“. „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
           </ol>
         </div>
       </aside>
@@ -164,7 +176,7 @@ function stats(sess) {
 // ======================================================================
 function drawRun(s) {
   const q = s.questions[s.index], n = q.options.length;
-  const byStudent = q.answers, answered = s.students.filter(x => byStudent[x.id] !== undefined).length;
+  const byStudent = q.answers, pres = present(s), answered = pres.filter(x => byStudent[x.id] !== undefined).length;
   const counts = q.options.map((_, i) => Object.values(byStudent).filter(v => v === i).length);
   const max = Math.max(1, ...counts);
   const phone = account.loggedIn() ? (Date.now() - live.phoneAt < 8000 ? `${icon('check', 14)} Handy verbunden` : `${icon('camera', 14)} Handy: auf dem Handy mit demselben Konto anmelden → Quiz → „Karten scannen“`) : `${icon('camera', 14)} Ohne Konto: auf diesem Gerät scannen oder das Quiz auf dem Handy starten`;
@@ -187,7 +199,7 @@ function drawRun(s) {
           ${s.reveal ? `<span class="run-bar"><i style="width:${counts[i] / max * 100}%"></i></span><span class="run-count">${counts[i]}</span>` : ''}
         </div>`).join('')}</div>
       <div class="run-foot">
-        <span class="run-progress"><b>${answered}</b> / ${s.students.length} geantwortet${s.reveal && q.correct !== null && answered ? ` · <b>${Math.round(counts[q.correct] / answered * 100)} %</b> richtig` : ''}</span>
+        <span class="run-progress"><b>${answered}</b> / ${pres.length} geantwortet${s.reveal && q.correct !== null && answered ? ` · <b>${Math.round(counts[q.correct] / answered * 100)} %</b> richtig` : ''}</span>
         <div class="tools">
           ${q.correct === null ? `<label class="run-correct no-present">Richtig: <select class="select sm" data-act="set-correct"><option value="">–</option>${q.options.map((_, i) => `<option value="${i}">${LETTERS[i]}</option>`).join('')}</select></label>` : ''}
           <button class="btn ghost" data-act="prev" ${s.index ? '' : 'disabled'}>${icon('back', 16)} Zurück</button>
@@ -198,8 +210,10 @@ function drawRun(s) {
     </div>
     <div class="card">
       <div class="card-head small"><h3>${icon('users', 16)} ${esc(s.className)}</h3>
-        <label class="check no-present"><input type="checkbox" data-act="names" ${showNames ? 'checked' : ''}> Antworten bei den Namen zeigen</label></div>
+        <div class="tools no-present"><label class="check"><input type="checkbox" data-act="auto" ${Q().autoReveal !== false ? 'checked' : ''}> Automatisch auflösen, wenn alle geantwortet haben</label>
+        <label class="check"><input type="checkbox" data-act="names" ${showNames ? 'checked' : ''}> Antworten bei den Namen zeigen</label></div></div>
       <div class="tiles">${s.students.slice().sort((a, b) => a.name.localeCompare(b.name, 'de')).map(x => {
+        if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
         const a = byStudent[x.id], has = a !== undefined, open = s.reveal && showNames && has;
         const cl = !has ? '' : open && q.correct !== null ? (a === q.correct ? 'right' : 'miss') : 'done';
         return `<button class="tile ${cl}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
@@ -217,6 +231,7 @@ function onChange(e) {
   if (t.id === 'quiz-class') store.update(s => { s.quiz.activeClassId = t.value; });
   else if (t.id === 'quiz-set') store.update(s => { s.quiz.activeSetId = t.value; });
   else if (t.dataset.act === 'names') { showNames = t.checked; draw(); }
+  else if (t.dataset.act === 'auto') store.update(s => { s.quiz.autoReveal = t.checked; });
   else if (t.dataset.act === 'set-correct' && t.value !== '') updateRun(s => { s.questions[s.index].correct = Number(t.value); });
 }
 
@@ -226,6 +241,7 @@ function onClick(e) {
   switch (act) {
     case 'classes': return classesDialog();
     case 'class-new': return classDialog();
+    case 'import-technik': return importTechnik();
     case 'students-add': return studentsAddDialog(cls());
     case 'student-edit': return studentDialog(cls(), b.dataset.id);
     case 'print': return printDialog();
@@ -263,7 +279,7 @@ function start(quick) {
   const questions = quick ? [{ id: uid(), text: '', options: ['', '', '', ''], correct: null }] : t.questions.filter(x => x.options.length >= 2);
   store.update(s => {
     if (old) s.quiz.sessions.find(x => x.id === old.id).done = true;
-    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), index: 0, reveal: false, done: false,
+    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), index: 0, reveal: false, done: false, absent: [],
       students: c.students.map(x => ({ id: x.id, name: x.name, card: x.card })), questions: questions.map(x => ({ ...structuredClone(x), id: uid(), answers: {} })) });
   });
   live.applied.clear(); live.lastCmd = null; live.lastControl = '';
@@ -295,8 +311,10 @@ function tileDialog(studentId) {
   const d = dialog({ title: `${stu.name} (Karte ${stu.card})`, submit: null, cancel: 'Schließen', body: `
     <p class="muted small-text">Antwort von Hand setzen, z. B. wenn die Karte fehlt.</p>
     <div class="answer-pick">${q.options.map((o, i) => `<button type="button" class="btn ${cur === i ? 'primary' : 'ghost'}" data-a="${i}">${esc(optLabel(q, i))}</button>`).join('')}
-    <button type="button" class="btn ghost" data-a="-1">Keine Antwort</button></div>`,
+    <button type="button" class="btn ghost" data-a="-1">Keine Antwort</button>
+    <button type="button" class="btn ghost" data-a="absent">${s.absent?.includes(studentId) ? 'Ist doch da' : 'Fehlt heute (zählt nicht mit)'}</button></div>`,
     onOpen: (el, close) => el.querySelectorAll('[data-a]').forEach(btn => btn.onclick = () => {
+      if (btn.dataset.a === 'absent') { updateRun(x => { x.absent ||= []; if (x.absent.includes(studentId)) x.absent = x.absent.filter(y => y !== studentId); else x.absent.push(studentId); }); return close(); }
       const a = Number(btn.dataset.a);
       updateRun(x => { const qq = x.questions[x.index]; if (a < 0) delete qq.answers[studentId]; else qq.answers[studentId] = a; });
       close();
@@ -313,7 +331,7 @@ function localProvider() {
       const s = running(); if (!s) return null;
       const q = s.questions[s.index], byCard = {};
       s.students.forEach(x => { if (q.answers[x.id] !== undefined) byCard[x.card] = q.answers[x.id]; });
-      return { sessionId: s.id, title: s.className, index: s.index, total: s.questions.length, text: q.text, options: q.options, reveal: s.reveal, roster: s.students.map(x => ({ card: x.card, name: x.name })), answers: byCard };
+      return { sessionId: s.id, title: s.className, index: s.index, total: s.questions.length, text: q.text, options: q.options, reveal: s.reveal, roster: present(s).map(x => ({ card: x.card, name: x.name })), answers: byCard };
     },
     answer(card, idx) { updateRun(s => { const stu = s.students.find(x => x.card === card); if (stu) s.questions[s.index].answers[stu.id] = idx; }); },
     command(c) { if (c === 'reveal') updateRun(s => { s.reveal = !s.reveal; }); else go(c === 'next' ? 1 : -1); },
@@ -383,7 +401,7 @@ function syncControl(s) {
   const q = s.questions[s.index], answers = {};
   s.students.forEach(x => { if (q.answers[x.id] !== undefined) answers[x.card] = q.answers[x.id]; });
   const payload = { v: 1, device: DEVICE, sessionId: s.id, classId: s.classId, className: s.className, index: s.index, total: s.questions.length, reveal: s.reveal,
-    question: { id: q.id, text: q.text, options: q.options }, cards: s.students.map(x => x.card), answers };
+    question: { id: q.id, text: q.text, options: q.options }, cards: present(s).map(x => x.card), answers };
   const key = JSON.stringify(payload);
   if (key === live.lastControl) return;
   live.lastControl = key;
@@ -433,10 +451,12 @@ function classesDialog() {
     <ul class="manage-list">${q.classes.map(c => `<li><span class="name"><b>${esc(c.name)}</b> <small class="muted">${c.students.length} Schüler</small></span>
       <button type="button" class="icon-btn sm" data-m="edit" data-id="${esc(c.id)}" title="Umbenennen" aria-label="Umbenennen">${icon('edit', 15)}</button>
       <button type="button" class="icon-btn sm" data-m="del" data-id="${esc(c.id)}" title="Löschen" aria-label="Löschen">${icon('trash', 15)}</button></li>`).join('') || '<li class="muted">Noch keine Klasse.</li>'}</ul>
-    <button type="button" class="btn primary full" data-m="new">${icon('plus')} Neue Klasse</button>`,
+    <button type="button" class="btn primary full" data-m="new">${icon('plus')} Neue Klasse</button>
+    <button type="button" class="btn ghost full" data-m="technik" style="margin-top:8px">${icon('technik')} Technik-Klassen übernehmen / aktualisieren</button>`,
     onOpen: (el, close) => el.querySelectorAll('[data-m]').forEach(b => b.onclick = async () => {
       const id = b.dataset.id, c = Q().classes.find(x => x.id === id);
       if (b.dataset.m === 'new') { close(); return classDialog(); }
+      if (b.dataset.m === 'technik') { close(); return importTechnik(); }
       if (b.dataset.m === 'edit') { close(); return renameClass(c); }
       close();
       if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
@@ -451,6 +471,32 @@ function sources() {
   return [...s.technik.classes.map(c => ({ id: 't:' + c.id, label: `Technik · ${c.name}`, names: c.students.map(x => x.name) })),
     ...s.sport.groups.map(g => ({ id: 's:' + g.id, label: `Sport · ${g.name}`, names: g.students.map(x => x.name) }))];
 }
+// Technik-Klassen als Quiz-Klassen übernehmen; bereits übernommene werden ergänzt (neue Kinder, geänderte Namen)
+const technikOwn = () => store.get().technik.classes.filter(c => !c.demo);
+const technikMissing = () => technikOwn().filter(c => !Q().classes.some(x => x.src === 't:' + c.id));
+function importTechnik() {
+  const tc = technikOwn();
+  if (!tc.length) return toast('Unter Technik gibt es noch keine eigenen Klassen.', { kind: 'warn' });
+  let created = 0, added = 0; const full = [];
+  store.update(s => {
+    for (const c of tc) {
+      let k = s.quiz.classes.find(x => x.src === 't:' + c.id);
+      if (!k) { k = { id: uid(), name: c.name, demo: false, src: 't:' + c.id, students: [] }; s.quiz.classes.push(k); created++; }
+      const used = new Set(k.students.map(x => x.card));
+      for (const stu of c.students) {
+        const have = k.students.find(x => x.srcId === stu.id);
+        if (have) { have.name = stu.name; continue; }
+        if (k.students.length >= CARD_COUNT) { full.push(stu.name); continue; }
+        let no = 1; while (used.has(no)) no++; used.add(no);
+        k.students.push({ id: uid(), name: stu.name, card: no, srcId: stu.id }); added++;
+      }
+    }
+    const first = s.quiz.classes.find(x => x.src === 't:' + tc[0].id);
+    if (created && first) s.quiz.activeClassId = first.id;
+  });
+  toast(`${created} Klasse(n) neu, ${added} Kind(er) übernommen.${full.length ? ` Mehr als ${CARD_COUNT} Kinder – nicht übernommen: ${full.join(', ')}` : ''}`);
+}
+
 function classDialog() {
   const src = sources();
   dialog({ title: 'Neue Quiz-Klasse', submit: 'Anlegen', body: `
