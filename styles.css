@@ -329,3 +329,5 @@ dialog.modal footer { display: flex; justify-content: flex-end; gap: 8px; paddin
   .t-layout { grid-template-columns: 1fr 1fr; }
   .score { border: 1px solid #999; }
 }
+
+.wide-seg { display: flex; margin-bottom: 14px; } .wide-seg button { flex: 1; padding: 9px; font-weight: 600; }

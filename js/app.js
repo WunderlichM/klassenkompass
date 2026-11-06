@@ -5,8 +5,9 @@ import * as technik from './technik.js';
 import * as sport from './sport.js';
 import * as screen from './screen.js';
 import * as sync from './sync.js';
+import * as account from './account.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
@@ -60,9 +61,10 @@ function navigate() {
 function menuDialog() {
   const s = store.get(), size = new Blob([JSON.stringify(s)]).size;
   dialog({ title: 'Daten und Hilfe', submit: null, cancel: 'Schließen', body: `
-    <p class="muted">Alle Klassen, Sportgruppen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). Es gibt keinen Server und keine Anmeldung.</p>
+    <p class="muted">Alle Klassen, Sportgruppen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
     <div class="menu-grid">
-      ${sync.supported ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
+      ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
+      ${sync.supported && account.status().state === 'off' ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
       <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
       <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
@@ -72,6 +74,7 @@ function menuDialog() {
     onOpen: (el, close) => {
       el.querySelector('[data-m=export]').onclick = () => { downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, store.exportJson()); toast('Sicherung heruntergeladen.'); };
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
+      const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
       const sb = el.querySelector('[data-m=sync]'); if (sb) sb.onclick = () => { close(); syncDialog(); };
       const file = el.querySelector('#import-file');
       el.querySelector('[data-m=import]').onclick = () => file.click();
@@ -114,14 +117,17 @@ function helpDialog() {
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
-      <li><b>Mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
+      <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
+      <li><b>Ohne Konto, mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
       <li><b>Als App nutzen:</b> Im Browser „Installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen. Danach funktioniert KlassenKompass auch ohne Internet.</li>
     </ul>
     <h3>Datenschutz</h3>
     <ul class="help-list">
-      <li>Alle Eingaben werden ausschließlich im Speicher dieses Browsers auf diesem Gerät abgelegt. Es gibt keinen Server, kein Konto, keine Werbung und keine Analyse.</li>
+      <li><b>Ohne Konto</b> bleiben alle Eingaben ausschließlich im Speicher dieses Browsers auf diesem Gerät.</li>
+      <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Weder der Betreiber noch Supabase können die Namen lesen.</li>
+      <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
-      <li>Andere Geräte sehen deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
+      <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>` });
 }
@@ -143,22 +149,27 @@ navigate();
 welcome();
 function renderStatus() {
   const el = document.getElementById('status'); if (!el) return;
-  const err = store.storageError(), st = sync.status();
+  const err = store.storageError(), ac = account.status(), st = ac.state !== 'off' ? { ...ac, fileName: ac.email } : sync.status();
   const time = st.lastSync ? new Date(st.lastSync).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
   let cls = '', html, title;
   if (err) { cls = 'warn attn'; html = `${icon('x', 14)} Nicht gespeichert`; title = err; }
   else if (st.state === 'permission') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync freigeben`; title = 'Der Browser braucht deine Freigabe, um die Sync-Datei zu lesen und zu schreiben. Hier klicken.'; }
   else if (st.state === 'conflict') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync-Konflikt`; title = 'Hier klicken, um zu entscheiden, welcher Stand gilt.'; }
   else if (st.state === 'error') { cls = 'warn attn'; html = `${icon('x', 14)} Sync-Fehler`; title = st.error + ' – Hier klicken für die Sync-Einstellungen.'; }
-  else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = 'Sync-Datei: ' + st.fileName; }
+  else if (st.state === 'login') { cls = 'warn attn'; html = `${icon('user', 14)} Anmelden`; title = st.error || 'Bitte erneut anmelden.'; }
+  else if (st.state === 'offline') { html = `${icon('repeat', 14)} Offline – wird später abgeglichen`; title = 'Änderungen bleiben auf diesem Gerät und werden abgeglichen, sobald wieder Internet da ist.'; }
+  else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = (ac.state !== 'off' ? 'Konto: ' : 'Sync-Datei: ') + st.fileName; }
   else { html = `${icon('check', 14)} Auf diesem Gerät gespeichert`; title = 'Alle Daten bleiben auf diesem Gerät'; }
   el.className = 'status ' + cls; el.innerHTML = html; el.title = title;
 }
 setInterval(renderStatus, 2000);
 document.getElementById('status').onclick = async () => {
+  const ast = account.status().state;
+  if (ast !== 'off') { if (ast === 'conflict') account.retryConflict(); else accountDialog(); return; }
   const st = sync.status().state;
   if (st === 'permission') { if (await sync.grant()) toast('Sync-Datei freigegeben.'); }
   else if (st === 'conflict') sync.retryConflict();
+  else if (account.enabled) accountDialog();
   else if (sync.supported) syncDialog();
 };
 
@@ -209,6 +220,79 @@ function syncDialog() {
       on('off', async () => { await sync.disconnect(); toast('Sync-Datei getrennt.'); });
     } });
 }
+
+// ---------- Konto ----------
+function remoteChoice(remote, { title, intro }) {
+  return new Promise(resolve => {
+    let done = false;
+    const d = dialog({ title, submit: null, cancel: 'Abbrechen', body: `<p>${intro}</p>
+      <div class="menu-grid">
+        <button type="button" class="menu-item" data-c="remote">${icon('download')}<span><b>Stand aus dem Konto übernehmen</b><small>${esc(summary(remote))}. Ersetzt die Daten auf diesem Gerät.</small></span></button>
+        <button type="button" class="menu-item" data-c="local">${icon('upload')}<span><b>Stand dieses Geräts behalten</b><small>${esc(summary(store.get()))}. Überschreibt den Stand im Konto.</small></span></button>
+      </div>`,
+      onOpen: (el, close) => el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { done = true; close(); resolve(b.dataset.c); }) });
+    d.el.addEventListener('close', () => { if (!done) resolve(null); });
+  });
+}
+
+function accountDialog() {
+  const st = account.status();
+  if (st.state === 'off' || st.state === 'login') {
+    let mode = st.email ? 'login' : 'login';
+    const body = () => `
+      <div class="seg wide-seg" role="tablist"><button type="button" data-mode="login" class="${mode === 'login' ? 'on' : ''}">Anmelden</button><button type="button" data-mode="register" class="${mode === 'register' ? 'on' : ''}">Neues Konto</button></div>
+      ${st.error && st.state === 'login' ? `<p class="notice">${esc(st.error)}</p>` : ''}
+      <label class="field">E-Mail<input name="email" type="email" class="input" autocomplete="username" value="${esc(st.email)}" required></label>
+      <label class="field">Passwort<input name="pw" type="password" class="input" autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" minlength="8" required></label>
+      ${mode === 'register' ? `<label class="field">Passwort wiederholen<input name="pw2" type="password" class="input" autocomplete="new-password" minlength="8"></label>
+      <div class="notice"><b>Wichtig:</b> Deine Daten werden mit diesem Passwort auf dem Gerät verschlüsselt. Niemand – auch nicht der Betreiber – kann sie lesen oder das Passwort zurücksetzen. <b>Passwort vergessen = Daten im Konto verloren.</b> Notiere es sicher und exportiere ab und zu eine Sicherung.</div>
+      <label class="check"><input type="checkbox" name="ok" required> Verstanden</label>` : `<p class="muted small-text">Nach der Anmeldung bleiben deine Daten auf allen Geräten gleich. Auf gemeinsam genutzten Schul-PCs nach der Stunde abmelden.</p>`}`;
+    dialog({ title: 'Konto & Synchronisierung', submit: 'Weiter', body: `<div data-acc>${body()}</div>`,
+      onOpen: el => {
+        const wrap = el.querySelector('[data-acc]'), sub = el.querySelector('button[type=submit]');
+        const bind = () => { sub.textContent = mode === 'register' ? 'Konto anlegen' : 'Anmelden'; wrap.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { const em = wrap.querySelector('[name=email]').value; mode = b.dataset.mode; wrap.innerHTML = body(); wrap.querySelector('[name=email]').value = em; bind(); }); };
+        bind();
+      },
+      onSubmit: async (fd, form) => {
+        const register = !!form.querySelector('[name=pw2]');
+        const email = String(fd.get('email') || ''), pw = String(fd.get('pw') || '');
+        if (register && pw !== String(fd.get('pw2'))) throw new Error('Die Passwörter stimmen nicht überein.');
+        if (register && fd.get('ok') !== 'on') throw new Error('Bitte den Hinweis zum Passwort bestätigen.');
+        const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Bitte warten …';
+        try {
+          if (sync.status().state !== 'off') await sync.disconnect();
+          await account.login(email, pw, { register, decide: remote => remoteChoice(remote, { title: 'Welcher Stand soll gelten?', intro: 'In deinem Konto und auf diesem Gerät sind schon Daten.' }) });
+        } finally { sub.disabled = false; sub.textContent = register ? 'Konto anlegen' : 'Anmelden'; }
+        navigate(); renderStatus();
+        toast(register ? 'Konto angelegt. Melde dich auf deinen anderen Geräten mit denselben Daten an.' : 'Angemeldet.');
+      } });
+    return;
+  }
+  dialog({ title: 'Konto & Synchronisierung', submit: null, cancel: 'Schließen', body: `
+    <p>Angemeldet als <b>${esc(st.email)}</b>${st.lastSync ? ` · zuletzt abgeglichen ${esc(fmt(st.lastSync))}` : ''}.</p>
+    ${st.state === 'error' ? `<p class="notice">${esc(st.error)}</p>` : ''}
+    <p class="muted small-text">Deine Daten werden auf dem Gerät verschlüsselt und so im Konto gespeichert. Änderungen werden nach wenigen Sekunden übertragen; andere Geräte holen sie beim Öffnen und alle 20 Sekunden.</p>
+    <div class="menu-grid">
+      <button type="button" class="menu-item" data-a="now">${icon('repeat')}<span><b>Jetzt abgleichen</b></span></button>
+      <button type="button" class="menu-item" data-a="logout">${icon('x')}<span><b>Abmelden</b><small>Auf gemeinsam genutzten Geräten nach der Stunde abmelden.</small></span></button>
+      <button type="button" class="menu-item" data-a="pw">${icon('edit')}<span><b>Passwort ändern</b></span></button>
+      <button type="button" class="menu-item danger" data-a="delete">${icon('trash')}<span><b>Konto löschen</b><small>Löscht das Konto und die Daten auf dem Server. Die Daten auf diesem Gerät bleiben.</small></span></button>
+    </div>`,
+    onOpen: (el, close) => {
+      const on = (k, fn) => el.querySelector(`[data-a=${k}]`).onclick = async () => { close(); try { await fn(); } catch (e) { toast(e.message, { kind: 'warn' }); } renderStatus(); };
+      on('now', async () => { await account.syncNow(); toast(account.status().state === 'ok' ? 'Abgeglichen.' : account.status().error || 'Abgleich nicht möglich.'); });
+      on('logout', () => new Promise(res => dialog({ title: 'Abmelden', submit: 'Abmelden', body: `<label class="check"><input type="checkbox" name="wipe" checked> Daten von diesem Gerät entfernen <small class="muted">(empfohlen auf fremden oder gemeinsam genutzten Geräten)</small></label>`,
+        onSubmit: async fd => { await account.logout({ wipe: fd.get('wipe') === 'on' }); navigate(); toast('Abgemeldet.'); res(); } }).el.addEventListener('close', res)));
+      on('pw', () => new Promise(res => dialog({ title: 'Passwort ändern', submit: 'Ändern', body: `<label class="field">Bisheriges Passwort<input name="old" type="password" class="input" autocomplete="current-password"></label><label class="field">Neues Passwort<input name="n1" type="password" class="input" autocomplete="new-password" minlength="8"></label><label class="field">Neues Passwort wiederholen<input name="n2" type="password" class="input" autocomplete="new-password"></label>`,
+        onSubmit: async fd => { if (fd.get('n1') !== fd.get('n2')) throw new Error('Die neuen Passwörter stimmen nicht überein.'); await account.changePassword(String(fd.get('old')), String(fd.get('n1'))); toast('Passwort geändert. Auf anderen Geräten neu anmelden.'); res(); } }).el.addEventListener('close', res)));
+      on('delete', async () => { if (!(await confirmDialog('Konto löschen', `Das Konto ${st.email} und alle Daten auf dem Server endgültig löschen? Die Daten auf diesem Gerät bleiben erhalten.`, 'Konto löschen'))) return; await account.deleteAccount(); toast('Konto gelöscht.'); });
+    } });
+}
+
+account.init({
+  changed: renderStatus,
+  conflict: remote => remoteChoice(remote, { title: 'Sync-Konflikt', intro: 'Auf einem anderen Gerät und auf diesem Gerät wurde seit dem letzten Abgleich etwas geändert. Welcher Stand soll gelten?' }).then(c => { if (c === 'remote') setTimeout(navigate); return c; }),
+});
 
 sync.init({
   changed: renderStatus,
