@@ -11,6 +11,10 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 
 Einfach den Link öffnen. Im Browser über „Installieren“ (Chrome/Edge) bzw. „Zum Home-Bildschirm“ (Safari) als App hinzufügen.
 
+## Mehrere PCs abgleichen (Sync-Datei)
+
+Zahnrad → „Sync-Datei einrichten“ → „Neue Sync-Datei anlegen“ und die Datei in einem Ordner speichern, den Google Drive für Desktop (oder OneDrive/Dropbox) abgleicht. Auf jedem weiteren PC „Vorhandene Sync-Datei wählen“. Änderungen werden automatisch geschrieben; beim Öffnen und alle 20 Sekunden prüft die App, ob ein anderer PC etwas geändert hat. Haben zwei PCs gleichzeitig geändert, fragt die App, welcher Stand gilt. Funktioniert in Chrome und Edge am PC; Handy und Tablet nutzen Export/Import.
+
 ## Veröffentlichen mit GitHub Pages
 
 1. Neues öffentliches Repository anlegen, z. B. `klassenkompass`.

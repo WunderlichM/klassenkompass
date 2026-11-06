@@ -4,8 +4,9 @@ import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
 import * as technik from './technik.js';
 import * as sport from './sport.js';
 import * as screen from './screen.js';
+import * as sync from './sync.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
@@ -25,7 +26,7 @@ function shell() {
       <a href="#/bildschirm" data-route="bildschirm">${icon('screen', 16)}<span>Bildschirm</span></a>
     </nav>
     <div class="top-tools">
-      <span class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</span>
+      <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
       <button class="btn ghost sm" id="install-btn" hidden title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
       <button class="icon-btn" id="menu-btn" aria-label="Daten und Hilfe" title="Daten und Hilfe">${icon('gear')}</button>
     </div>
@@ -61,6 +62,7 @@ function menuDialog() {
   dialog({ title: 'Daten und Hilfe', submit: null, cancel: 'Schließen', body: `
     <p class="muted">Alle Klassen, Sportgruppen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). Es gibt keinen Server und keine Anmeldung.</p>
     <div class="menu-grid">
+      ${sync.supported ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
       <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
       <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
@@ -70,6 +72,7 @@ function menuDialog() {
     onOpen: (el, close) => {
       el.querySelector('[data-m=export]').onclick = () => { downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, store.exportJson()); toast('Sicherung heruntergeladen.'); };
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
+      const sb = el.querySelector('[data-m=sync]'); if (sb) sb.onclick = () => { close(); syncDialog(); };
       const file = el.querySelector('#import-file');
       el.querySelector('[data-m=import]').onclick = () => file.click();
       file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); importFile(f); };
@@ -111,6 +114,7 @@ function helpDialog() {
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
+      <li><b>Mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
       <li><b>Als App nutzen:</b> Im Browser „Installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen. Danach funktioniert KlassenKompass auch ohne Internet.</li>
     </ul>
     <h3>Datenschutz</h3>
@@ -137,10 +141,79 @@ shell();
 addEventListener('hashchange', navigate);
 navigate();
 welcome();
-setInterval(() => {
-  const err = store.storageError(), el = document.getElementById('status');
-  if (el) { el.classList.toggle('warn', !!err); el.innerHTML = err ? `${icon('x', 14)} Nicht gespeichert` : `${icon('check', 14)} Auf diesem Gerät gespeichert`; el.title = err || 'Alle Daten bleiben auf diesem Gerät'; }
-}, 2000);
+function renderStatus() {
+  const el = document.getElementById('status'); if (!el) return;
+  const err = store.storageError(), st = sync.status();
+  const time = st.lastSync ? new Date(st.lastSync).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+  let cls = '', html, title;
+  if (err) { cls = 'warn attn'; html = `${icon('x', 14)} Nicht gespeichert`; title = err; }
+  else if (st.state === 'permission') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync freigeben`; title = 'Der Browser braucht deine Freigabe, um die Sync-Datei zu lesen und zu schreiben. Hier klicken.'; }
+  else if (st.state === 'conflict') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync-Konflikt`; title = 'Hier klicken, um zu entscheiden, welcher Stand gilt.'; }
+  else if (st.state === 'error') { cls = 'warn attn'; html = `${icon('x', 14)} Sync-Fehler`; title = st.error + ' – Hier klicken für die Sync-Einstellungen.'; }
+  else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = 'Sync-Datei: ' + st.fileName; }
+  else { html = `${icon('check', 14)} Auf diesem Gerät gespeichert`; title = 'Alle Daten bleiben auf diesem Gerät'; }
+  el.className = 'status ' + cls; el.innerHTML = html; el.title = title;
+}
+setInterval(renderStatus, 2000);
+document.getElementById('status').onclick = async () => {
+  const st = sync.status().state;
+  if (st === 'permission') { if (await sync.grant()) toast('Sync-Datei freigegeben.'); }
+  else if (st === 'conflict') sync.retryConflict();
+  else if (sync.supported) syncDialog();
+};
+
+// ---------- Sync-Datei ----------
+const fmt = iso => iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
+const summary = data => `${data?.technik?.classes?.length ?? 0} Klasse(n), ${data?.sport?.groups?.length ?? 0} Sportgruppe(n)`;
+
+function chooseVersion(raw, { title, intro }) {
+  return new Promise(resolve => {
+    let done = false;
+    const d = dialog({ title, submit: null, cancel: 'Abbrechen', body: `<p>${intro}</p>
+      <div class="menu-grid">
+        <button type="button" class="menu-item" data-c="file">${icon('download')}<span><b>Stand aus der Sync-Datei übernehmen</b><small>Gespeichert ${esc(fmt(raw.savedAt))} · ${esc(summary(raw.data))}. Ersetzt die Daten auf diesem Gerät.</small></span></button>
+        <button type="button" class="menu-item" data-c="local">${icon('upload')}<span><b>Stand dieses Geräts behalten</b><small>${esc(summary(store.get()))}. Überschreibt die Sync-Datei.</small></span></button>
+      </div>`,
+      onOpen: (el, close) => el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { done = true; close(); resolve(b.dataset.c); }) });
+    d.el.addEventListener('close', () => { if (!done) resolve(null); });
+  });
+}
+
+function syncDialog() {
+  const st = sync.status(), on = st.state !== 'off';
+  dialog({ title: 'Sync-Datei', submit: null, cancel: 'Schließen', body: on ? `
+    <p>Verbunden mit <b>${esc(st.fileName)}</b>${st.lastSync ? ` · zuletzt abgeglichen ${esc(fmt(st.lastSync))}` : ''}.</p>
+    ${st.state === 'error' ? `<p class="notice">${esc(st.error)}</p>` : ''}
+    <p class="muted small-text">Änderungen werden automatisch in die Datei geschrieben. Beim Öffnen und alle 20 Sekunden prüft die App, ob ein anderer PC etwas geändert hat. Google Drive für Desktop überträgt die Datei zwischen deinen PCs.</p>
+    <div class="menu-grid">
+      <button type="button" class="menu-item" data-s="now">${icon('repeat')}<span><b>Jetzt abgleichen</b></span></button>
+      <button type="button" class="menu-item" data-s="open">${icon('upload')}<span><b>Andere Sync-Datei wählen</b></span></button>
+      <button type="button" class="menu-item danger" data-s="off">${icon('x')}<span><b>Verbindung trennen</b><small>Die Daten bleiben auf diesem Gerät und in der Datei erhalten.</small></span></button>
+    </div>` : `
+    <p>Mit einer Sync-Datei bleiben deine Daten auf allen PCs gleich – ohne Konto und ohne Server.</p>
+    <ol class="help-list">
+      <li><b>Auf dem ersten PC:</b> „Neue Sync-Datei anlegen“ und sie in einem Ordner speichern, den Google Drive für Desktop abgleicht, z. B. <code>KWS/1. Schule Allgemein/09 Organisation</code>.</li>
+      <li><b>Auf jedem weiteren PC:</b> KlassenKompass öffnen, „Vorhandene Sync-Datei wählen“ und dieselbe Datei auswählen.</li>
+      <li>Nach einem Neustart fragt der Browser manchmal noch einmal nach Erlaubnis – dann oben auf „Sync freigeben“ klicken.</li>
+    </ol>
+    <div class="menu-grid">
+      <button type="button" class="menu-item" data-s="new">${icon('plus')}<span><b>Neue Sync-Datei anlegen</b><small>Speichert die Daten dieses Geräts in eine neue Datei.</small></span></button>
+      <button type="button" class="menu-item" data-s="open">${icon('upload')}<span><b>Vorhandene Sync-Datei wählen</b><small>Für jeden weiteren PC.</small></span></button>
+    </div>
+    <p class="muted small-text">Funktioniert in Chrome und Edge am PC. Handy und Tablet nutzen weiter Export und Import.</p>`,
+    onOpen: (el, close) => {
+      const on = (k, fn) => { const b = el.querySelector(`[data-s=${k}]`); if (b) b.onclick = async () => { close(); try { await fn(); } catch (e) { if (e?.name !== 'AbortError') toast('Sync: ' + e.message, { kind: 'warn' }); } renderStatus(); }; };
+      on('new', async () => { await sync.createFile(); toast('Sync-Datei angelegt. Wähle sie auf deinen anderen PCs über „Vorhandene Sync-Datei wählen“.'); });
+      on('open', async () => { if (await sync.openFile(raw => chooseVersion(raw, { title: 'Welcher Stand soll gelten?', intro: 'Die gewählte Datei enthält bereits Daten.' }))) { navigate(); toast('Mit der Sync-Datei verbunden.'); } });
+      on('now', async () => { await sync.syncNow(); toast('Abgeglichen.'); });
+      on('off', async () => { await sync.disconnect(); toast('Sync-Datei getrennt.'); });
+    } });
+}
+
+sync.init({
+  changed: renderStatus,
+  conflict: raw => chooseVersion(raw, { title: 'Sync-Konflikt', intro: 'Auf einem anderen PC und auf diesem Gerät wurde seit dem letzten Abgleich etwas geändert. Welcher Stand soll gelten?' }).then(c => { if (c === 'file') setTimeout(navigate); return c; }),
+});
 
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; const b = document.getElementById('install-btn'); if (b) b.hidden = false; });
 addEventListener('appinstalled', () => { const b = document.getElementById('install-btn'); if (b) b.hidden = true; toast('KlassenKompass wurde installiert.'); });
