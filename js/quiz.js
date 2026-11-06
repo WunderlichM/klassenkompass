@@ -23,6 +23,8 @@ const absentFor = id => { if (!absentByClass.has(id)) absentByClass.set(id, new 
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
 let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null;
+// Nur für die Optik: welche Antworten schon gezeigt wurden (Kachel „springt“ nur beim ersten Mal), welche Auflösung schon animiert wurde, welches Podium schon Konfetti hatte
+const seenAns = new Set(); let seenQ = '', revealAnim = '', confettiFor = '';
 const live = { remote: null, scanTimer: null, keep: null, lastControl: '', lastCmd: null, applied: new Map(), phoneAt: 0, lastScanAt: 0, error: '' };
 
 export function mount(el) {
@@ -79,8 +81,16 @@ function drawPodium(s) {
         <button class="btn primary sm" data-act="podium-close">${icon('check', 16)} Fertig</button>
       </div>
     </div>
-    <div class="card pod-card">${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="muted center">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
+    <div class="card pod-card">${places.length ? confetti(s.id) : ''}${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="muted center">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
   </section>`;
+}
+
+// Konfetti nur beim ersten Anzeigen eines Podiums (bei „weniger Bewegung“ per CSS ausgeblendet)
+function confetti(id) {
+  if (confettiFor === id) return '';
+  confettiFor = id;
+  const cols = ['#e0533d', '#2f6fd0', '#e3a312', '#7a4fc4', '#3f9a5c', '#f2c14e'];
+  return `<div class="confetti" aria-hidden="true">${Array.from({ length: 70 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};animation-delay:${(1.2 + Math.random() * 1.4).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 1.8).toFixed(2)}s;--dx:${(Math.random() * 160 - 80).toFixed(0)}px;--r:${(Math.random() * 720 - 360).toFixed(0)}deg;width:${6 + Math.round(Math.random() * 6)}px"></i>`).join('')}</div>`;
 }
 
 // ======================================================================
@@ -161,7 +171,7 @@ function questionList(t) {
   if (!t.questions.length) return '<p class="muted">Noch keine Fragen in diesem Satz.</p>';
   return `<ol class="q-list">${t.questions.map((x, i) => `<li>
     ${x.img ? images.imgTag(x.img, 'q-thumb') : ''}<div class="q-main"><b>${esc(x.text) || (x.img ? '<span class="muted">(Bildfrage)</span>' : '<span class="muted">(Frage ohne Text)</span>')}</b>
-      <span class="q-opts">${x.options.map((o, k) => `<span class="${x.correct === k ? 'ok' : ''}">${LETTERS[k]}${x.optImgs?.[k] ? ' ' + images.imgTag(x.optImgs[k], 'opt-thumb') : ''}${o ? ' · ' + esc(o) : ''}</span>`).join('')}</span></div>
+      <span class="q-opts">${x.options.map((o, k) => `<span class="l${k} ${x.correct === k ? 'ok' : ''}"><i>${LETTERS[k]}</i>${x.optImgs?.[k] ? ' ' + images.imgTag(x.optImgs[k], 'opt-thumb') : ''}${o ? ' ' + esc(o) : ''}</span>`).join('')}</span></div>
     <div class="q-tools">
       <button class="icon-btn xs" data-act="q-up" data-i="${i}" ${i ? '' : 'disabled'} title="Nach oben" aria-label="Nach oben">${icon('back', 14)}</button>
       <button class="icon-btn xs" data-act="q-edit" data-i="${i}" title="Bearbeiten" aria-label="Bearbeiten">${icon('edit', 14)}</button>
@@ -185,12 +195,19 @@ function drawRun(s) {
   const q = s.questions[s.index], n = q.options.length;
   const byStudent = q.answers, pres = present(s), answered = pres.filter(x => byStudent[x.id] !== undefined).length;
   const counts = q.options.map((_, i) => Object.values(byStudent).filter(v => v === i).length);
-  const max = Math.max(1, ...counts);
+  const votes = counts.reduce((a, b) => a + b, 0), pct = i => votes ? Math.round(counts[i] / votes * 100) : 0;
+  // Kachel-Animation nur für neu erfasste Antworten; beim Wechsel der Frage springt nichts
+  if (seenQ !== q.id) { seenQ = q.id; for (const [k, v] of Object.entries(byStudent)) seenAns.add(`${q.id}|${k}|${v}`); }
+  const fresh = id => { const k = `${q.id}|${id}|${byStudent[id]}`; if (seenAns.has(k)) return false; seenAns.add(k); return true; };
+  // Balken wachsen nur beim ersten Auflösen dieser Frage
+  const grow = s.reveal && revealAnim !== q.id; if (s.reveal) revealAnim = q.id; else if (revealAnim === q.id) revealAnim = '';
+  const ring = pres.length ? answered / pres.length * 100 : 0;
   const phone = account.loggedIn() ? (Date.now() - live.phoneAt < 8000 ? `${icon('check', 14)} Handy verbunden` : `${icon('camera', 14)} Handy: auf dem Handy mit demselben Konto anmelden → Quiz → „Karten scannen“`) : `${icon('camera', 14)} Ohne Konto: auf diesem Gerät scannen oder das Quiz auf dem Handy starten`;
   root.innerHTML = `
   <section class="page quiz quiz-run">
     <div class="run-head">
-      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>Frage ${s.index + 1}<span class="muted"> / ${s.questions.length}</span></h1></div>
+      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>Frage ${s.index + 1}<span class="muted"> / ${s.questions.length}</span></h1>
+        ${s.questions.length > 1 ? `<div class="run-dots" aria-hidden="true">${s.questions.map((_, k) => `<i class="${k < s.index ? 'past' : k === s.index ? 'now' : ''}"></i>`).join('')}</div>` : ''}</div>
       <div class="tools">
         <button class="btn ghost sm" data-act="scan-here">${icon('camera', 16)} Hier scannen</button>
         <button class="btn ghost sm no-present" data-act="add-q" title="Weitere Frage spontan anhängen">${icon('plus', 16)} Frage</button>
@@ -201,13 +218,19 @@ function drawRun(s) {
     <div class="card run-card">
       ${q.text || !q.img ? `<p class="run-q">${esc(q.text) || '<span class="muted">Frage mündlich oder an der Tafel</span>'}</p>` : ''}
       ${q.img ? `<div class="run-img">${images.imgTag(q.img)}</div>` : ''}
-      <div class="run-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''}">${q.options.map((o, i) => `
-        <div class="run-opt ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}">
+      <div class="run-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''} ${s.reveal ? 'revealed' : ''}">${q.options.map((o, i) => `
+        <div class="run-opt l${i} ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}">
+          ${s.reveal ? `<span class="run-fill ${grow ? 'grow' : ''}" style="width:${pct(i)}%"></span>` : ''}
           <span class="run-letter">${LETTERS[i]}</span>${q.optImgs?.[i] ? `<span class="run-opt-img">${images.imgTag(q.optImgs[i])}</span>` : ''}<span class="run-text">${esc(o)}</span>
-          ${s.reveal ? `<span class="run-bar"><i style="width:${counts[i] / max * 100}%"></i></span><span class="run-count">${counts[i]}</span>` : ''}
+          ${s.reveal ? `<span class="run-stat"><b>${counts[i]}</b><small>${pct(i)} %</small></span>` : ''}
+          ${s.reveal && q.correct === i ? `<span class="run-ok" title="Richtige Antwort">${icon('check', 20)}</span>` : ''}
         </div>`).join('')}</div>
       <div class="run-foot">
-        <span class="run-progress"><b>${answered}</b> / ${pres.length} geantwortet${s.reveal && q.correct !== null && answered ? ` · <b>${Math.round(counts[q.correct] / answered * 100)} %</b> richtig` : ''}</span>
+        <div class="run-progress">
+          <span class="ring ${pres.length && answered === pres.length ? 'full' : ''}"><svg class="ring-svg" viewBox="0 0 40 40" aria-hidden="true"><circle class="r-bg" cx="20" cy="20" r="17"/><circle class="r-fg" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="${ring.toFixed(1)} 100"/></svg>${pres.length && answered === pres.length ? icon('check', 18) : ''}</span>
+          <span class="rp-text"><span><b>${answered}</b> / ${pres.length}</span><small>geantwortet</small></span>
+          ${s.reveal && q.correct !== null && answered ? `<span class="rp-right"><b>${Math.round(counts[q.correct] / answered * 100)} %</b><small>richtig</small></span>` : ''}
+        </div>
         <div class="tools">
           ${q.correct === null ? `<label class="run-correct no-present">Richtig: <select class="select sm" data-act="set-correct"><option value="">–</option>${q.options.map((_, i) => `<option value="${i}">${LETTERS[i]}</option>`).join('')}</select></label>` : ''}
           <button class="btn ghost" data-act="prev" ${s.index ? '' : 'disabled'}>${icon('back', 16)} Zurück</button>
@@ -224,7 +247,7 @@ function drawRun(s) {
         if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
         const a = byStudent[x.id], has = a !== undefined, open = s.reveal && showNames && has;
         const cl = !has ? '' : open && q.correct !== null ? (a === q.correct ? 'right' : 'miss') : 'done';
-        return `<button class="tile ${cl}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
+        return `<button class="tile ${cl} ${has && fresh(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
       }).join('')}</div>
       <p class="hint no-present">${phone}${live.error ? ` · <span class="warn-text">${esc(live.error)}</span>` : ''}</p>
     </div>
