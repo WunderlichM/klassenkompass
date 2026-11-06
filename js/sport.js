@@ -1,6 +1,6 @@
 // Bereich Sport: Teams, Turniere und Einzelranglisten
 import * as store from './store.js';
-import { mixGroups, teamsAreCurrent, roundRobin, tournamentTable, individualTable, reconcileSeries, linkTournament, uid } from './engine.js';
+import { mixGroups, teamsAreCurrent, tournamentTable, individualTable, reconcileSeries, linkTournament, uid, FORMATS, formatOf, matchWinner, koPlan, koLabel, koSize, kotcPlan, kotcCourts, defaultCourtPoints, syncTournament, tournamentDone, createTournament } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, namesFromText, palStyle, toggleFullscreen, todayISO, displayDate, rulesDialog } from './ui.js';
 
 const SPORTS = ['Fußball', 'Basketball', 'Volleyball', 'Handball', 'Badminton', 'Tischtennis', 'Leichtathletik', 'Turnen', 'Hockey', 'Brennball'];
@@ -109,36 +109,80 @@ function tournamentView(g) {
   if (!list.length) return `<div class="card empty"><p>Noch kein Turnier. Mische zuerst Teams und wähle dann „Turnier mit diesen Teams“.</p><button class="btn primary sport-btn" data-act="tab" data-tab="teams">Zu den Teams</button></div>`;
   const t = g.tournaments.find(x => x.id === activeTournament) || list[0];
   activeTournament = t.id;
+  const f = formatOf(t), finished = tournamentDone(t);
+  const plan = f === 'ko' ? koPlan(t) : f === 'kotc' ? kotcPlan(t) : null;
   const rounds = [...new Set(t.matches.map(m => m.round))].sort((a, b) => a - b);
   const teamName = id => t.teams.find(x => x.id === id)?.name ?? '?';
   const done = t.matches.filter(m => m.scoreA !== null && m.scoreB !== null).length;
-  const byeTeams = r => t.teams.filter(team => !t.matches.some(m => m.round === r && (m.a === team.id || m.b === team.id)));
+  const freeTeams = r => plan ? (plan.free[r] || []).map(teamName) : t.teams.filter(team => !t.matches.some(m => m.round === r && (m.a === team.id || m.b === team.id))).map(x => x.name);
+  const totalRounds = f === 'ko' ? Math.log2(koSize(t.teams.length)) : f === 'kotc' ? t.rounds : rounds.length;
+  const badge = f === 'rr' ? `${done}/${t.matches.length} Spiele` : finished ? 'beendet' : `Runde ${rounds.at(-1) ?? 1} von ${totalRounds}`;
+  const label = m => f === 'ko' ? koLabel(t, m) : f === 'kotc' ? `Feld ${m.court}${m.court === 1 ? ' · Königsfeld' : ''}` : '';
+  const ordered = r => { const ms = t.matches.filter(m => m.round === r); return f === 'rr' ? ms : ms.sort((x, y) => x.court - y.court || (x.pos ?? 0) - (y.pos ?? 0)); };
+  const matchRow = m => {
+    const w = f === 'rr' ? null : matchWinner(m), tie = f !== 'rr' && m.scoreA !== null && m.scoreA === m.scoreB;
+    return `<div class="match-wrap">${label(m) ? `<p class="match-label">${esc(label(m))}</p>` : ''}<div class="match"><span class="ta ${w === 'A' ? 'win' : ''}">${esc(teamName(m.a))}</span>
+      <input class="score" type="number" inputmode="numeric" min="0" max="999" data-score="${esc(m.id)}" data-side="A" value="${m.scoreA ?? ''}" aria-label="Ergebnis ${esc(teamName(m.a))}">
+      <span class="colon">:</span>
+      <input class="score" type="number" inputmode="numeric" min="0" max="999" data-score="${esc(m.id)}" data-side="B" value="${m.scoreB ?? ''}" aria-label="Ergebnis ${esc(teamName(m.b))}">
+      <span class="tb ${w === 'B' ? 'win' : ''}">${esc(teamName(m.b))}</span></div>
+      ${tie ? `<div class="tie no-print"><span class="muted small-text">Gleichstand – Sieger:</span>${['A', 'B'].map(side => `<button class="btn ghost sm ${m.winner === side ? 'on' : ''}" data-act="tie" data-id="${esc(m.id)}" data-side="${side}" aria-pressed="${m.winner === side}">${esc(teamName(side === 'A' ? m.a : m.b))}</button>`).join('')}</div>` : ''}</div>`;
+  };
+  const note = f === 'ko' ? (t.placement === 'top' ? 'Ausgespielt werden Finale und Spiel um Platz 3; die übrigen Teams teilen sich ihren Platz.' : 'Kein Team scheidet aus: Verlierer spielen um die hinteren Plätze.')
+    : f === 'kotc' ? 'Feld 1 ist das Königsfeld. Sieger steigen ein Feld auf, Verlierer ein Feld ab.' : '';
   return `<div class="card">
     <div class="card-head">
-      <div><p class="eyebrow">${esc(t.sport)} · ${esc(displayDate(t.date))}</p><h2>${esc(t.title)} <span class="badge">${done}/${t.matches.length} Spiele</span></h2></div>
+      <div><p class="eyebrow">${esc(t.sport)} · ${esc(displayDate(t.date))} · ${esc(FORMATS[f])}</p><h2>${esc(t.title)} <span class="badge">${badge}</span></h2></div>
       <div class="tools no-print">
         ${list.length > 1 ? `<select class="select sm" id="tournament-select">${list.map(x => `<option value="${esc(x.id)}" ${x.id === t.id ? 'selected' : ''}>${esc(x.title)} · ${esc(displayDate(x.date))}</option>`).join('')}</select>` : ''}
         <button class="icon-btn" data-act="edit-tournament" title="Turnier bearbeiten">${icon('edit')}</button>
         <button class="icon-btn" data-act="del-tournament" title="Turnier löschen">${icon('trash')}</button>
       </div>
     </div>
+    ${note ? `<p class="muted small-text t-note">${note}</p>` : ''}
     <div class="t-layout">
-      <div class="schedule">${rounds.map(r => `<div class="round"><h4>Runde ${r}${byeTeams(r).length ? ` <small class="muted">· spielfrei: ${byeTeams(r).map(x => esc(x.name)).join(', ')}</small>` : ''}</h4>
-        ${t.matches.filter(m => m.round === r).map(m => `<div class="match"><span class="ta">${esc(teamName(m.a))}</span>
-          <input class="score" type="number" inputmode="numeric" min="0" max="999" data-score="${esc(m.id)}" data-side="A" value="${m.scoreA ?? ''}" aria-label="Ergebnis ${esc(teamName(m.a))}">
-          <span class="colon">:</span>
-          <input class="score" type="number" inputmode="numeric" min="0" max="999" data-score="${esc(m.id)}" data-side="B" value="${m.scoreB ?? ''}" aria-label="Ergebnis ${esc(teamName(m.b))}">
-          <span class="tb">${esc(teamName(m.b))}</span></div>`).join('')}</div>`).join('')}</div>
-      <div class="standings"><h4>Tabelle</h4>${standings(t)}<p class="muted small-text">Sieg ${t.win} · Unentschieden ${t.draw} · Niederlage ${t.loss} Punkte. Ein Spiel zählt, wenn beide Ergebnisse eingetragen sind.</p>
+      <div class="schedule">${rounds.map(r => { const fr = freeTeams(r); return `<div class="round"><h4>Runde ${r}${fr.length ? ` <small class="muted">· spielfrei: ${fr.map(esc).join(', ')}</small>` : ''}</h4>
+        ${ordered(r).map(matchRow).join('')}</div>`; }).join('')}
+        ${f !== 'rr' && !finished ? '<p class="muted small-text no-print">Die nächste Runde erscheint, sobald alle Spiele dieser Runde ein Ergebnis haben.</p>' : ''}</div>
+      <div class="standings"><h4>${f === 'ko' ? 'Platzierung' : 'Tabelle'}</h4>${standings(t, plan)}<p class="muted small-text">${scoringText(t)}</p>
         <details class="teams-detail"><summary>Teams anzeigen</summary>${t.teams.map((team, i) => `<p style="${palStyle(i)}"><span class="gdot"></span><b>${esc(team.name)}:</b> ${team.members.map(id => esc(t.participants.find(p => p.id === id)?.name ?? '?')).join(', ')}</p>`).join('')}</details>
-        <button class="btn ghost full no-print" data-act="link-series" ${done === t.matches.length ? '' : 'disabled'}>${icon('chart', 16)} In Einzelrangliste übernehmen</button></div>
+        <button class="btn ghost full no-print" data-act="link-series" ${finished ? '' : 'disabled'}>${icon('chart', 16)} In Einzelrangliste übernehmen</button></div>
     </div>
   </div>`;
 }
-function standings(t) {
-  const rows = tournamentTable(t);
+function scoringText(t) {
+  const f = formatOf(t);
+  if (f === 'ko') return `Einzelrangliste: Platz 1 erhält ${t.teams.length} Punkte, jeder weitere Platz einen weniger. Bei Gleichstand den Sieger auswählen.`;
+  if (f === 'kotc') return `Sieg auf ${(t.courtPoints || []).map((p, i) => `Feld ${i + 1} = ${p}`).join(' · ')} Punkte. Bei Punktgleichheit zählt das bessere Feld. Bei Gleichstand im Spiel den Sieger auswählen.`;
+  return `Sieg ${t.win} · Unentschieden ${t.draw} · Niederlage ${t.loss} Punkte. Ein Spiel zählt, wenn beide Ergebnisse eingetragen sind.`;
+}
+function standings(t, plan) {
+  const rows = tournamentTable(t), f = formatOf(t);
+  if (f === 'ko') return `<table class="table-std"><thead><tr><th>Platz</th><th>Team</th><th title="Spiele">Sp</th><th title="Siege">S</th><th title="Niederlagen">N</th><th title="Tore/Punkte">±</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.rank && r.rank <= 3 ? 'top' + r.rank : ''}"><td>${r.rank ? r.rank + '.' : '–'}</td><td>${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td><td>${r.scored}:${r.conceded}</td></tr>`).join('')}</tbody></table>`;
+  if (f === 'kotc') return `<table class="table-std"><thead><tr><th>#</th><th>Team</th><th title="Spiele">Sp</th><th title="Siege">S</th><th title="Feld in der nächsten bzw. letzten Aufstellung">Feld</th><th>Pkt</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${r.rank}.</td><td>${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.court === null ? '–' : r.court > plan.courts ? 'spielfrei' : r.court}</td><td><b>${r.points}</b></td></tr>`).join('')}</tbody></table>`;
   return `<table class="table-std"><thead><tr><th>#</th><th>Team</th><th title="Spiele">Sp</th><th title="Siege">S</th><th title="Unentschieden">U</th><th title="Niederlagen">N</th><th title="Tore/Punkte">±</th><th>Pkt</th></tr></thead>
     <tbody>${rows.map(r => `<tr><td>${r.rank}.</td><td>${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.draws}</td><td>${r.losses}</td><td>${r.scored}:${r.conceded}</td><td><b>${r.points}</b></td></tr>`).join('')}</tbody></table>`;
+}
+
+// Ergebnisänderung anwenden; bei K.-o./King of the Court warnen, wenn dadurch eingetragene Folgespiele wegfallen.
+let confirming = false;
+async function applyMatch(root, matchId, change) {
+  if (confirming) return;
+  const g = grp(), tour = g?.tournaments.find(x => x.id === activeTournament); if (!tour) return;
+  const probe = structuredClone(tour); change(probe.matches.find(x => x.id === matchId)); syncTournament(probe);
+  const keep = new Set(probe.matches.map(m => m.id));
+  const lost = tour.matches.filter(m => !keep.has(m.id) && m.scoreA !== null && m.scoreB !== null).length;
+  if (lost) {
+    confirming = true;
+    const ok = await confirmDialog('Paarungen ändern sich', `Durch diese Änderung ändern sich spätere Paarungen. ${lost === 1 ? 'Ein bereits eingetragenes Ergebnis wird' : lost + ' bereits eingetragene Ergebnisse werden'} verworfen.`, 'Ändern').finally(() => { confirming = false; });
+    if (!ok) return draw(root);
+  }
+  store.update(s => {
+    const k = cur(s), t = k.tournaments.find(x => x.id === tour.id), m = t.matches.find(x => x.id === matchId);
+    change(m); if (m.scoreA !== m.scoreB) m.winner = null; syncTournament(t); reconcileSeries(k);
+  });
 }
 
 // ---------- Einzelranglisten ----------
@@ -177,11 +221,7 @@ function onChange(e, root) {
   else if (t.id === 'series-select') { activeSeries = t.value; draw(root); }
   else if (t.dataset.score) {
     const v = t.value === '' ? null : Math.max(0, Math.min(999, Math.round(Number(t.value))));
-    store.update(s => {
-      const g = cur(s), tour = g.tournaments.find(x => x.id === activeTournament), m = tour.matches.find(x => x.id === t.dataset.score);
-      m['score' + t.dataset.side] = Number.isFinite(v) ? v : null;
-      reconcileSeries(g);
-    });
+    applyMatch(root, t.dataset.score, m => { m['score' + t.dataset.side] = Number.isFinite(v) ? v : null; });
   }
 }
 
@@ -221,6 +261,7 @@ async function onClick(e, root) {
       activeTournament = null; break;
     }
     case 'link-series': linkDialog(g); break;
+    case 'tie': applyMatch(root, b.dataset.id, m => { m.winner = b.dataset.side; }); break;
     case 'new-series': seriesDialog(g); break;
     case 'del-series': {
       const se = g.series.find(x => x.id === activeSeries);
@@ -303,21 +344,48 @@ function rulesFor(g) {
 }
 
 function tournamentDialog(g, existing) {
-  const t = existing || { title: 'Turnier', sport: 'Fußball', date: todayISO(), win: 3, draw: 1, loss: 0 };
+  const t = existing || { title: 'Turnier', sport: 'Fußball', date: todayISO(), win: 3, draw: 1, loss: 0, format: 'rr', placement: 'all', rounds: 6 };
+  const f0 = formatOf(t), n = existing ? existing.teams.length : g.teams.length, courts = kotcCourts(n);
+  const cp = Array.from({ length: courts }, (_, i) => t.courtPoints?.[i] ?? defaultCourtPoints(courts)[i]);
+  const show = f => (f === f0 ? '' : 'hidden');
   dialog({ title: existing ? 'Turnier bearbeiten' : 'Turnier mit diesen Teams', submit: existing ? 'Speichern' : 'Turnier anlegen',
     body: `<label class="field">Titel<input name="title" class="input" maxlength="80" value="${esc(t.title)}"></label>
       <div class="two"><label class="field">Sportart<input name="sport" class="input" list="sports" maxlength="40" value="${esc(t.sport)}"><datalist id="sports">${SPORTS.map(x => `<option value="${x}">`).join('')}</datalist></label>
       <label class="field">Datum<input name="date" type="date" class="input" value="${esc(t.date)}"></label></div>
-      <div class="three"><label class="field">Punkte Sieg<input name="win" type="number" class="input" value="${t.win}"></label><label class="field">Unentschieden<input name="draw" type="number" class="input" value="${t.draw}"></label><label class="field">Niederlage<input name="loss" type="number" class="input" value="${t.loss}"></label></div>
-      ${existing ? '' : `<p class="muted small-text">Jedes Team spielt einmal gegen jedes andere. Die aktuelle Teamverteilung (${g.teams.length} Teams) wird übernommen.</p>`}`,
+      <label class="field">Turnierform<select name="format" class="select" ${existing ? 'disabled' : ''}>${Object.entries(FORMATS).map(([k, v]) => `<option value="${k}" ${k === f0 ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <div data-format="rr" ${show('rr')}>
+        <div class="three"><label class="field">Punkte Sieg<input name="win" type="number" class="input" value="${t.win}"></label><label class="field">Unentschieden<input name="draw" type="number" class="input" value="${t.draw}"></label><label class="field">Niederlage<input name="loss" type="number" class="input" value="${t.loss}"></label></div>
+        <p class="muted small-text">Jedes Team spielt einmal gegen jedes andere.</p></div>
+      <div data-format="ko" ${show('ko')}>
+        <label class="field">Platzierungsspiele<select name="placement" class="select"><option value="all" ${t.placement !== 'top' ? 'selected' : ''}>Alle Plätze ausspielen – jedes Team spielt jede Runde</option><option value="top" ${t.placement === 'top' ? 'selected' : ''}>Nur Finale und Spiel um Platz 3</option></select></label>
+        <p class="muted small-text">Die erste Runde wird ausgelost. Verlierer scheiden nicht aus, sondern spielen um die hinteren Plätze. ${koSize(n) > n ? `Bei ${n} Teams erhalten ${koSize(n) - n} Teams in Runde 1 ein Freilos.` : ''}</p></div>
+      <div data-format="kotc" ${show('kotc')}>
+        <label class="field">Anzahl Runden<input name="rounds" type="number" class="input" min="1" max="30" value="${t.rounds || 6}"></label>
+        <p class="field-label">Punkte für einen Sieg auf …</p>
+        <div class="court-points">${cp.map((p, i) => `<label class="field">Feld ${i + 1}${i === 0 ? ' (König)' : ''}<input name="cp${i}" type="number" class="input" value="${p}"></label>`).join('')}</div>
+        <p class="muted small-text">${n} Teams spielen gleichzeitig auf ${courts} ${courts === 1 ? 'Feld' : 'Feldern'}${n % 2 ? '; je Runde setzt ein Team aus und steigt danach auf dem untersten Feld ein' : ''}. Die erste Aufstellung wird ausgelost.</p></div>
+      ${existing ? '<p class="muted small-text">Die Turnierform lässt sich nachträglich nicht ändern.</p>' : `<p class="muted small-text">Die aktuelle Teamverteilung (${n} Teams) wird übernommen.</p>`}`,
+    onOpen: el => {
+      const sel = el.querySelector('[name=format]');
+      sel.onchange = () => el.querySelectorAll('[data-format]').forEach(d => { d.hidden = d.dataset.format !== sel.value; });
+    },
     onSubmit: fd => {
+      const format = existing ? f0 : String(fd.get('format') || 'rr');
       const data = { title: String(fd.get('title')).trim() || 'Turnier', sport: String(fd.get('sport')).trim() || 'Sport', date: String(fd.get('date')) || todayISO(),
         win: Number(fd.get('win')) || 0, draw: Number(fd.get('draw')) || 0, loss: Number(fd.get('loss')) || 0 };
+      const opts = { placement: fd.get('placement') === 'top' ? 'top' : 'all', rounds: Math.max(1, Math.min(30, Math.round(Number(fd.get('rounds')) || 6))),
+        courtPoints: cp.map((_, i) => Number(fd.get('cp' + i)) || 0) };
       store.update(s => {
         const k = cur(s);
-        if (existing) { Object.assign(k.tournaments.find(x => x.id === existing.id), data); reconcileSeries(k); return; }
+        if (existing) {
+          const x = k.tournaments.find(y => y.id === existing.id);
+          Object.assign(x, data);
+          if (format === 'ko') x.placement = opts.placement;
+          if (format === 'kotc') Object.assign(x, { rounds: opts.rounds, courtPoints: opts.courtPoints });
+          syncTournament(x); reconcileSeries(k); return;
+        }
         const teams = k.teams.map(x => ({ ...x, members: [...x.members] })), ids = new Set(teams.flatMap(x => x.members));
-        const tour = { id: uid(), ...data, participants: k.students.filter(p => ids.has(p.id)).map(p => ({ ...p })), teams, matches: roundRobin(teams) };
+        const tour = createTournament({ id: uid(), ...data, participants: k.students.filter(p => ids.has(p.id)).map(p => ({ ...p })), teams }, format, opts);
         k.tournaments.push(tour); activeTournament = tour.id;
       });
       tab = 'turnier'; draw(document.getElementById('view'));

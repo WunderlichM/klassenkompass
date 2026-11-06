@@ -10,7 +10,7 @@ import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 
-export const VERSION = '1.8.6';
+export const VERSION = '1.9.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -125,7 +125,7 @@ function helpDialog() {
     <h3>So funktioniert es</h3>
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, unter „Einteilung anpassen“ festlegen, wer nicht in dieselbe Gruppe soll (nur im Fenster sichtbar, nicht auf der Hauptseite), und oben „Neu mischen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
-      <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
+      <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ oder die Sync-Datei auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
@@ -206,7 +206,7 @@ function tour({ force = false } = {}) {
   const steps = [
     { ic: logo(34), title: 'Willkommen bei KlassenKompass', html: `<p>Deine Helfer für den Unterricht an einem Ort:</p>
       <ul class="tour-list"><li>${icon('technik')}<span><b>Technik</b> – Klassen anlegen, Sitzplan und Gruppen per Zufall verteilen.</span></li>
-      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere „jeder gegen jeden“ und Ranglisten.</span></li>
+      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere (jeder gegen jeden, K.-o., King of the Court) und Ranglisten.</span></li>
       <li>${icon('cards')}<span><b>Quiz</b> – Kartenquiz: Kinder heben Antwortkarten, das Handy scannt die ganze Klasse.</span></li>
       <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Intervalltimer und QR-Codes groß zeigen.</span></li></ul>
       <p class="muted small-text">Zum Ausprobieren sind eine Demoklasse und eine Demogruppe mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },

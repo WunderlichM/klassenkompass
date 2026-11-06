@@ -101,8 +101,12 @@ function normSport(g) {
     id: String(t.id || uid()), title: str(t.title, 80) || 'Turnier', sport: str(t.sport, 40) || 'Sport', date: str(t.date, 10),
     participants: (t.participants || []).map(p => ({ id: String(p.id), name: str(p.name, 40), className: str(p.className, 20) })),
     teams: (t.teams || []).map(x => ({ id: String(x.id), name: str(x.name, 40), members: (x.members || []).map(String) })),
-    matches: (t.matches || []).map(m => ({ id: String(m.id || uid()), round: int(m.round, 1, 99, 1), a: String(m.a), b: String(m.b), scoreA: num(m.scoreA), scoreB: num(m.scoreB) })),
-    win: Number(t.win ?? 3), draw: Number(t.draw ?? 1), loss: Number(t.loss ?? 0) }));
+    matches: (t.matches || []).map(m => ({ id: String(m.id || uid()), round: int(m.round, 1, 99, 1), a: String(m.a), b: String(m.b), scoreA: num(m.scoreA), scoreB: num(m.scoreB),
+      winner: m.winner === 'A' || m.winner === 'B' ? m.winner : null, court: int(m.court, 1, 999, 1), pos: int(m.pos, 0, 999, 0) })),
+    win: Number(t.win ?? 3), draw: Number(t.draw ?? 1), loss: Number(t.loss ?? 0),
+    format: ['ko', 'kotc'].includes(t.format) ? t.format : 'rr', order: (Array.isArray(t.order) ? t.order : []).map(String),
+    placement: t.placement === 'top' ? 'top' : 'all', rounds: int(t.rounds, 1, 30, 6),
+    courtPoints: (Array.isArray(t.courtPoints) ? t.courtPoints : []).slice(0, 20).map(v => (Number.isFinite(Number(v)) ? Number(v) : 0)) }));
   const series = (Array.isArray(g?.series) ? g.series : []).map(s => ({
     id: String(s.id || uid()), title: str(s.title, 80) || 'Rangliste', sport: str(s.sport, 40) || 'Sport',
     participants: (s.participants || []).map(p => ({ id: String(p.id), name: str(p.name, 40), className: str(p.className, 20) })),

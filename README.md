@@ -27,6 +27,13 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.
 - Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).
 
+## Turniere (Sport)
+
+- **Jeder gegen jeden:** Spielplan nach der Kreismethode, Punkte für Sieg/Unentschieden/Niederlage einstellbar.
+- **K.-o. mit Platzierung:** Die erste Runde wird ausgelost, die nächste Runde entsteht, sobald alle Ergebnisse eingetragen sind. Niemand scheidet aus: Verlierer spielen um die hinteren Plätze. Einstellbar: alle Plätze ausspielen oder nur Finale und Spiel um Platz 3 (die übrigen Teams teilen sich ihren Platz). Bei Gleichstand wird der Sieger ausgewählt; ungerade Teamzahlen erhalten Freilose. Für die Einzelrangliste erhält Platz 1 so viele Punkte, wie Teams teilnehmen, jeder weitere Platz einen weniger.
+- **King of the Court:** Alle Teams spielen gleichzeitig auf Teamzahl ÷ 2 Feldern; Feld 1 ist das Königsfeld. Sieger steigen ein Feld auf, Verlierer ein Feld ab; bei ungerader Teamzahl setzt je Runde ein Team aus. Punkte je Sieg hängen vom Feld ab (voreingestellt Feld 1 = höchste Punktzahl), Rundenzahl einstellbar. Bei Punktgleichheit zählt das bessere Feld.
+- Wird ein früheres Ergebnis geändert, passt die App die folgenden Paarungen an und fragt vorher, falls dadurch eingetragene Ergebnisse wegfallen.
+
 ## Technik der Konten
 
 - `js/config.js`: Supabase-URL und öffentlicher Publishable Key.
