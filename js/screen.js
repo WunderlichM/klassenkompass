@@ -1,6 +1,6 @@
 // Bereich Bildschirm: frei anordnbare Timer, Stoppuhren, Intervalltimer und QR-Codes
 import * as store from './store.js';
-import { SCREEN_W, SCREEN_H } from './store.js';
+import { SCREEN_H, stageW } from './store.js';
 import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen } from './ui.js';
 import { qrSvg } from './qr.js';
@@ -24,6 +24,7 @@ const fired = new Set(); // bereits gemeldete Timer-Enden
 const lastPhase = new Map(), lastCount = new Map();
 
 const scr = () => store.get().screen;
+const W = () => stageW(scr());
 const wid = id => scr().widgets.find(w => w.id === id);
 const patch = (id, fn, opts) => store.update(s => { const w = s.screen.widgets.find(x => x.id === id); if (w) fn(w); }, opts);
 
@@ -54,7 +55,7 @@ function draw() {
       </div>
     </div>
     <div class="stage-wrap" id="stage-wrap">
-      <div class="stage" id="stage" style="width:${SCREEN_W}px;height:${SCREEN_H}px">${s.widgets.map(widgetHtml).join('')}
+      <div class="stage" id="stage" style="width:${W()}px;height:${SCREEN_H}px">${s.widgets.map(widgetHtml).join('')}
         ${s.widgets.length ? '' : '<div class="stage-empty">Füge unten einen Timer, eine Stoppuhr oder einen QR-Code hinzu.</div>'}</div>
     </div>
     <div class="dock no-present">
@@ -62,6 +63,7 @@ function draw() {
       <div class="dock-row">
         <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte untereinander. „Alles anzeigen“ zeigt die Anordnung wie am Bildschirm.</span>
         <span class="swatches" role="group" aria-label="Hintergrund">${['mint', 'paper', 'night'].map(b => `<button class="swatch sw-${b} ${s.background === b ? 'on' : ''}" data-act="bg" data-bg="${b}" title="${{ mint: 'Mint', paper: 'Papier', night: 'Nacht' }[b]}"></button>`).join('')}</span>
+        <label class="small-text" title="21:9 nutzt Ultrawide-Bildschirme (z. B. 3440 × 1440) ohne Ränder">Format <select class="select sm" id="format"><option value="std" ${s.format !== 'wide' ? 'selected' : ''}>16:9</option><option value="wide" ${s.format === 'wide' ? 'selected' : ''}>21:9 Breitbild</option></select></label>
         <label class="small-text">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${String(s.zoom) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
     </div>
@@ -86,13 +88,13 @@ function fit() {
   }
   const vh = window.visualViewport?.height || innerHeight;
   const availH = presenting ? vh - 24 : Math.max(320, vh - wrap.getBoundingClientRect().top - 150);
-  if (z === 'fit' || presenting) scale = Math.min(availW / SCREEN_W, availH / SCREEN_H);
-  else if (z === 'auto') scale = Math.max(0.4, Math.min(availW / SCREEN_W, 1.6));
+  if (z === 'fit' || presenting) scale = Math.min(availW / W(), availH / SCREEN_H);
+  else if (z === 'auto') scale = Math.max(0.4, Math.min(availW / W(), 1.6, innerWidth >= 1800 ? availH / SCREEN_H : Infinity));
   else scale = Number(z) || 1;
   stage.style.transform = `scale(${scale})`;
   wrap.style.height = SCREEN_H * scale + 'px';
-  wrap.classList.toggle('scroll-x', SCREEN_W * scale > availW + 1);
-  stage.style.marginLeft = SCREEN_W * scale < availW ? (availW - SCREEN_W * scale) / 2 + 'px' : '0';
+  wrap.classList.toggle('scroll-x', W() * scale > availW + 1);
+  stage.style.marginLeft = W() * scale < availW ? (availW - W() * scale) / 2 + 'px' : '0';
 }
 
 // ---------- Widgets ----------
@@ -248,7 +250,7 @@ function piePath(frac) {
 // ---------- Aktionen ----------
 function freeSpot(wd, ht) {
   const ws = scr().widgets, hit = (x, y) => ws.some(o => x < o.x + o.width + 12 && x + wd + 12 > o.x && y < o.y + o.height + 12 && y + ht + 12 > o.y);
-  for (let y = 30; y + ht <= SCREEN_H - 10; y += 30) for (let x = 30; x + wd <= SCREEN_W - 10; x += 30) if (!hit(x, y)) return { x, y };
+  for (let y = 30; y + ht <= SCREEN_H - 10; y += 30) for (let x = 30; x + wd <= W() - 10; x += 30) if (!hit(x, y)) return { x, y };
   const n = ws.length % 10; return { x: 40 + n * 24, y: 40 + n * 20 };
 }
 function addWidget(kind) {
@@ -313,6 +315,11 @@ async function onClick(e) {
 
 function onChange(e) {
   if (e.target.id === 'zoom') store.update(s => { s.screen.zoom = e.target.value; });
+  if (e.target.id === 'format') store.update(s => {
+    s.screen.format = e.target.value === 'wide' ? 'wide' : 'std';
+    const w = stageW(s.screen);  // Objekte bei schmalerer Bühne hineinschieben
+    s.screen.widgets.forEach(x => { x.width = Math.min(x.width, w); x.x = Math.max(0, Math.min(x.x, w - x.width)); });
+  });
 }
 
 document.addEventListener('submit', e => {
@@ -348,8 +355,8 @@ function onPointerDown(e) {
   let nx = w.x, ny = w.y, nw = w.width, nh = w.height;
   const move = ev => {
     const dx = (ev.clientX - start.x) / scale, dy = (ev.clientY - start.y) / scale;
-    if (resize) { nw = clamp(Math.round(start.ww + dx), minW, SCREEN_W - w.x); nh = clamp(Math.round(start.wh + dy), minH, SCREEN_H - w.y); wEl.style.width = nw + 'px'; wEl.style.height = nh + 'px'; }
-    else { nx = clamp(Math.round(start.wx + dx), 0, SCREEN_W - w.width); ny = clamp(Math.round(start.wy + dy), 0, SCREEN_H - w.height); wEl.style.left = nx + 'px'; wEl.style.top = ny + 'px'; }
+    if (resize) { nw = clamp(Math.round(start.ww + dx), minW, W() - w.x); nh = clamp(Math.round(start.wh + dy), minH, SCREEN_H - w.y); wEl.style.width = nw + 'px'; wEl.style.height = nh + 'px'; }
+    else { nx = clamp(Math.round(start.wx + dx), 0, W() - w.width); ny = clamp(Math.round(start.wy + dy), 0, SCREEN_H - w.height); wEl.style.left = nx + 'px'; wEl.style.top = ny + 'px'; }
   };
   const up = () => {
     wEl.removeEventListener('pointermove', move); wEl.removeEventListener('pointerup', up); wEl.removeEventListener('pointercancel', up);
@@ -365,8 +372,8 @@ function onKey(e) {
   e.preventDefault();
   const step = e.altKey ? 1 : 10, d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key], [minW, minH] = minFor(w);
   patch(w.id, x => {
-    if (e.shiftKey) { x.width = clamp(x.width + d[0], minW, SCREEN_W - x.x); x.height = clamp(x.height + d[1], minH, SCREEN_H - x.y); }
-    else { x.x = clamp(x.x + d[0], 0, SCREEN_W - x.width); x.y = clamp(x.y + d[1], 0, SCREEN_H - x.height); }
+    if (e.shiftKey) { x.width = clamp(x.width + d[0], minW, W() - x.x); x.height = clamp(x.height + d[1], minH, SCREEN_H - x.y); }
+    else { x.x = clamp(x.x + d[0], 0, W() - x.width); x.y = clamp(x.y + d[1], 0, SCREEN_H - x.height); }
   });
   requestAnimationFrame(() => root?.querySelector(`[data-wid="${CSS.escape(w.id)}"]`)?.focus());
 }
@@ -402,7 +409,7 @@ function settingsDialog(w) {
       const [minW, minH] = minFor(w);
       patch(w.id, x => {
         x.label = String(fd.get('label')).trim().slice(0, 60);
-        x.x = clamp(Number(fd.get('x')) || 0, 0, SCREEN_W - 60); x.y = clamp(Number(fd.get('y')) || 0, 0, SCREEN_H - 60);
+        x.x = clamp(Number(fd.get('x')) || 0, 0, W() - 60); x.y = clamp(Number(fd.get('y')) || 0, 0, SCREEN_H - 60);
         if (x.type === 'timer') {
           const d = clamp(readDur(fd, 'dur'), 1000, 24 * 3600000);
           if (d !== x.durationMs) { x.durationMs = d; x.remainingMs = d; x.endsAt = null; }
@@ -416,7 +423,7 @@ function settingsDialog(w) {
           x.tones = Object.fromEntries(Object.keys(INTERVAL_TONE_LABELS).map(k => [k, String(fd.get('tone_' + k))]));
         }
         const [mw, mh] = minFor(x);
-        x.width = clamp(Number(fd.get('width')) || x.width, Math.max(minW, mw), SCREEN_W - x.x); x.height = clamp(Number(fd.get('height')) || x.height, Math.max(minH, mh), SCREEN_H - x.y);
+        x.width = clamp(Number(fd.get('width')) || x.width, Math.max(minW, mw), W() - x.x); x.height = clamp(Number(fd.get('height')) || x.height, Math.max(minH, mh), SCREEN_H - x.y);
       });
     } });
 }

@@ -157,13 +157,22 @@ function tablesFromPlan(c) {
   return tables;
 }
 
+// Zweiertisch: Gruppenfarbe auf dem ganzen Tisch, Gruppennummer im Kopf
+const deskTable = (c, t, label) => t.g < 0
+  ? `<div class="table empty">${label ? `<small><span>${label}</span></small>` : ''}<div class="pair"><div class="seat free"></div><div class="seat free"></div></div></div>`
+  : `<div class="table grouped" style="${palStyle(t.g)}"><small><b class="gtag">G${t.g + 1}</b>${label ? `<span>${label}</span>` : ''}</small><div class="pair">${seat(c, t.a, t.g) + seat(c, t.b, t.g)}</div></div>`;
+// Legende über dem Raum: welche Farbe gehört zu welcher Gruppe
+const legend = c => c.plan.groups.length > 1
+  ? `<div class="legend">${c.plan.groups.map((g, gi) => `<span class="legend-item" style="${palStyle(gi)}"><span class="gdot"></span>Gruppe ${gi + 1}<em>${g.length}</em></span>`).join('')}</div>`
+  : '';
+
 function room(c) {
   const L = c.settings.layout;
   const front = `<div class="front"><span>Vorne · Tafel</span><div class="desk">Lehrerpult</div></div>`;
   if (L === 'omnibus') {
     const tables = tablesFromPlan(c);
     while (tables.length < c.settings.tables) tables.push({ g: -1, a: null, b: null });
-    return `<div class="room omnibus">${front}<div class="rows">${tables.map((t, i) => `<div class="table ${t.g < 0 ? 'empty' : ''}"><small>Tisch ${i + 1}</small><div class="pair">${t.g < 0 ? '<div class="seat free"></div><div class="seat free"></div>' : seat(c, t.a, t.g) + seat(c, t.b, t.g)}</div></div>`).join('')}</div><div class="back">Hinten</div></div>`;
+    return `<div class="room omnibus">${front}${legend(c)}<div class="rows">${tables.map((t, i) => deskTable(c, t, `Tisch ${i + 1}`)).join('')}</div><div class="back">Hinten</div></div>`;
   }
   if (L === 'gruppen') {
     return `<div class="room gruppen">${front}<div class="islands">${c.plan.groups.map((g, gi) => {
@@ -176,8 +185,8 @@ function room(c) {
     const tables = tablesFromPlan(c);
     while (tables.length < c.settings.tables) tables.push({ g: -1, a: null, b: null });
     const n = tables.length, side = Math.ceil(n / 3), left = tables.slice(0, side), bottom = tables.slice(side, n - side), right = tables.slice(n - side).reverse();
-    const t = x => `<div class="table ${x.g < 0 ? 'empty' : ''}"><div class="pair">${x.g < 0 ? '<div class="seat free"></div><div class="seat free"></div>' : seat(c, x.a, x.g) + seat(c, x.b, x.g)}</div></div>`;
-    return `<div class="room uform">${front}<div class="u"><div class="u-left">${left.map(t).join('')}</div><div class="u-mid">Offene Mitte</div><div class="u-right">${right.map(t).join('')}</div><div class="u-bottom">${bottom.map(t).join('')}</div></div></div>`;
+    const t = x => deskTable(c, x, '');
+    return `<div class="room uform">${front}${legend(c)}<div class="u"><div class="u-left">${left.map(t).join('')}</div><div class="u-mid">Offene Mitte</div><div class="u-right">${right.map(t).join('')}</div><div class="u-bottom">${bottom.map(t).join('')}</div></div></div>`;
   }
   if (L === 'sitzkreis' || L === 'stehkreis') {
     const ids = c.plan.groups.flatMap((g, gi) => g.map(id => ({ id, gi }))), n = ids.length || 1;

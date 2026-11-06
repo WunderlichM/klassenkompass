@@ -7,7 +7,7 @@ import * as screen from './screen.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.5.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
@@ -128,6 +128,16 @@ function helpDialog() {
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
+    </ul>
+    <h3>Datenschutzhinweise im Einzelnen</h3>
+    <ul class="help-list">
+      <li><b>Welche Daten:</b> Vornamen, optional Klasse (Sport), Klassen- und Gruppennamen, Sitzpläne, Teams, Ergebnisse und Einstellungen. Mit Konto zusätzlich die E-Mail-Adresse.</li>
+      <li><b>Wozu:</b> ausschließlich zur Unterrichtsorganisation der angemeldeten Lehrkraft.</li>
+      <li><b>Wo:</b> im Browser (Websitedaten) des Geräts. Mit Konto zusätzlich verschlüsselt bei Supabase (Rechenzentrum Frankfurt) als Auftragsverarbeiter.</li>
+      <li><b>Abruf der App:</b> Die App wird über GitHub Pages ausgeliefert. Dabei verarbeitet GitHub technisch notwendig die IP-Adresse und Browserangaben, um die Seite auszuliefern und abzusichern. Die App selbst setzt keine Cookies und lädt nichts von fremden Servern nach.</li>
+      <li><b>Löschen:</b> Zahnrad → „Konto &amp; Synchronisierung“ → „Konto löschen“ entfernt Konto und gespeicherten Datenblock sofort. Ohne Konto genügt es, die Websitedaten im Browser zu löschen.</li>
+      <li><b>Deine Rechte:</b> Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit (über „Daten exportieren“) und Beschwerde bei einer Datenschutzaufsichtsbehörde, in Baden-Württemberg beim LfDI.</li>
+      <li><b>Für Lehrkräfte:</b> Wer Schülerdaten auf privaten Geräten oder mit eigenen Programmen verarbeitet, klärt das vorher mit der Schulleitung bzw. der oder dem Datenschutzbeauftragten der Schule (in Baden-Württemberg: VwV „Datenschutz an öffentlichen Schulen“).</li>
     </ul>` });
 }
 

@@ -3,7 +3,9 @@ import { uid } from './engine.js';
 
 const KEY = 'klassenkompass.v1';
 export const SCHEMA = 1;
-export const SCREEN_W = 1280, SCREEN_H = 720;
+export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
+// Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
+export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
 
 const DEMO_NAMES = ['Amelie', 'Ben', 'Clara', 'David', 'Emma', 'Felix', 'Greta', 'Hannah', 'Ida', 'Jonas', 'Lina', 'Luis', 'Mila', 'Noah', 'Paul', 'Sofia'];
 const DEMO_SPORT = ['Anton', 'Bela', 'Carla', 'Dana', 'Elias', 'Frida', 'Gabriel', 'Hanna', 'Ilias', 'Jana', 'Kian', 'Lea', 'Mats', 'Nele', 'Oskar', 'Pia', 'Quentin', 'Romy', 'Samu', 'Tilda'];
@@ -17,7 +19,7 @@ export function demoSportGroup() {
     students: DEMO_SPORT.map((name, i) => ({ id: uid(), name, className: i % 2 ? '6b' : '6a' })) };
 }
 export function defaultScreen() {
-  return { background: 'mint', zoom: 'auto', widgets: [
+  return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
     { id: uid(), type: 'timer', style: 'digital', label: 'Arbeitsphase', x: 52, y: 90, width: 390, height: 230, durationMs: 600000, remainingMs: 600000, endsAt: null, sound: true },
     { id: uid(), type: 'timer', style: 'circle', label: 'Noch Zeit für Fragen', x: 493, y: 56, width: 280, height: 364, durationMs: 300000, remainingMs: 300000, endsAt: null, sound: true },
     { id: uid(), type: 'qr', label: 'Unterrichtsmaterial', x: 834, y: 114, width: 278, height: 354, content: '' },
@@ -105,8 +107,8 @@ function normSport(g) {
 function normScreen(s) {
   if (!s || !Array.isArray(s.widgets)) return defaultScreen();
   const widgets = s.widgets.filter(w => w && ['timer', 'qr', 'stopwatch', 'interval'].includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
-    x: int(w.x, 0, SCREEN_W - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
-  return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', widgets };
+    x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
+  return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
 export function normalize(raw) {
   const fresh = freshState();

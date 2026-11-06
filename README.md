@@ -8,6 +8,8 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 - **Ohne Konto:** Alle Daten bleiben im Browser des jeweiligen Geräts. Übertragen und Sichern über „Daten exportieren / importieren“ (Zahnrad oben rechts).
 - **Mit Konto (optional):** Zahnrad → „Konto & Synchronisierung“. Die Daten werden auf dem Gerät mit dem eigenen Passwort verschlüsselt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort) und in Supabase (Frankfurt) gespeichert. Der Server sieht weder Passwort noch Namen. Passwort vergessen = Daten im Konto verloren.
 - Keine externen Bibliotheken, keine Analyse, keine Werbung. QR-Codes werden direkt im Browser erzeugt.
+- Breitbild: Ab etwa 1800 px Breite nutzt die App mehr Platz, ab 2600 px (z. B. 3440 × 1440) werden Schrift und Sitzplätze größer. Im Bildschirm lässt sich das Format 21:9 wählen.
+- Sitzplan: Jeder Tisch trägt Farbe und Nummer seiner Gruppe (G1, G2 …), darüber steht eine Legende.
 
 ## Nutzen
 
@@ -38,5 +40,8 @@ Zahnrad → „Sync-Datei einrichten“ → „Neue Sync-Datei anlegen“ und di
 Geänderte Dateien hochladen und in `sw.js` die Zeile `const VERSION = 'kk-…'` hochzählen. Geöffnete Apps zeigen dann „Eine neue Version ist bereit“.
 
 ## Datenschutz
+
+Die ausführlichen Datenschutzhinweise stehen in der App unter „Hilfe & Datenschutz“. Für die Nutzung mit Schülerdaten vorher Schulleitung bzw. Datenschutzbeauftragte der Schule einbeziehen (BW: VwV Datenschutz an öffentlichen Schulen). Mit Supabase den Vertrag zur Auftragsverarbeitung (DPA) abschließen.
+
 
 Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert. Die Sicherungsdatei enthält die Vornamen und sollte entsprechend sorgfältig aufbewahrt werden.
