@@ -604,6 +604,26 @@ body.scanning { overflow: hidden; }
 .scan-btn.wide { flex: 1; } .scan-btn.done { background: #3f9a5c; padding: 0 16px; }
 
 /* Kartendruck */
+/* Kartenquiz: Bilder in Fragen und Antworten (Bilder liegen nur auf dem Gerät) */
+.img-slot { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.img-slot .img-thumb { width: 64px; height: 48px; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.img-pick { cursor: pointer; white-space: nowrap; }
+.q-img-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -4px 0 12px; }
+.q-img-row .img-thumb { width: 120px; height: 80px; }
+.q-thumb { flex: none; width: 56px; height: 42px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); background: #fff; }
+.opt-thumb { width: 22px; height: 16px; object-fit: cover; border-radius: 3px; vertical-align: -3px; }
+.q-thumb.img-missing { font-size: 9px; line-height: 1.1; overflow: hidden; height: 42px; }
+.img-missing { display: inline-grid; place-items: center; min-width: 56px; min-height: 30px; padding: 2px 6px; border: 1px dashed var(--line); border-radius: 7px; color: var(--muted); font-size: 11px; background: var(--soft); text-align: center; }
+.run-img { display: flex; justify-content: center; margin: 0 0 16px; }
+.run-img img, .run-img .img-missing { max-width: 100%; max-height: 38vh; object-fit: contain; border-radius: 12px; }
+body.presenting .run-img img { max-height: 44vh; }
+.run-opt-img { flex: none; display: grid; place-items: center; z-index: 1; }
+.run-opt-img img { display: block; height: clamp(70px, 14vh, 180px); max-width: 26vw; object-fit: contain; border-radius: 8px; background: #fff; }
+.run-opts.n3 .run-opt-img img { max-width: 18vw; }
+.run-opts.with-img .run-opt { min-height: 100px; }
+.result-table tr.absent td { color: var(--muted); font-style: italic; text-align: left; }
+@media (max-width: 720px) { .run-opt-img img { height: 80px; max-width: 40vw; } .q-img-row { flex-wrap: wrap; } }
+
 #print-cards { display: none; }
 @media print {
   body.printing-cards > *:not(#print-cards) { display: none !important; }

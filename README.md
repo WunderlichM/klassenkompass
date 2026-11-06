@@ -19,7 +19,9 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 
 ## Kartenquiz
 
-- 40 Antwortkarten (für alle Klassen gleich) unter Quiz → „Karten drucken“ (1, 2 oder 4 pro A4-Seite). Jede Karte trägt ein eigenes 7 × 7-Muster; die Kante, die oben ist, ist die Antwort (A–D).
+- Antwortkarten unter Quiz → „Karten drucken“ (1, 2 oder 4 pro A4-Seite). Voreingestellt sind nur die Karten der gewählten Klasse, mit Nummer und Vorname oben links zum Austeilen; leere Karten (alle 40 oder ein Bereich) unter „Weitere“. Jede Karte trägt ein eigenes 7 × 7-Muster; die Kante, die oben ist, ist die Antwort (A–D).
+- „Fehlt heute“: vor dem Start bei „Klasse & Karten“ (Personensymbol) oder im Quiz am Namen. Fehlende Kinder brauchen keine Antwort fürs automatische Auflösen; im Ergebnis und in der CSV steht „fehlte“ (ohne Grund). Die Auswahl vor dem Start gilt bis zum nächsten Öffnen der App.
+- Bilder zu Fragen und Antworten (Datei, Kamera oder Strg+V). Sie werden auf höchstens 1280 px verkleinert (WebP/JPEG) und in IndexedDB des Geräts gespeichert (`js/images.js`); Fragen enthalten nur die Kennung `img_…` (Prüfsumme des Bildes). Bilder gehen nicht ins Konto (2-MB-Grenze), aber in „Daten exportieren“ und in die Sync-Datei. Fehlt ein Bild auf einem Gerät, erscheint ein Platzhalter.
 - Die Erkennung (`js/detect.js`) läuft vollständig im Browser, ohne Bibliothek: örtlicher Schwellwert, zusammenhängende Flächen, Viereck, Raster abtasten, Code mit Prüfabstand (`js/cards.js`, mindestens 7 Felder Unterschied auch gedreht). Kamerabilder werden nicht gespeichert.
 - Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.
 - Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).

@@ -33,7 +33,8 @@ export function matchCode(read, maxErr = 1) {
 
 // Druckbild einer Karte als SVG. Maße in Rastereinheiten: Rand 2,2 Einheiten um das 7er-Raster.
 const M = 2.2, SIZE = 7 + 2 * M;
-export function cardSvg(n, { label = '', size = '100%' } = {}) {
+// name: Vorname gut sichtbar oben links neben der Nummer (zum Austeilen); bleibt mit Abstand außerhalb des Musters
+export function cardSvg(n, { name = '', size = '100%' } = {}) {
   const code = CODES[n - 1];
   let cells = '';
   for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
@@ -46,7 +47,14 @@ export function cardSvg(n, { label = '', size = '100%' } = {}) {
     <rect width="${SIZE}" height="${SIZE}" fill="#fff"/>
     <g fill="#111">${cells}</g>
     ${letter('A', mid, off, 0)}${letter('B', SIZE - off, mid, 90)}${letter('C', mid, SIZE - off, 180)}${letter('D', off, mid, -90)}
-    <text x="0.45" y="0.55" font-size="0.42" fill="#9a9aa3" dominant-baseline="hanging">${n}</text>
-    ${label ? `<text x="${SIZE - 0.45}" y="${SIZE - 0.45}" font-size="0.32" fill="#b4b4bb" text-anchor="end">${label.replace(/[&<>"]/g, '')}</text>` : ''}
+    ${name ? nameText(n, name) : `<text x="0.45" y="0.55" font-size="0.42" fill="#9a9aa3" dominant-baseline="hanging">${n}</text>`}
   </svg>`;
+}
+// Nummer und Name in der Ecke oben links; lange Namen werden auf den Platz bis vor das „A“ gestaucht
+function nameText(n, name) {
+  const t = String(name).replace(/[&<>"]/g, '').trim();
+  const fs = 0.6, x = 0.45, room = SIZE / 2 - 0.65 - x;
+  const est = (String(n).length + 1.5 + t.length) * fs * 0.56;
+  const fit = est > room ? ` textLength="${room.toFixed(2)}" lengthAdjust="spacingAndGlyphs"` : '';
+  return `<text x="${x}" y="0.42" font-size="${fs}" fill="#55555d" dominant-baseline="hanging"${fit}><tspan font-weight="700">${n}</tspan><tspan font-weight="600" dx="${(fs * 0.5).toFixed(2)}">${t}</tspan></text>`;
 }

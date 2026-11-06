@@ -1,6 +1,7 @@
 // Abgleich über eine Sync-Datei (z. B. im Google-Drive-Ordner).
 // Nutzt die File System Access API (Chrome/Edge am PC). Kein Server.
 import * as store from './store.js';
+import * as images from './images.js';
 
 export const supported = typeof window.showOpenFilePicker === 'function' && typeof window.showSaveFilePicker === 'function';
 const META_KEY = 'klassenkompass.sync';
@@ -65,12 +66,15 @@ async function readFile() {
 }
 async function writeFile() {
   const savedAt = new Date().toISOString();
-  const body = JSON.stringify({ app: 'KlassenKompass', kind: 'sync', schema: store.SCHEMA, savedAt, device: meta.deviceId, data: store.get() });
+  // Quiz-Bilder mitschreiben, damit sie auf den anderen PCs ankommen (nur in der Sync-Datei, nicht im Konto)
+  const pics = await images.pack(images.idsIn(store.get().quiz)).catch(() => ({}));
+  const body = JSON.stringify({ app: 'KlassenKompass', kind: 'sync', schema: store.SCHEMA, savedAt, device: meta.deviceId, data: store.get(), ...(Object.keys(pics).length ? { images: pics } : {}) });
   const w = await handle.createWritable();
   await w.write(body); await w.close();
   meta.fileVersion = savedAt; meta.lastSyncAt = savedAt; meta.dirty = false; dirty = false; saveMeta();
 }
 function apply(raw) {
+  if (raw.images) images.unpack(raw.images).then(n => { if (n) dispatchEvent(new Event('kk-images')); }).catch(() => {});
   applying = true;
   try { store.replaceState({ ...raw.data, welcomed: true }); } finally { applying = false; }
   meta.fileVersion = raw.savedAt; meta.lastSyncAt = new Date().toISOString(); meta.dirty = false; dirty = false; saveMeta();

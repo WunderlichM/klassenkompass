@@ -120,6 +120,7 @@ function normScreen(s) {
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
 const CARD_MAX = 40;
+const IMG_RE = /^img_[0-9a-f]{20}$/;
 function normQuiz(q) {
   if (!q || typeof q !== 'object') return demoQuiz();
   const classes = (Array.isArray(q.classes) ? q.classes : []).map(c => {
@@ -135,7 +136,10 @@ function normQuiz(q) {
     const options = (Array.isArray(x?.options) ? x.options : []).map(o => str(o, 120)).slice(0, 4);
     while (options.length < 2) options.push('');
     const correct = Number.isInteger(x?.correct) && x.correct >= 0 && x.correct < options.length ? x.correct : null;
-    return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct };
+    // Bilder: nur Kennungen (die Bilder selbst liegen in IndexedDB, siehe images.js)
+    const imgId = v => (typeof v === 'string' && IMG_RE.test(v) ? v : '');
+    const img = imgId(x?.img), optImgs = options.map((_, i) => imgId(x?.optImgs?.[i]));
+    return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct, ...(img ? { img } : {}), ...(optImgs.some(Boolean) ? { optImgs } : {}) };
   };
   const sets = (Array.isArray(q.sets) ? q.sets : []).map(t => ({ id: String(t?.id || uid()), title: str(t?.title, 80) || 'Fragensatz', demo: !!t?.demo,
     questions: (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map(normQ) }));

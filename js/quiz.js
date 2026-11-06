@@ -5,6 +5,7 @@ import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, namesFromText, todayISO, displayDate, downloadFile, toggleFullscreen } from './ui.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
+import * as images from './images.js';
 
 // Jedes Gerät bekommt eine zufällige Kennung, damit klar ist, wo ein Quiz läuft
 const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localStorage.getItem(k); if (!d) { d = uid(); localStorage.setItem(k, d); } return d; } catch { return uid(); } })();
@@ -16,6 +17,9 @@ const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
 const present = s => s.students.filter(x => !s.absent?.includes(x.id));
 const autoDone = new Set();
+// „Fehlt heute“ vor dem Start – gilt nur bis zum nächsten Öffnen der App und wird nicht gespeichert
+const absentByClass = new Map();
+const absentFor = id => { if (!absentByClass.has(id)) absentByClass.set(id, new Set()); return absentByClass.get(id); };
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
 let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null;
@@ -24,11 +28,13 @@ const live = { remote: null, scanTimer: null, keep: null, lastControl: '', lastC
 export function mount(el) {
   root = el;
   const off = store.subscribe(() => draw());
+  const onImages = () => draw();
+  addEventListener('kk-images', onImages);
   root.onclick = onClick;
   root.onchange = onChange;
   draw();
   homeTimer = setInterval(pollHome, 4000); pollHome();
-  return () => { off(); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; root.onclick = root.onchange = null; root = null; };
+  return () => { off(); removeEventListener('kk-images', onImages); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; root.onclick = root.onchange = null; root = null; };
 }
 
 function draw() {
@@ -36,6 +42,7 @@ function draw() {
   const s = running();
   if (s) { drawRun(s); startScanPoll(); syncControl(s); checkAuto(s); }
   else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId); if (p) drawPodium(p); else { podiumId = null; drawHome(); } }
+  images.hydrate(root);
 }
 
 // Automatisch auflösen, sobald alle anwesenden Kinder geantwortet haben (je Frage nur einmal)
@@ -132,17 +139,17 @@ function drawHome() {
             <h3>${icon('cards', 16)} Klasse &amp; Karten ${c ? `<span class="badge">${c.students.length}</span>` : ''}</h3>
             ${c ? `<button class="icon-btn sm" data-act="students-add" title="Schüler hinzufügen" aria-label="Schüler hinzufügen">${icon('plus', 16)}</button>` : ''}
           </div>
-          ${c ? `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li><span class="card-no">${s.card}</span><span class="name">${esc(s.name)}</span><button class="icon-btn xs" data-act="student-edit" data-id="${esc(s.id)}" title="Kartennummer ändern oder entfernen" aria-label="${esc(s.name)} bearbeiten">${icon('edit', 14)}</button></li>`).join('')}</ul>
-          <p class="muted small-text">Jedes Kind behält seine Kartennummer. Dieselben gedruckten Karten passen für alle Klassen.</p>` : `<p class="muted">Lege eine Klasse an oder übernimm die Namen aus Technik oder Sport.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
+          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span><span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button><button class="icon-btn xs" data-act="student-edit" data-id="${esc(s.id)}" title="Kartennummer ändern oder entfernen" aria-label="${esc(s.name)} bearbeiten">${icon('edit', 14)}</button></li>`).join('')}</ul>
+          <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind behält seine Kartennummer; gedruckt werden nur die Karten dieser Klasse mit Namen.</p>`; })() : `<p class="muted">Lege eine Klasse an oder übernimm die Namen aus Technik oder Sport.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
           <button class="btn ghost full" data-act="print">${icon('print', 16)} Karten drucken</button>
         </div>
         <div class="card">
           <h3>${icon('help', 16)} So geht’s</h3>
           <ol class="help-list steps small-text">
-            <li>Karten einmal drucken (am besten auf festem Papier) und austeilen. Jedes Kind bekommt seine Nummer.</li>
+            <li>Karten der Klasse drucken (am besten auf festem Papier). Nummer und Vorname stehen auf jeder Karte – so ist schnell ausgeteilt.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
-            <li>Sobald alle erfasst sind, wird automatisch aufgelöst (abschaltbar). Fehlt ein Kind, im Quiz auf seinen Namen tippen → „Fehlt heute“. „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
+            <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf seinen Namen → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
           </ol>
         </div>
       </aside>
@@ -153,8 +160,8 @@ function drawHome() {
 function questionList(t) {
   if (!t.questions.length) return '<p class="muted">Noch keine Fragen in diesem Satz.</p>';
   return `<ol class="q-list">${t.questions.map((x, i) => `<li>
-    <div class="q-main"><b>${esc(x.text) || '<span class="muted">(Frage ohne Text)</span>'}</b>
-      <span class="q-opts">${x.options.map((o, k) => `<span class="${x.correct === k ? 'ok' : ''}">${LETTERS[k]}${o ? ' · ' + esc(o) : ''}</span>`).join('')}</span></div>
+    ${x.img ? images.imgTag(x.img, 'q-thumb') : ''}<div class="q-main"><b>${esc(x.text) || (x.img ? '<span class="muted">(Bildfrage)</span>' : '<span class="muted">(Frage ohne Text)</span>')}</b>
+      <span class="q-opts">${x.options.map((o, k) => `<span class="${x.correct === k ? 'ok' : ''}">${LETTERS[k]}${x.optImgs?.[k] ? ' ' + images.imgTag(x.optImgs[k], 'opt-thumb') : ''}${o ? ' · ' + esc(o) : ''}</span>`).join('')}</span></div>
     <div class="q-tools">
       <button class="icon-btn xs" data-act="q-up" data-i="${i}" ${i ? '' : 'disabled'} title="Nach oben" aria-label="Nach oben">${icon('back', 14)}</button>
       <button class="icon-btn xs" data-act="q-edit" data-i="${i}" title="Bearbeiten" aria-label="Bearbeiten">${icon('edit', 14)}</button>
@@ -192,10 +199,11 @@ function drawRun(s) {
       </div>
     </div>
     <div class="card run-card">
-      <p class="run-q">${esc(q.text) || '<span class="muted">Frage mündlich oder an der Tafel</span>'}</p>
-      <div class="run-opts n${n}">${q.options.map((o, i) => `
+      ${q.text || !q.img ? `<p class="run-q">${esc(q.text) || '<span class="muted">Frage mündlich oder an der Tafel</span>'}</p>` : ''}
+      ${q.img ? `<div class="run-img">${images.imgTag(q.img)}</div>` : ''}
+      <div class="run-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''}">${q.options.map((o, i) => `
         <div class="run-opt ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}">
-          <span class="run-letter">${LETTERS[i]}</span><span class="run-text">${esc(o)}</span>
+          <span class="run-letter">${LETTERS[i]}</span>${q.optImgs?.[i] ? `<span class="run-opt-img">${images.imgTag(q.optImgs[i])}</span>` : ''}<span class="run-text">${esc(o)}</span>
           ${s.reveal ? `<span class="run-bar"><i style="width:${counts[i] / max * 100}%"></i></span><span class="run-count">${counts[i]}</span>` : ''}
         </div>`).join('')}</div>
       <div class="run-foot">
@@ -244,6 +252,7 @@ function onClick(e) {
     case 'import-technik': return importTechnik();
     case 'students-add': return studentsAddDialog(cls());
     case 'student-edit': return studentDialog(cls(), b.dataset.id);
+    case 'student-absent': { const off = absentFor(cls().id), id = b.dataset.id; off.has(id) ? off.delete(id) : off.add(id); return draw(); }
     case 'print': return printDialog();
     case 'set-new': return setDialog();
     case 'set-edit': return setDialog(qset());
@@ -279,7 +288,7 @@ function start(quick) {
   const questions = quick ? [{ id: uid(), text: '', options: ['', '', '', ''], correct: null }] : t.questions.filter(x => x.options.length >= 2);
   store.update(s => {
     if (old) s.quiz.sessions.find(x => x.id === old.id).done = true;
-    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), index: 0, reveal: false, done: false, absent: [],
+    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), index: 0, reveal: false, done: false, absent: c.students.filter(x => absentFor(c.id).has(x.id)).map(x => x.id),
       students: c.students.map(x => ({ id: x.id, name: x.name, card: x.card })), questions: questions.map(x => ({ ...structuredClone(x), id: uid(), answers: {} })) });
   });
   live.applied.clear(); live.lastCmd = null; live.lastControl = '';
@@ -314,7 +323,12 @@ function tileDialog(studentId) {
     <button type="button" class="btn ghost" data-a="-1">Keine Antwort</button>
     <button type="button" class="btn ghost" data-a="absent">${s.absent?.includes(studentId) ? 'Ist doch da' : 'Fehlt heute (zählt nicht mit)'}</button></div>`,
     onOpen: (el, close) => el.querySelectorAll('[data-a]').forEach(btn => btn.onclick = () => {
-      if (btn.dataset.a === 'absent') { updateRun(x => { x.absent ||= []; if (x.absent.includes(studentId)) x.absent = x.absent.filter(y => y !== studentId); else x.absent.push(studentId); }); return close(); }
+      if (btn.dataset.a === 'absent') {
+        const off = absentFor(s.classId), now = !s.absent?.includes(studentId);
+        now ? off.add(studentId) : off.delete(studentId);
+        updateRun(x => { x.absent ||= []; if (!now) x.absent = x.absent.filter(y => y !== studentId); else if (!x.absent.includes(studentId)) x.absent.push(studentId); });
+        return close();
+      }
       const a = Number(btn.dataset.a);
       updateRun(x => { const qq = x.questions[x.index]; if (a < 0) delete qq.answers[studentId]; else qq.answers[studentId] = a; });
       close();
@@ -560,34 +574,60 @@ function setDialog(t) {
 function questionDialog(t, index = -1) {
   if (!t) return;
   const old = index >= 0 ? t.questions[index] : null;
-  let type = !old ? 'abcd' : old.options.length === 2 && old.options[0] === 'Richtig' && old.options[1] === 'Falsch' ? 'tf' : ({ 4: 'abcd', 3: 'abc', 2: 'ab' })[old.options.length];
+  let type = !old ? 'abcd' : old.options.length === 2 && old.options[0] === 'Richtig' && old.options[1] === 'Falsch' && !old.optImgs ? 'tf' : ({ 4: 'abcd', 3: 'abc', 2: 'ab' })[old.options.length];
   let opts = old ? [...old.options] : ['', '', '', ''], correct = old ? old.correct : null;
+  // Bilder: Frage und je Antwort eine Kennung (leer = kein Bild)
+  let qImg = old?.img || '';
+  const optImgs = Array.from({ length: 4 }, (_, i) => old?.optImgs?.[i] || '');
+  const slot = (key, id) => `<div class="img-slot ${id ? 'has' : ''}" data-slot="${key}">${id ? `${images.imgTag(id, 'img-thumb')}<button type="button" class="icon-btn xs" data-img-del="${key}" title="Bild entfernen" aria-label="Bild entfernen">${icon('x', 14)}</button>`
+    : `<label class="btn ghost sm img-pick" title="Bild wählen, fotografieren oder mit Strg+V einfügen">${icon('camera', 15)} Bild<input type="file" accept="image/*" data-img-file="${key}" hidden></label>`}</div>`;
   const optHtml = () => {
     const n = TYPES[type].n;
     return Array.from({ length: n }, (_, i) => `<div class="opt-row"><label class="opt-correct" title="Richtige Antwort"><input type="radio" name="correct" value="${i}" ${correct === i ? 'checked' : ''}><span>${LETTERS[i]}</span></label>
-      <input name="o${i}" class="input" maxlength="120" value="${esc(type === 'tf' ? ['Richtig', 'Falsch'][i] : opts[i] || '')}" ${type === 'tf' ? 'readonly' : ''} placeholder="Antwort ${LETTERS[i]} (optional)"></div>`).join('') +
+      <input name="o${i}" class="input" maxlength="120" value="${esc(type === 'tf' ? ['Richtig', 'Falsch'][i] : opts[i] || '')}" ${type === 'tf' ? 'readonly' : ''} placeholder="Antwort ${LETTERS[i]} (optional)">${type === 'tf' ? '' : slot('o' + i, optImgs[i])}</div>`).join('') +
       `<label class="check"><input type="radio" name="correct" value="" ${correct === null ? 'checked' : ''}> Keine richtige Antwort (Umfrage, Meinung)</label>`;
   };
   dialog({ title: old ? `Frage ${index + 1} bearbeiten` : 'Neue Frage', submit: old ? 'Speichern' : 'Hinzufügen', wide: true, body: `
     <label class="field">Frage<textarea name="text" class="input" rows="3" maxlength="400" placeholder="Was möchtest du fragen?">${esc(old?.text || '')}</textarea></label>
+    <div class="q-img-row"><span class="muted small-text">Bild zur Frage (optional) – auch mit Strg+V einfügen</span><div data-qslot>${slot('q', qImg)}</div></div>
     <label class="field">Antwortart<select name="type" class="select">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
-    <p class="eyebrow">Antworten · Kreis = richtige Antwort</p>
+    <p class="eyebrow">Antworten · Kreis = richtige Antwort · Bild statt oder zusätzlich zum Text möglich</p>
     <div data-opts>${optHtml()}</div>
     ${old ? '' : '<label class="check"><input type="checkbox" name="more" checked> Danach gleich die nächste Frage anlegen</label>'}`,
     onOpen: el => {
-      const sel = el.querySelector('[name=type]'), wrap = el.querySelector('[data-opts]');
-      sel.onchange = () => {
+      const sel = el.querySelector('[name=type]'), wrap = el.querySelector('[data-opts]'), qwrap = el.querySelector('[data-qslot]');
+      const keep = () => {
         wrap.querySelectorAll('input[name^=o]').forEach((inp, i) => { if (type !== 'tf') opts[i] = inp.value; });
         const r = wrap.querySelector('[name=correct]:checked'); correct = r && r.value !== '' ? Number(r.value) : null;
-        type = sel.value; if (correct !== null && correct >= TYPES[type].n) correct = null;
-        wrap.innerHTML = optHtml();
       };
+      const redraw = () => { keep(); wrap.innerHTML = optHtml(); qwrap.innerHTML = slot('q', qImg); images.hydrate(el); };
+      const setImg = (key, id) => { if (key === 'q') qImg = id; else optImgs[Number(key.slice(1))] = id; redraw(); };
+      const addFile = async (key, file) => {
+        const err = el.querySelector('.form-error');
+        try { err.hidden = true; setImg(key, await images.add(file)); }
+        catch (e) { err.textContent = e.message; err.hidden = false; }
+      };
+      sel.onchange = () => { keep(); type = sel.value; if (correct !== null && correct >= TYPES[type].n) correct = null; redraw(); };
+      el.addEventListener('change', e => { const k = e.target.dataset?.imgFile; if (k && e.target.files?.[0]) addFile(k, e.target.files[0]); });
+      el.addEventListener('click', e => { const k = e.target.closest('[data-img-del]')?.dataset.imgDel; if (k) { e.preventDefault(); setImg(k, ''); } });
+      // Einfügen aus der Zwischenablage: in die Antwortzeile mit dem Cursor, sonst zur Frage
+      el.addEventListener('paste', e => {
+        const file = [...(e.clipboardData?.items || [])].find(x => x.kind === 'file' && x.type.startsWith('image/'))?.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+        const row = document.activeElement?.closest?.('.opt-row'), inp = row?.querySelector('input[name^=o]');
+        addFile(inp && type !== 'tf' ? inp.name : 'q', file);
+      });
+      images.hydrate(el);
     },
     onSubmit: fd => {
-      const n = TYPES[fd.get('type')].n;
+      const n = TYPES[fd.get('type')].n, tf = fd.get('type') === 'tf';
       const options = Array.from({ length: n }, (_, i) => String(fd.get('o' + i) || '').trim());
+      const oi = tf ? [] : optImgs.slice(0, n);
       const c = fd.get('correct'), q = { id: old?.id || uid(), text: String(fd.get('text') || '').trim(), options, correct: c === null || c === '' ? null : Number(c) };
-      if (!q.text && options.every(o => !o)) throw new Error('Bitte eine Frage oder Antworten eintragen.');
+      if (qImg) q.img = qImg;
+      if (oi.some(Boolean)) q.optImgs = oi;
+      if (!q.text && !q.img && options.every(o => !o) && !oi.some(Boolean)) throw new Error('Bitte eine Frage, ein Bild oder Antworten eintragen.');
       store.update(s => { const set = s.quiz.sets.find(x => x.id === t.id); if (old) set.questions[index] = q; else set.questions.push(q); });
       if (!old && fd.get('more') === 'on') setTimeout(() => questionDialog(qset()), 50);
     } });
@@ -597,29 +637,30 @@ function questionDialog(t, index = -1) {
 // Kartendruck
 // ======================================================================
 function printDialog() {
-  const c = cls();
+  const c = cls(), mine = c?.students.slice().sort((a, b) => a.card - b.card) || [];
+  const first = mine[0];
   dialog({ title: 'Antwortkarten drucken', submit: 'Drucken', body: `
-    <div class="print-preview">${cardSvg(1, { size: '120' })}<p class="small-text muted">Jede Karte hat ein eigenes Muster. Die Kinder halten sie so, dass der Buchstabe ihrer Antwort <b>oben</b> steht. Die Buchstaben sind klein und hell, damit die Nachbarn sie kaum lesen können.</p></div>
+    <div class="print-preview">${cardSvg(first?.card || 1, { size: '120', name: first?.name || '' })}<p class="small-text muted">Jede Karte hat ein eigenes Muster. Nummer und Vorname stehen oben links – so lassen sich die Karten schnell austeilen. Die Kinder halten die Karte so, dass der Buchstabe ihrer Antwort <b>oben</b> steht. Die Buchstaben sind klein und hell, damit die Nachbarn sie kaum lesen können.</p></div>
     <label class="field">Karten pro Seite (A4)<select name="per" class="select"><option value="2" selected>2 – groß, für Räume bis etwa 8 m</option><option value="1">1 – sehr groß, für Halle oder großen Raum</option><option value="4">4 – klein, für kleine Räume</option></select></label>
-    <label class="field">Welche Karten<select name="which" class="select"><option value="all">Alle ${CARD_COUNT} Karten</option>${c?.students.length ? `<option value="class">Nur die Nummern der Klasse ${esc(c.name)} (${c.students.length})</option>` : ''}<option value="range">Bereich wählen …</option></select></label>
+    <label class="field">Welche Karten<select name="which" class="select">${mine.length ? `<option value="class" selected>Klasse ${esc(c.name)}: ${mine.length} Karten mit Namen</option>` : ''}<optgroup label="Weitere (leere Karten ohne Namen)"><option value="all">Alle ${CARD_COUNT} Karten</option><option value="range">Bereich wählen …</option></optgroup></select></label>
     <div class="two" data-range hidden><label class="field">Von<input name="from" type="number" class="input" min="1" max="${CARD_COUNT}" value="1"></label><label class="field">Bis<input name="to" type="number" class="input" min="1" max="${CARD_COUNT}" value="${CARD_COUNT}"></label></div>
-    <p class="muted small-text">Tipp: auf festes Papier drucken oder laminieren (matte Folie spiegelt weniger). Im Druckdialog „Tatsächliche Größe“ bzw. 100 % wählen.</p>`,
-    onOpen: el => { const w = el.querySelector('[name=which]'); w.onchange = () => { el.querySelector('[data-range]').hidden = w.value !== 'range'; }; },
+    <p class="muted small-text">Karten mit Namen gelten nur für diese Klasse. Kommt ein Kind dazu oder ändert sich eine Kartennummer, nur diese Karte neu drucken (Bereich wählen bzw. Klasse). Tipp: auf festes Papier drucken oder laminieren (matte Folie spiegelt weniger). Im Druckdialog „Tatsächliche Größe“ bzw. 100 % wählen.</p>`,
+    onOpen: el => { const w = el.querySelector('[name=which]'), r = el.querySelector('[data-range]'); const sync = () => { r.hidden = w.value !== 'range'; r.style.display = r.hidden ? 'none' : ''; }; w.onchange = sync; sync(); },
     onSubmit: fd => {
-      const which = fd.get('which'); let nums;
-      if (which === 'class') nums = c.students.map(x => x.card).sort((a, b) => a - b);
-      else if (which === 'range') { const a = Math.max(1, Math.min(CARD_COUNT, Number(fd.get('from')) || 1)), b = Math.max(a, Math.min(CARD_COUNT, Number(fd.get('to')) || CARD_COUNT)); nums = Array.from({ length: b - a + 1 }, (_, i) => a + i); }
-      else nums = Array.from({ length: CARD_COUNT }, (_, i) => i + 1);
-      printCards(nums, Number(fd.get('per')));
+      const which = fd.get('which'); let cards;
+      if (which === 'class') cards = mine.map(x => ({ n: x.card, name: x.name }));
+      else if (which === 'range') { const a = Math.max(1, Math.min(CARD_COUNT, Number(fd.get('from')) || 1)), b = Math.max(a, Math.min(CARD_COUNT, Number(fd.get('to')) || CARD_COUNT)); cards = Array.from({ length: b - a + 1 }, (_, i) => ({ n: a + i })); }
+      else cards = Array.from({ length: CARD_COUNT }, (_, i) => ({ n: i + 1 }));
+      printCards(cards, Number(fd.get('per')));
     } });
 }
-function printCards(nums, per) {
+function printCards(cards, per) {
   document.getElementById('print-cards')?.remove();
   const wrap = document.createElement('div');
   wrap.id = 'print-cards'; wrap.className = 'pc-' + per;
   const pages = [];
-  for (let i = 0; i < nums.length; i += per) pages.push(nums.slice(i, i + per));
-  wrap.innerHTML = pages.map(p => `<section class="pc-page">${p.map(n => `<div class="pc-cell">${cardSvg(n)}</div>`).join('')}</section>`).join('');
+  for (let i = 0; i < cards.length; i += per) pages.push(cards.slice(i, i + per));
+  wrap.innerHTML = pages.map(p => `<section class="pc-page">${p.map(x => `<div class="pc-cell">${cardSvg(x.n, { name: x.name || '' })}</div>`).join('')}</section>`).join('');
   document.body.append(wrap); document.body.classList.add('printing-cards');
   const done = () => { wrap.remove(); document.body.classList.remove('printing-cards'); removeEventListener('afterprint', done); };
   addEventListener('afterprint', done);
@@ -634,16 +675,18 @@ function resultDialog(id) {
   const st = stats(s), graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
   const rows = s.students.slice().sort((a, b) => a.name.localeCompare(b.name, 'de')).map(stu => {
     const right = graded.filter(q => q.answers[stu.id] === q.correct).length;
+    if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) return `<tr class="absent"><th>${esc(stu.name)} <small class="muted">${stu.card}</small></th><td class="none" colspan="${s.questions.length + 1}">fehlte</td></tr>`;
     return `<tr><th>${esc(stu.name)} <small class="muted">${stu.card}</small></th>${s.questions.map(q => { const a = q.answers[stu.id]; return `<td class="${a === undefined ? 'none' : q.correct === null ? '' : a === q.correct ? 'right' : 'miss'}">${a === undefined ? '–' : LETTERS[a]}</td>`; }).join('')}<td class="sum">${graded.length ? `${right}/${graded.length}` : '–'}</td></tr>`;
   }).join('');
   const qpct = q => { const v = Object.values(q.answers); return q.correct === null || !v.length ? '–' : Math.round(v.filter(x => x === q.correct).length / v.length * 100) + ' %'; };
   dialog({ title: `${s.title} · ${s.className}`, submit: null, cancel: 'Schließen', wide: true, body: `
     <p class="muted">${esc(displayDate(s.date))} · ${s.questions.length} Frage(n) · ${st.answered} Antworten${st.pct !== null ? ` · <b>${st.pct} % richtig</b>` : ''}</p>
-    <ol class="result-qs">${s.questions.map((q, i) => `<li><b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]} · ${qpct(q)}` : 'ohne richtige Antwort'}</span>
+    <ol class="result-qs">${s.questions.map((q, i) => `<li>${q.img ? images.imgTag(q.img, 'opt-thumb') + ' ' : ''}<b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]} · ${qpct(q)}` : 'ohne richtige Antwort'}</span>
       <span class="q-dist">${q.options.map((o, k) => `<span class="${q.correct === k ? 'ok' : ''}">${LETTERS[k]}: ${Object.values(q.answers).filter(v => v === k).length}</span>`).join('')}</span></li>`).join('')}</ol>
     <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Name</th>${s.questions.map((_, i) => `<th>F${i + 1}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="tools">${ranking(s).places.length ? `<button type="button" class="btn ghost sm" data-m="podium">${icon('trophy', 15)} Podium zeigen</button>` : ''}<button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
     onOpen: (el, close) => {
+      images.hydrate(el);
       el.querySelector('[data-m=podium]')?.addEventListener('click', () => { close(); podiumId = id; draw(); scrollTo(0, 0); });
       el.querySelector('[data-m=csv]').onclick = () => downloadFile(`Kartenquiz-${s.date}-${s.className}.csv`.replace(/[\\/:*?"<>|]/g, '_'), csv(s), 'text/csv;charset=utf-8');
       el.querySelector('[data-m=del]').onclick = async () => { close(); if (await confirmDialog('Ergebnis löschen', `Ergebnis „${s.title}“ vom ${displayDate(s.date)} löschen?`)) store.update(x => { x.quiz.sessions = x.quiz.sessions.filter(y => y.id !== id); }); };
@@ -654,6 +697,7 @@ function csv(s) {
   const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
   const lines = [['Name', 'Karte', ...s.questions.map((q, i) => `F${i + 1}${q.text ? ': ' + q.text : ''}`), 'Richtig', 'Bewertete Fragen']];
   lines.push(['Richtige Antwort', '', ...s.questions.map(q => q.correct === null ? '' : LETTERS[q.correct]), '', '']);
-  for (const stu of s.students) lines.push([stu.name, stu.card, ...s.questions.map(q => q.answers[stu.id] === undefined ? '' : LETTERS[q.answers[stu.id]]), graded.filter(q => q.answers[stu.id] === q.correct).length, graded.length]);
+  for (const stu of s.students) if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) lines.push([stu.name, stu.card, 'fehlte', ...s.questions.slice(1).map(() => ''), '', '']);
+  else lines.push([stu.name, stu.card, ...s.questions.map(q => q.answers[stu.id] === undefined ? '' : LETTERS[q.answers[stu.id]]), graded.filter(q => q.answers[stu.id] === q.correct).length, graded.length]);
   return '﻿' + lines.map(l => l.map(cell).join(';')).join('\r\n');
 }

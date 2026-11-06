@@ -7,8 +7,9 @@ import * as screen from './screen.js';
 import * as quiz from './quiz.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
+import * as images from './images.js';
 
-export const VERSION = '1.6.3';
+export const VERSION = '1.7.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -71,7 +72,12 @@ function menuDialog() {
     </div>
     <input type="file" id="import-file" accept="application/json,.json" hidden>`,
     onOpen: (el, close) => {
-      el.querySelector('[data-m=export]').onclick = () => { downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, store.exportJson()); toast('Sicherung heruntergeladen.'); };
+      el.querySelector('[data-m=export]').onclick = async () => {
+        // Quiz-Bilder liegen nur auf diesem Gerät und kommen deshalb mit in die Sicherung
+        let text = store.exportJson();
+        try { const pics = await images.pack(images.idsIn(store.get().quiz)); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o, null, 1); } } catch {}
+        downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, text); toast('Sicherung heruntergeladen.');
+      };
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
       const sb = el.querySelector('[data-m=sync]'); if (sb) sb.onclick = () => { close(); syncDialog(); };
@@ -89,8 +95,10 @@ function menuDialog() {
 async function importFile(f) {
   let incoming;
   try {
-    if (f.size > 8 * 1024 * 1024) throw new Error('Die Datei ist zu groß.');
-    incoming = store.parseImport(await f.text());
+    if (f.size > 60 * 1024 * 1024) throw new Error('Die Datei ist zu groß.');
+    const text = await f.text();
+    incoming = store.parseImport(text);
+    try { const n = await images.unpack(JSON.parse(text).images); if (n) { toast(`${n} Quiz-Bild(er) übernommen.`); dispatchEvent(new Event('kk-images')); } } catch {}
   } catch (e) { return toast('Import nicht möglich: ' + (e instanceof SyntaxError ? 'Die Datei ist keine gültige JSON-Datei.' : e.message), { kind: 'warn' }); }
   const nC = incoming.technik.classes.length, nG = incoming.sport.groups.length, nW = incoming.screen.widgets.length;
   const hasDemoOnly = store.get().technik.classes.every(c => c.demo) && store.get().sport.groups.every(g => g.demo) && store.get().quiz.sets.every(t => t.demo) && store.get().quiz.classes.every(c => c.demo);
@@ -117,7 +125,7 @@ function helpDialog() {
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, Trennungsregeln festlegen und „Zufällig verteilen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
-      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Antwortkarten drucken (40 Stück, für alle Klassen gleich), Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Fragensatz anlegen, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.</li>
+      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz bleiben auf dem Gerät, auf dem sie eingefügt wurden; auf andere Geräte kommen sie über „Daten exportieren/importieren“ oder die Sync-Datei (nicht über das Konto).</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
@@ -130,7 +138,7 @@ function helpDialog() {
       <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Weder der Betreiber noch Supabase können die Namen lesen.</li>
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
-      <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen.</li>
+      <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden nur im Browser dieses Geräts gespeichert und nicht ins Konto hochgeladen.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
