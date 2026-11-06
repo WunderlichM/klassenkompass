@@ -232,7 +232,19 @@ textarea.input { resize: vertical; min-height: 80px; }
 .circle-timer .time { position: absolute; inset: 0; display: grid; place-items: center; font-size: min(14cqw, 11cqh); color: #2c2e36; text-shadow: 0 0 6px #fff, 0 0 12px #fff; }
 .egg-timer { width: min(60cqw, 46cqh); aspect-ratio: 1; }
 .egg-svg { width: 100%; height: 100%; }
+.egg-svg { overflow: visible; }
 .egg-open { display: none; } .egg-timer.hatched .egg-open { display: inline; } .egg-timer.hatched .egg-whole { display: none; }
+.egg-svg .crack { fill: none; stroke: #8b6a3e; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; transition: stroke-dashoffset .25s linear; }
+.egg-whole { transform-box: fill-box; transform-origin: 50% 90%; }
+.egg-timer.wobble .egg-whole { animation: egg-wobble .7s ease-in-out infinite; }
+@keyframes egg-wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+.egg-cap { transform-box: fill-box; transform-origin: 85% 100%; }
+.egg-timer.hatched .egg-cap { animation: egg-cap-off .6s cubic-bezier(.2, .8, .3, 1.2) forwards; }
+@keyframes egg-cap-off { to { transform: translate(16px, -14px) rotate(32deg); } }
+.egg-chick { transform-box: fill-box; transform-origin: 50% 100%; }
+.egg-timer.hatched .egg-chick { animation: egg-chick-up .5s .2s ease-out both; }
+@keyframes egg-chick-up { from { transform: translateY(14px) scale(.8); } }
+.egg-timer.hatched .egg-sparks { animation: pod-fade .4s .5s both; }
 .timer.egg .time { font-size: min(20cqw, 15cqh); color: #a85f3d; }
 .qr-box { width: min(86cqw, 72cqh); aspect-ratio: 1; } .qr-box svg { width: 100%; height: 100%; display: block; }
 .qr-text { margin: 0; font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

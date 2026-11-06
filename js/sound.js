@@ -32,4 +32,25 @@ export const DEFAULT_INTERVAL_TONES = { start: 'start', pause: 'pause', roundPau
 export const INTERVAL_TONE_LABELS = { start: 'Trainingsbeginn', pause: 'Satzpause', roundPause: 'Rundenpause', finish: 'Trainingsende', countdown: 'Countdown (3, 2, 1)' };
 
 export function play(id, volume = 0.6) { (TONES[id] || TONES.beep).play(Math.max(0, Math.min(1, volume)) * 0.5); }
-export function timerEnd(volume = 0.7) { play('bell', volume); setTimeout(() => play('bell', volume), 700); }
+// Endton der Timer: kräftiges Weckersignal (je Sekunde drei Pieptöne, 8 Sekunden lang).
+// Er wird im Voraus auf der Audio-Uhr eingeplant und erklingt daher auch, wenn das Fenster im Hintergrund liegt.
+export const ALARM_SECONDS = 8;
+export function scheduleAlarm(delaySec = 0, seconds = ALARM_SECONDS) {
+  const c = ac(); if (!c || c.state !== 'running') return null;
+  const comp = c.createDynamicsCompressor(), out = c.createGain();
+  comp.threshold.value = -6; comp.knee.value = 3; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.08;
+  out.gain.value = 1; out.connect(comp).connect(c.destination);
+  const t0 = c.currentTime + Math.max(0, delaySec), oscs = [];
+  const beep = (t, freq) => {
+    for (const [f, type, v] of [[freq, 'square', 0.55], [freq * 2, 'triangle', 0.3]]) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.008);
+      g.gain.setValueAtTime(v, t + 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 0.15); oscs.push(o);
+    }
+  };
+  for (let s = 0; s < seconds; s++) for (let b = 0; b < 3; b++) beep(t0 + s + b * 0.17, s % 2 ? 1175 : 1046);
+  return { stop() { for (const o of oscs) { try { o.stop(); } catch (e) {} } try { out.disconnect(); } catch (e) {} } };
+}
+export function timerEnd() { return scheduleAlarm(0); }

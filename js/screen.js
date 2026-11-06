@@ -4,7 +4,7 @@ import { SCREEN_H, stageW } from './store.js';
 import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen } from './ui.js';
 import { qrSvg } from './qr.js';
-import { play, timerEnd, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
+import { play, scheduleAlarm, ALARM_SECONDS, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
 
 const MAX_WIDGETS = 30, MAX_RESULTS = 200;
 const ADD = [
@@ -20,7 +20,7 @@ const MIN = { qr: [220, 300], stopwatch: [280, 210], people: [300, 380], interva
 const minFor = w => MIN[w.type === 'timer' ? w.style : w.type === 'stopwatch' && w.mode === 'people' ? 'people' : w.type] || [220, 200];
 
 let root = null, raf = 0, selected = null, scale = 1, muted = false;
-const fired = new Set(); // bereits gemeldete Timer-Enden
+const alarms = new Map(); // eingeplante Endtöne je Timer: Schlüssel id:endsAt → Wiedergabe
 const lastPhase = new Map(), lastCount = new Map();
 
 const scr = () => store.get().screen;
@@ -139,16 +139,40 @@ function widgetHtml(w) {
 }
 
 function eggSvg() {
-  // eigenes, schlichtes Motiv: Ei, das am Ende aufbricht
+  // eigenes, schlichtes Motiv: Ei bekommt mit der Zeit immer mehr Risse und bricht am Ende auf
   return `<svg viewBox="0 0 120 120" class="egg-svg">
     <g class="egg-whole"><path d="M60 12c20 0 34 32 34 54a34 34 0 0 1-68 0c0-22 14-54 34-54z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
-      <clipPath id="eggclip"><path d="M60 12c20 0 34 32 34 54a34 34 0 0 1-68 0c0-22 14-54 34-54z"/></clipPath>
-      <rect data-live="eggfill" x="20" y="12" width="80" height="90" fill="#f6dd8c" clip-path="url(#eggclip)"/></g>
-    <g class="egg-open"><path d="M30 76l8-8 8 8 8-8 8 8 8-8 8 8 8-8 4 4a34 34 0 0 1-68 4z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
-      <circle cx="60" cy="56" r="20" fill="#f7d659"/><circle cx="53" cy="52" r="2.4" fill="#3b3226"/><circle cx="67" cy="52" r="2.4" fill="#3b3226"/><path d="M56 59l4 4 4-4z" fill="#e8913a"/>
+      <g class="cracks" data-live="cracks"><path class="crack" pathLength="1" data-crack="0.02,0.4" d="M61 58l-6 6-5-6-6 6-6-5-6 6-5-2"/><path class="crack" pathLength="1" data-crack="0.12,0.52" d="M61 58l6 6 6-6 6 6 6-5 6 3"/><path class="crack" pathLength="1" data-crack="0.3,0.66" d="M50 58l2-8-4-6 1-7"/><path class="crack" pathLength="1" data-crack="0.42,0.76" d="M73 58l-1-9 5-5-2-8"/><path class="crack" pathLength="1" data-crack="0.52,0.84" d="M38 64l3 8-4 7"/><path class="crack" pathLength="1" data-crack="0.6,0.88" d="M79 64l-2 8 4 7"/><path class="crack" pathLength="1" data-crack="0.72,0.94" d="M49 37l-6-4-1-7"/><path class="crack" pathLength="1" data-crack="0.78,0.97" d="M76 41l6-5 0-7"/></g></g>
+    <g class="egg-open"><g class="egg-chick"><circle cx="60" cy="56" r="20" fill="#f7d659"/><circle cx="53" cy="52" r="2.4" fill="#3b3226"/><circle cx="67" cy="52" r="2.4" fill="#3b3226"/><path d="M56 59l4 4 4-4z" fill="#e8913a"/>
       <circle cx="47" cy="59" r="3" fill="#f4a9a0" opacity=".7"/><circle cx="73" cy="59" r="3" fill="#f4a9a0" opacity=".7"/>
-      <path d="M58 36q2-6 6-4" stroke="#e6b93f" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      <path d="M22 30l4 0M24 28l0 4M96 24l5 0M98.5 21.5l0 5M100 52l4 0M102 50l0 4" stroke="#e0a43c" stroke-width="2.5" stroke-linecap="round"/></g></svg>`;
+      <path d="M58 36q2-6 6-4" stroke="#e6b93f" stroke-width="2.5" fill="none" stroke-linecap="round"/></g>
+      <path class="egg-bottom" d="M30 76l8-8 8 8 8-8 8 8 8-8 8 8 8-8 4 4a34 34 0 0 1-68 4z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
+      <path class="egg-cap" d="M28 64c2-24 15-52 32-52s30 28 32 52l-5-4-6 6-6-6-6 6-6-6-6 6-6-6-6 6-6-6-6 6z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2" stroke-linejoin="round"/>
+      <path class="egg-sparks" d="M22 30l4 0M24 28l0 4M96 24l5 0M98.5 21.5l0 5M100 52l4 0M102 50l0 4" stroke="#e0a43c" stroke-width="2.5" stroke-linecap="round"/></g></svg>`;
+}
+
+// Risse: jeder Riss wächst in seinem Abschnitt der Laufzeit (0 = Start, 1 = Ende) von 0 bis zur vollen Länge
+function setCracks(g, p) {
+  for (const c of g.children) {
+    const [a, b] = c.dataset.crack.split(',').map(Number), v = clamp((p - a) / (b - a), 0, 1);
+    c.style.strokeDashoffset = 1 - v; c.style.opacity = v > 0 ? 1 : 0;
+  }
+}
+
+// Endtöne: für jeden laufenden Timer mit Ton im Voraus einplanen, bei Pause, Zurücksetzen, Ton aus oder Entfernen sofort stoppen
+function syncAlarms(now) {
+  const want = new Map();
+  for (const w of scr().widgets) {
+    if (w.type !== 'timer' || w.endsAt === null || !w.sound || muted) continue;
+    if (now - w.endsAt > ALARM_SECONDS * 1000) continue; // längst abgelaufen (z. B. nach dem Neuladen)
+    want.set(w.id + ':' + w.endsAt, w.endsAt);
+  }
+  for (const [key, a] of alarms) if (!want.has(key)) { a?.stop(); alarms.delete(key); }
+  for (const [key, endsAt] of want) {
+    if (alarms.has(key)) continue;
+    const late = Math.max(0, now - endsAt) / 1000, a = scheduleAlarm((endsAt - now) / 1000, Math.max(1, Math.ceil(ALARM_SECONDS - late)));
+    if (a) alarms.set(key, a); // sonst (Ton noch gesperrt) beim nächsten Bild erneut versuchen
+  }
 }
 
 // ---------- Zeitlogik ----------
@@ -177,6 +201,7 @@ export function ivState(w, now) {
 function tick() {
   const now = Date.now();
   updateLive(now, true);
+  syncAlarms(now);
   keepAwake(anyRunning(now));
   raf = requestAnimationFrame(tick);
 }
@@ -210,10 +235,8 @@ function updateLive(now, withSound) {
       setText(q('state'), done ? 'Zeit abgelaufen' : w.endsAt !== null ? 'läuft' : rem === w.durationMs ? 'Bereit' : 'pausiert');
       const bar = q('bar'); if (bar) bar.style.width = clamp(frac * 100, 0, 100) + '%';
       const pie = q('pie'); if (pie) pie.setAttribute('d', piePath(frac));
-      const fill = q('eggfill'); if (fill) { fill.setAttribute('y', 12 + (1 - frac) * 90); }
-      const egg = q('egg'); if (egg) egg.classList.toggle('hatched', done);
-      const key = w.id + ':' + w.endsAt;
-      if (done && !fired.has(key)) { fired.add(key); if (withSound && w.sound && !muted) timerEnd(0.7); }
+      const cracks = q('cracks'); if (cracks) setCracks(cracks, rem === w.durationMs ? 0 : 1 - frac);
+      const egg = q('egg'); if (egg) { egg.classList.toggle('hatched', done); egg.classList.toggle('wobble', !done && w.endsAt !== null && rem <= 10000); }
     } else if (w.type === 'stopwatch') {
       setText(q('sw'), swText(swElapsed(w, now)));
     } else if (w.type === 'interval') {
