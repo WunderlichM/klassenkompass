@@ -16,7 +16,7 @@ const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
-let root = null, showNames = false, scanner = null, homeTimer = null;
+let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null;
 const live = { remote: null, scanTimer: null, keep: null, lastControl: '', lastCmd: null, applied: new Map(), phoneAt: 0, lastScanAt: 0, error: '' };
 
 export function mount(el) {
@@ -26,14 +26,43 @@ export function mount(el) {
   root.onchange = onChange;
   draw();
   homeTimer = setInterval(pollHome, 4000); pollHome();
-  return () => { off(); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); root.onclick = root.onchange = null; root = null; };
+  return () => { off(); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; root.onclick = root.onchange = null; root = null; };
 }
 
 function draw() {
   if (!root) return;
   const s = running();
   if (s) { drawRun(s); startScanPoll(); syncControl(s); }
-  else { stopScanPoll(); drawHome(); }
+  else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId); if (p) drawPodium(p); else { podiumId = null; drawHome(); } }
+}
+
+// ======================================================================
+// Podium nach dem Quiz: die besten drei Plätze (Gleichstand teilt sich einen Platz)
+// ======================================================================
+function ranking(s) {
+  const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+  if (!graded.length) return { graded: 0, places: [] };
+  const scores = s.students.map(x => ({ name: x.name, score: graded.filter(q => q.answers[x.id] === q.correct).length })).filter(x => x.score > 0);
+  const levels = [...new Set(scores.map(x => x.score))].sort((a, b) => b - a).slice(0, 3);
+  return { graded: graded.length, places: levels.map((score, i) => ({ place: i + 1, score, names: scores.filter(x => x.score === score).map(x => x.name).sort((a, b) => a.localeCompare(b, 'de')) })) };
+}
+function drawPodium(s) {
+  const { graded, places } = ranking(s);
+  const step = n => { const p = places[n - 1]; if (!p) return `<div class="pod-col empty"></div>`;
+    return `<div class="pod-col p${n}"><div class="pod-names ${p.names.length > 4 ? 'many' : ''}">${p.names.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+      <div class="pod-step"><span class="pod-place">${n}</span><span class="pod-score">${p.score} / ${graded} richtig</span></div></div>`; };
+  root.innerHTML = `
+  <section class="page quiz quiz-podium">
+    <div class="run-head">
+      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>Unsere Besten<span class="dot">.</span></h1></div>
+      <div class="tools">
+        <button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>
+        <button class="btn ghost sm no-present" data-act="result" data-id="${esc(s.id)}">${icon('chart', 16)} Alle Ergebnisse</button>
+        <button class="btn primary sm" data-act="podium-close">${icon('check', 16)} Fertig</button>
+      </div>
+    </div>
+    <div class="card pod-card">${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="muted center">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
+  </section>`;
 }
 
 // ======================================================================
@@ -101,7 +130,7 @@ function drawHome() {
             <li>Karten einmal drucken (am besten auf festem Papier) und austeilen. Jedes Kind bekommt seine Nummer.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
-            <li>„Auflösen“ zeigt die Verteilung. Ergebnisse werden gespeichert.</li>
+            <li>„Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
           </ol>
         </div>
       </aside>
@@ -218,6 +247,7 @@ function onClick(e) {
     case 'end': return endRun();
     case 'add-q': return updateRun(s => { s.questions.push({ id: uid(), text: '', options: ['', '', '', ''], correct: null, answers: {} }); s.index = s.questions.length - 1; s.reveal = false; });
     case 'present': toggleFullscreen(); return draw();
+    case 'podium-close': podiumId = null; if (document.body.classList.contains('presenting')) toggleFullscreen(); return draw();
     case 'scan-here': return scanLocal();
     case 'tile': return tileDialog(b.dataset.id);
   }
@@ -245,7 +275,9 @@ async function endRun() {
   const st = stats(s);
   if (!(await new Promise(res => { let ok = false; const d = dialog({ title: 'Quiz beenden', submit: 'Beenden', body: `<p>${st.answered ? `Die Ergebnisse (${st.answered} Antworten) werden unter „Ergebnisse“ gespeichert.` : 'Es wurden noch keine Antworten erfasst. Das Quiz wird ohne Ergebnis beendet.'}</p>`, onSubmit: () => { ok = true; res(true); } }); d.el.addEventListener('close', () => { if (!ok) res(false); }); }))) return;
   scanner?.close();
-  if (document.body.classList.contains('presenting')) toggleFullscreen();
+  const showPodium = st.answered && ranking(s).places.length;
+  if (showPodium) podiumId = s.id;
+  else if (document.body.classList.contains('presenting')) toggleFullscreen();
   store.update(x => {
     const ses = x.quiz.sessions.find(y => y.id === s.id); if (!ses) return;
     if (!st.answered) x.quiz.sessions.splice(x.quiz.sessions.indexOf(ses), 1); else { ses.done = true; ses.reveal = false; }
@@ -254,6 +286,7 @@ async function endRun() {
   account.liveClear().catch(() => {});
   live.lastControl = '';
   toast(st.answered ? 'Quiz beendet – Ergebnis gespeichert.' : 'Quiz beendet.');
+  scrollTo(0, 0);
 }
 
 function tileDialog(studentId) {
@@ -563,8 +596,9 @@ function resultDialog(id) {
     <ol class="result-qs">${s.questions.map((q, i) => `<li><b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]} · ${qpct(q)}` : 'ohne richtige Antwort'}</span>
       <span class="q-dist">${q.options.map((o, k) => `<span class="${q.correct === k ? 'ok' : ''}">${LETTERS[k]}: ${Object.values(q.answers).filter(v => v === k).length}</span>`).join('')}</span></li>`).join('')}</ol>
     <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Name</th>${s.questions.map((_, i) => `<th>F${i + 1}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="tools"><button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
+    <div class="tools">${ranking(s).places.length ? `<button type="button" class="btn ghost sm" data-m="podium">${icon('trophy', 15)} Podium zeigen</button>` : ''}<button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
     onOpen: (el, close) => {
+      el.querySelector('[data-m=podium]')?.addEventListener('click', () => { close(); podiumId = id; draw(); scrollTo(0, 0); });
       el.querySelector('[data-m=csv]').onclick = () => downloadFile(`Kartenquiz-${s.date}-${s.className}.csv`.replace(/[\\/:*?"<>|]/g, '_'), csv(s), 'text/csv;charset=utf-8');
       el.querySelector('[data-m=del]').onclick = async () => { close(); if (await confirmDialog('Ergebnis löschen', `Ergebnis „${s.title}“ vom ${displayDate(s.date)} löschen?`)) store.update(x => { x.quiz.sessions = x.quiz.sessions.filter(y => y.id !== id); }); };
     } });
