@@ -66,8 +66,8 @@ export function mixGroups({ students, rules, groupCount, layout = 'stehkreis', t
     return false;
   }
   if (!visit(n)) return { ok: false, message: exhausted
-    ? 'Die Suche hat noch keine passende Verteilung gefunden. Versuche es erneut, erhöhe die Gruppenanzahl oder prüfe die Trennungsregeln.'
-    : 'Mit diesen Trennungsregeln sind gleichmäßig große Gruppen nicht möglich. Erhöhe die Gruppenanzahl oder ändere eine Regel.' };
+    ? 'Die Suche hat noch keine passende Verteilung gefunden. Versuche es erneut, erhöhe die Gruppenanzahl oder prüfe „Einteilung anpassen“.'
+    : 'Mit den aktuellen Einstellungen sind gleich große Gruppen nicht möglich. Erhöhe die Gruppenanzahl oder ändere „Einteilung anpassen“.' };
   return { ok: true, groups: buckets.map(g => shuffle(g.map(i => present[i].id), rng)) };
 }
 

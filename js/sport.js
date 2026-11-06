@@ -1,7 +1,7 @@
 // Bereich Sport: Teams, Turniere und Einzelranglisten
 import * as store from './store.js';
 import { mixGroups, teamsAreCurrent, roundRobin, tournamentTable, individualTable, reconcileSeries, linkTournament, uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, namesFromText, palStyle, toggleFullscreen, todayISO, displayDate } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, namesFromText, palStyle, toggleFullscreen, todayISO, displayDate, rulesDialog } from './ui.js';
 
 const SPORTS = ['Fußball', 'Basketball', 'Volleyball', 'Handball', 'Badminton', 'Tischtennis', 'Leichtathletik', 'Turnen', 'Hockey', 'Brennball'];
 const absentByGroup = new Map();
@@ -68,7 +68,7 @@ function teamsView(g) {
     ${g.teams.length ? `<div class="team-grid">${g.teams.map((t, i) => `<div class="team" style="${palStyle(i)}"><h4><span class="gdot"></span>${esc(t.name)}<span class="count">${t.members.length}</span></h4><ul>${t.members.map(id => { const p = person(g, id); return p ? `<li>${esc(p.name)}${p.className ? `<small>${esc(p.className)}</small>` : ''}</li>` : ''; }).join('')}</ul></div>`).join('')}</div>`
       : `<div class="room-empty"><p>Noch keine Teams.</p></div>`}
     ${g.teams.length && !current ? '<p class="notice">Die Anwesenheit oder Teamanzahl wurde geändert. Mische neu, bevor du ein neues Turnier anlegst.</p>' : ''}
-    <div class="card-foot no-print"><span class="muted small-text">${icon('check', 14)} Teams sind möglichst gleich groß. Trennungsregeln werden berücksichtigt.</span>
+    <div class="card-foot no-print"><span class="muted small-text">${icon('check', 14)} Teams sind möglichst gleich groß.</span>
       <button class="btn ghost" data-act="new-tournament" ${g.teams.length >= 2 && current ? '' : 'disabled'}>Turnier mit diesen Teams →</button></div>
   </div>`;
 }
@@ -89,9 +89,7 @@ function sidebar(g) {
       <p class="muted small-text">„Heute nicht dabei“ gilt bis zum nächsten Öffnen.</p>
     </div>
     <div class="card">
-      <h3>Nicht im selben Team</h3>
-      ${g.rules.length ? `<ul class="rules">${g.rules.map(([a, b], i) => `<li><span>${esc(person(g, a)?.name)}</span><span class="muted">↔</span><span>${esc(person(g, b)?.name)}</span><button class="icon-btn xs" data-act="del-rule" data-i="${i}" aria-label="Regel entfernen">${icon('x', 14)}</button></li>`).join('')}</ul>` : '<p class="muted small-text">Keine Trennungsregeln.</p>'}
-      <button class="btn ghost full" data-act="add-rule">${icon('plus', 16)} Regel hinzufügen</button>
+      <button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button>
     </div>`;
 }
 
@@ -213,8 +211,7 @@ async function onClick(e, root) {
       store.update(s => { const k = cur(s); k.students = k.students.filter(x => x.id !== p.id); k.rules = k.rules.filter(r => !r.includes(p.id)); k.teams = k.teams.map(t => ({ ...t, members: t.members.filter(id => id !== p.id) })); });
       break;
     }
-    case 'add-rule': ruleDialog(g); break;
-    case 'del-rule': store.update(s => { cur(s).rules.splice(Number(b.dataset.i), 1); }); break;
+    case 'rules': rulesFor(g); break;
     case 'new-tournament': tournamentDialog(g); break;
     case 'edit-tournament': tournamentDialog(g, g.tournaments.find(x => x.id === activeTournament)); break;
     case 'del-tournament': {
@@ -298,17 +295,11 @@ function personDialog(g, id) {
     onSubmit: fd => { const n = String(fd.get('name')).trim(); if (!n) throw new Error('Der Name darf nicht leer sein.'); store.update(s => { const x = cur(s).students.find(y => y.id === id); x.name = n; x.className = String(fd.get('cls')).trim(); }); } });
 }
 
-function ruleDialog(g) {
-  if (g.students.length < 2) return toast('Dafür braucht die Gruppe mindestens zwei Personen.');
-  const opts = [...g.students].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(s => `<option value="${esc(s.id)}">${esc(s.name)}${s.className ? ' (' + esc(s.className) + ')' : ''}</option>`).join('');
-  dialog({ title: 'Nicht im selben Team', submit: 'Regel speichern',
-    body: `<div class="two"><label class="field">Person 1<select name="a" class="select">${opts}</select></label><label class="field">Person 2<select name="b" class="select">${opts}</select></label></div>`,
-    onSubmit: fd => {
-      const a = fd.get('a'), b = fd.get('b');
-      if (a === b) throw new Error('Bitte zwei verschiedene Personen wählen.');
-      if (g.rules.some(r => r.includes(a) && r.includes(b))) throw new Error('Diese Regel gibt es schon.');
-      store.update(s => { cur(s).rules.push([a, b]); });
-    } });
+function rulesFor(g) {
+  rulesDialog({ title: 'Einteilung anpassen', people: g.students.map(p => ({ id: p.id, label: p.name + (p.className ? ' (' + p.className + ')' : '') })),
+    getRules: () => grp()?.rules ?? [],
+    onAdd: pair => store.update(s => { cur(s).rules.push(pair); }),
+    onDelete: i => store.update(s => { cur(s).rules.splice(i, 1); }) });
 }
 
 function tournamentDialog(g, existing) {

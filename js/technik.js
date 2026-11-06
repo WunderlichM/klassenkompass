@@ -1,7 +1,7 @@
 // Bereich Technik: Klassen, Sitzplan und Gruppen
 import * as store from './store.js';
 import { mixGroups, planIsCurrent, minimumTables, uid, TABLE_LAYOUTS } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, namesFromText, initials, palStyle, toggleFullscreen } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, namesFromText, initials, palStyle, toggleFullscreen, rulesDialog } from './ui.js';
 
 const LAYOUTS = [
   { id: 'omnibus', name: 'Omnibus', hint: 'Zweiertische in Reihen' },
@@ -99,7 +99,7 @@ function body(c) {
       <p class="print-only print-title">${esc(c.name)} · ${esc(layout.name)} · ${new Date().toLocaleDateString('de-DE')}</p>
       ${c.plan && !current ? `<p class="notice no-print">Anwesenheit oder Einstellungen wurden geändert. Verteile neu, damit der Plan passt.</p>` : ''}
       <div class="room-wrap">${c.plan ? (view === 'plan' ? room(c) : groupList(c)) : `<div class="room-empty"><p>Noch keine Verteilung.</p><button class="btn primary" data-act="mix">${icon('shuffle')} Zufällig verteilen</button></div>`}</div>
-      ${c.plan ? `<p class="hint no-print">${icon('check', 14)} Regeln berücksichtigt · Die Farben zeigen die Gruppen – auch im Sitzplan.</p>` : ''}
+      ${c.plan ? `<p class="hint no-print">${icon('check', 14)} Die Farben zeigen die Gruppen – auch im Sitzplan.</p>` : ''}
     </div>
     <aside class="side no-print">
       <div class="card">
@@ -122,9 +122,7 @@ function body(c) {
         <p class="muted small-text">${usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Form braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
       </div>
       <div class="card">
-        <h3>Nicht dieselbe Gruppe</h3>
-        ${c.rules.length ? `<ul class="rules">${c.rules.map(([a, b], i) => `<li><span>${esc(nameOf(c, a))}</span><span class="muted">↔</span><span>${esc(nameOf(c, b))}</span><button class="icon-btn xs" data-act="del-rule" data-i="${i}" aria-label="Regel entfernen">${icon('x', 14)}</button></li>`).join('')}</ul>` : '<p class="muted small-text">Keine Trennungsregeln.</p>'}
-        <button class="btn ghost full" data-act="add-rule">${icon('plus', 16)} Regel hinzufügen</button>
+        <button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button>
       </div>
       <div class="sticky-action"><button class="btn primary big full" data-act="mix">${icon('shuffle')} Zufällig verteilen</button><p class="muted small-text center">Alle Einstellungen werden automatisch gespeichert.</p></div>
     </aside>
@@ -253,8 +251,7 @@ async function onClick(e, root) {
       break;
     }
     case 'add-students': addStudentsDialog(c); break;
-    case 'add-rule': ruleDialog(c); break;
-    case 'del-rule': store.update(s => { cur(s).rules.splice(Number(b.dataset.i), 1); }); break;
+    case 'rules': rulesFor(c); break;
   }
 }
 const cur = s => s.technik.classes.find(c => c.id === s.technik.activeId);
@@ -311,15 +308,9 @@ function renameDialog(c, id) {
     onSubmit: fd => { const v = String(fd.get('name')).trim(); if (!v) throw new Error('Der Name darf nicht leer sein.'); store.update(s => { cur(s).students.find(x => x.id === id).name = v; }); } });
 }
 
-function ruleDialog(c) {
-  if (c.students.length < 2) return toast('Dafür braucht die Klasse mindestens zwei Schüler.');
-  const opts = [...c.students].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  dialog({ title: 'Nicht in dieselbe Gruppe', submit: 'Regel speichern',
-    body: `<div class="two"><label class="field">Person 1<select name="a" class="select">${opts}</select></label><label class="field">Person 2<select name="b" class="select">${opts}</select></label></div><p class="muted small-text">Die Regel gilt in jeder Organisationsform.</p>`,
-    onSubmit: fd => {
-      const a = fd.get('a'), b = fd.get('b');
-      if (a === b) throw new Error('Bitte zwei verschiedene Personen wählen.');
-      if (c.rules.some(r => r.includes(a) && r.includes(b))) throw new Error('Diese Regel gibt es schon.');
-      store.update(s => { cur(s).rules.push([a, b]); });
-    } });
+function rulesFor(c) {
+  rulesDialog({ title: 'Einteilung anpassen', people: c.students.map(s => ({ id: s.id, label: s.name })),
+    getRules: () => cls()?.rules ?? [], note: 'Die Regeln gelten in jeder Organisationsform.',
+    onAdd: pair => store.update(s => { cur(s).rules.push(pair); }),
+    onDelete: i => store.update(s => { cur(s).rules.splice(i, 1); }) });
 }

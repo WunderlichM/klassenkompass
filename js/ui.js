@@ -87,6 +87,35 @@ export function dialog({ title, body, submit = 'Speichern', cancel = 'Abbrechen'
   return { close, el: d };
 }
 
+// Trennungsregeln nur in einem Fenster zeigen, damit die Namen nicht dauerhaft (z. B. am Beamer) sichtbar sind.
+export function rulesDialog({ title, people, getRules, onAdd, onDelete, note = '' }) {
+  const label = id => people.find(p => p.id === id)?.label ?? '?';
+  const opts = [...people].sort((a, b) => a.label.localeCompare(b.label, 'de')).map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('');
+  return dialog({ title, submit: null, cancel: 'Fertig',
+    body: `<p class="muted small-text">Diese Personen kommen nie in dieselbe Gruppe. Die Liste ist nur hier sichtbar – am besten bearbeiten, wenn der Beamer aus ist.</p>
+      <ul class="rules" data-list></ul>
+      <div class="two"><label class="field">Person 1<select class="select" data-a>${opts}</select></label><label class="field">Person 2<select class="select" data-b>${opts}</select></label></div>
+      ${note ? `<p class="muted small-text">${esc(note)}</p>` : ''}
+      <button type="button" class="btn ghost full" data-add ${people.length < 2 ? 'disabled' : ''}>${icon('plus', 16)} Regel hinzufügen</button>`,
+    onOpen: el => {
+      const list = el.querySelector('[data-list]'), err = el.querySelector('.form-error');
+      const showError = m => { err.textContent = m; err.hidden = !m; };
+      const draw = () => {
+        const rules = getRules();
+        list.innerHTML = rules.length ? rules.map(([a, b], i) => `<li><span>${esc(label(a))}</span><span class="muted">↔</span><span>${esc(label(b))}</span><button type="button" class="icon-btn xs" data-del="${i}" aria-label="Regel entfernen">${icon('x', 14)}</button></li>`).join('')
+          : '<li class="muted small-text">Noch keine Regeln.</li>';
+        list.querySelectorAll('[data-del]').forEach(btn => btn.onclick = () => { onDelete(Number(btn.dataset.del)); showError(''); draw(); });
+      };
+      el.querySelector('[data-add]').onclick = () => {
+        const a = el.querySelector('[data-a]').value, b = el.querySelector('[data-b]').value;
+        if (a === b) return showError('Bitte zwei verschiedene Personen wählen.');
+        if (getRules().some(r => r.includes(a) && r.includes(b))) return showError('Diese Regel gibt es schon.');
+        onAdd([a, b]); showError(''); draw();
+      };
+      draw();
+    } });
+}
+
 export function confirmDialog(title, text, submit = 'Löschen') {
   return new Promise(resolve => {
     let done = false;
