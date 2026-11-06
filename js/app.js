@@ -7,9 +7,10 @@ import * as screen from './screen.js';
 import * as quiz from './quiz.js';
 import * as sync from './sync.js';
 import * as account from './account.js';
+import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 
-export const VERSION = '1.7.0';
+export const VERSION = '1.8.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -125,7 +126,7 @@ function helpDialog() {
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, Trennungsregeln festlegen und „Zufällig verteilen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier „jeder gegen jeden“ erstellen und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
-      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz bleiben auf dem Gerät, auf dem sie eingefügt wurden; auf andere Geräte kommen sie über „Daten exportieren/importieren“ oder die Sync-Datei (nicht über das Konto).</li>
+      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ oder die Sync-Datei auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
@@ -138,7 +139,7 @@ function helpDialog() {
       <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Weder der Betreiber noch Supabase können die Namen lesen.</li>
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
-      <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden nur im Browser dieses Geräts gespeichert und nicht ins Konto hochgeladen.</li>
+      <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
@@ -380,7 +381,7 @@ function accountDialog(startMode = 'login') {
       <button type="button" class="menu-item" data-a="now">${icon('repeat')}<span><b>Jetzt abgleichen</b></span></button>
       <button type="button" class="menu-item" data-a="logout">${icon('x')}<span><b>Abmelden</b><small>Auf gemeinsam genutzten Geräten nach der Stunde abmelden.</small></span></button>
       <button type="button" class="menu-item" data-a="pw">${icon('edit')}<span><b>Passwort ändern</b></span></button>
-      <button type="button" class="menu-item danger" data-a="delete">${icon('trash')}<span><b>Konto löschen</b><small>Löscht das Konto und die Daten auf dem Server. Die Daten auf diesem Gerät bleiben.</small></span></button>
+      <button type="button" class="menu-item danger" data-a="delete">${icon('trash')}<span><b>Konto löschen</b><small>Löscht das Konto und die Daten auf dem Server (auch die Quiz-Bilder). Die Daten auf diesem Gerät bleiben.</small></span></button>
     </div>`,
     onOpen: (el, close) => {
       const on = (k, fn) => el.querySelector(`[data-a=${k}]`).onclick = async () => { close(); try { await fn(); } catch (e) { toast(e.message, { kind: 'warn' }); } renderStatus(); };
@@ -397,6 +398,8 @@ account.init({
   changed: renderStatus,
   conflict: remote => remoteChoice(remote, { title: 'Sync-Konflikt', intro: 'Auf einem anderen Gerät und auf diesem Gerät wurde seit dem letzten Abgleich etwas geändert. Welcher Stand soll gelten?' }).then(c => { if (c === 'remote') setTimeout(navigate); return c; }),
 });
+
+cloudimages.init();
 
 sync.init({
   changed: renderStatus,

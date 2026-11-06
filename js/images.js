@@ -1,4 +1,5 @@
-// Bilder für das Kartenquiz: bleiben auf diesem Gerät (IndexedDB), nicht im Konto.
+// Bilder für das Kartenquiz: liegen auf jedem Gerät in IndexedDB. Mit Konto werden sie zusätzlich verschlüsselt
+// im Supabase-Dateispeicher abgelegt und fehlende Bilder von dort geholt (siehe cloudimages.js).
 // Fragen speichern nur die Bildkennung („img_…“). Gleiche Bilder bekommen dieselbe Kennung (Inhalts-Prüfsumme),
 // deshalb lassen sie sich über Export/Import und die Sync-Datei gefahrlos zusammenführen.
 const DB = 'klassenkompass.images', STORE = 'img';
@@ -25,11 +26,33 @@ async function tx(mode, fn) {
 
 const urls = new Map();     // id → Objekt-URL (für <img>)
 const missing = new Set();  // auf diesem Gerät nicht vorhanden
+let remote = null;          // async id → Blob | null (Bild aus dem Konto holen)
+const pending = new Map(), triedAt = new Map();
+export function setRemote(fn) { remote = fn; }
+export const missingIds = () => [...missing];
+export function retry(ids) { ids.forEach(id => triedAt.delete(id)); }
+// Aus dem Konto holen und auf diesem Gerät ablegen; je Bild höchstens ein Versuch pro Minute
+async function fromRemote(id) {
+  if (!remote) return null;
+  if (pending.has(id)) return pending.get(id);
+  if (Date.now() - (triedAt.get(id) || 0) < 60000) return null;
+  triedAt.set(id, Date.now());
+  const p = (async () => {
+    const blob = await remote(id).catch(() => null);
+    if (!blob) return null;
+    const rec = { id, blob, w: 0, h: 0, at: Date.now() };
+    await tx('readwrite', s => s.put(rec)).catch(() => {});
+    triedAt.delete(id);
+    return rec;
+  })();
+  pending.set(id, p);
+  try { return await p; } finally { pending.delete(id); }
+}
 
 export async function getRecord(id) { return ID_RE.test(id) ? tx('readonly', s => s.get(id)) : undefined; }
 export async function url(id) {
   if (urls.has(id)) return urls.get(id);
-  const rec = await getRecord(id).catch(() => null);
+  const rec = (await getRecord(id).catch(() => null)) || (ID_RE.test(id) ? await fromRemote(id) : null);
   if (!rec) { missing.add(id); return null; }
   missing.delete(id);
   const u = URL.createObjectURL(rec.blob); urls.set(id, u); return u;

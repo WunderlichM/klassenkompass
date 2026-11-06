@@ -9,7 +9,9 @@ const SESSION_KEY = 'klassenkompass.account', DB = 'klassenkompass-account', OS 
 const ITER = 250000;
 
 let session = null, encKey = null, state = 'off', lastError = '', dirty = false, applying = false, busy = false;
-let timer = null, onConflict = null, onChange = () => {};
+let timer = null, onConflict = null, onChange = () => {}, imgKey = null;
+const syncedHooks = new Set();
+let beforeDelete = null;
 const meta = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || {}; } catch { return {}; } })();
 const saveMeta = () => { try { localStorage.setItem(SESSION_KEY, JSON.stringify(meta)); } catch {} };
 session = meta.session || null; dirty = !!meta.dirty;
@@ -115,6 +117,55 @@ export async function init({ conflict, changed }) {
   set('ok'); syncNow();
 }
 
+// ---------- Erweiterungen (Quiz-Bilder im Konto, siehe cloudimages.js) ----------
+export const userId = () => session?.user?.id || null;
+export function onSynced(fn) { syncedHooks.add(fn); }
+export function setBeforeDelete(fn) { beforeDelete = fn; }
+
+// Supabase-Dateispeicher: Rohzugriff mit Anmeldung (Antwort wird nicht als JSON gelesen)
+export async function storage(path, { method = 'GET', body, headers = {}, retry = true } = {}) {
+  if (!loggedIn()) throw Object.assign(new Error('Nicht angemeldet.'), { status: 401 });
+  await ensureFresh();
+  const res = await fetch(SUPABASE_URL + '/storage/v1/' + path, { method, body, headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + session.access_token, ...headers } });
+  if (res.status === 401 && retry) { await refresh(); return storage(path, { method, body, headers, retry: false }); }
+  if (!res.ok) {
+    const d = await res.json().catch(() => null);
+    throw Object.assign(new Error(d?.message || d?.error || res.statusText || 'Speicherfehler'), { status: res.status, code: String(d?.statusCode || d?.error || '') });
+  }
+  return res;
+}
+
+// Schlüssel für die Quiz-Bilder: zufällig, einmal je Konto. Er liegt mit dem Passwort-Schlüssel verschlüsselt
+// in der Tabelle image_keys. So müssen die Bilder beim Passwortwechsel nicht neu verschlüsselt werden.
+const importImgKey = raw => crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+async function readImgKey() {
+  const rows = await call(`/rest/v1/image_keys?select=ciphertext,iv&user_id=eq.${session.user.id}`);
+  return rows?.[0] ? importImgKey(unb64((await decrypt(rows[0])).k)) : null;
+}
+async function wrappedImgKey(key) { return encrypt({ k: b64(await crypto.subtle.exportKey('raw', key)) }); }
+export async function imageKey() {
+  if (imgKey) return imgKey;
+  if (!loggedIn()) throw Object.assign(new Error('Nicht angemeldet.'), { status: 401 });
+  imgKey = await idb('readonly', s => s.get('imgkey')).catch(() => null);
+  if (!imgKey) {
+    let key = await readImgKey();
+    if (!key) {
+      key = await importImgKey(crypto.getRandomValues(new Uint8Array(32)));
+      try { await call('/rest/v1/image_keys', { method: 'POST', body: { user_id: session.user.id, ...(await wrappedImgKey(key)) } }); }
+      catch (e) { if (e.status === 409 || e.code === '23505') key = await readImgKey(); else throw e; } // anderes Gerät war schneller
+    }
+    imgKey = key;
+    await idb('readwrite', s => s.put(key, 'imgkey')).catch(() => {});
+  }
+  return imgKey;
+}
+// Nach einem Passwortwechsel den Bilder-Schlüssel mit dem neuen Passwort-Schlüssel ablegen
+async function rewrapImgKey() {
+  if (!imgKey) return;
+  await call(`/rest/v1/image_keys?user_id=eq.${session.user.id}`, { method: 'PATCH', body: { ...(await wrappedImgKey(imgKey)), updated_at: new Date().toISOString() } });
+  delete meta.rewrap; saveMeta();
+}
+
 // ---------- Live-Quiz: kurzlebige, ebenfalls verschlüsselte Daten zwischen zwei Geräten desselben Kontos ----------
 // part = 'control' (Gerät, das das Quiz zeigt) oder 'scans' (Gerät, das scannt). Jede Seite schreibt nur ihren Teil.
 export async function liveGet(part) {
@@ -162,7 +213,9 @@ export async function syncNow() {
       try { await push(); }
       catch (e) { if (/version_conflict/.test(e.message)) { busy = false; dirty = true; return syncNow(); } throw e; }
     }
+    if (meta.rewrap) { await imageKey().catch(() => {}); await rewrapImgKey().catch(() => {}); }
     set('ok');
+    if (!dirty) syncedHooks.forEach(fn => { try { fn(); } catch {} });
   } catch (e) {
     if (e.status === 401) set('login', 'Bitte erneut anmelden.');
     else if (e.decrypt) set('login', 'Das Passwort wurde auf einem anderen Gerät geändert. Bitte mit dem neuen Passwort anmelden.');
@@ -193,8 +246,8 @@ export async function login(email, password, { register = false, decide } = {}) 
       : await call('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password: authPw } });
   } catch (e) { throw new Error(friendly(e)); }
   if (!data?.access_token) throw new Error(register ? 'Konto angelegt, aber noch nicht aktiv: In Supabase ist „Confirm email“ eingeschaltet.' : 'Anmeldung fehlgeschlagen.');
-  setSession(data); encKey = key;
-  await idb('readwrite', s => s.put(key, 'key'));
+  setSession(data); encKey = key; imgKey = null;
+  await idb('readwrite', s => { s.delete('imgkey'); return s.put(key, 'key'); });
   meta.version = 0; meta.dirty = false; dirty = false; saveMeta();
   let row;
   try { row = await pull(); } catch (e) { throw new Error(friendly(e)); }
@@ -213,14 +266,15 @@ export async function logout({ wipe }) {
   clearTimeout(timer);
   if (dirty && loggedIn()) { try { await syncNow(); } catch {} }
   try { await call('/auth/v1/logout', { method: 'POST' }); } catch {}
-  session = null; encKey = null;
-  await idb('readwrite', s => s.delete('key')).catch(() => {});
+  session = null; encKey = null; imgKey = null;
+  await idb('readwrite', s => { s.delete('key'); return s.delete('imgkey'); }).catch(() => {});
   for (const k of Object.keys(meta)) delete meta[k]; saveMeta(); dirty = false;
   if (wipe) { applying = true; try { store.replaceState(store.freshState()); } finally { applying = false; } }
   set('off');
 }
 
 export async function deleteAccount() {
+  if (beforeDelete) await beforeDelete(); // zuerst die Quiz-Bilder im Dateispeicher löschen
   await call('/rest/v1/rpc/delete_my_account', { method: 'POST', body: {} });
   await logout({ wipe: false });
 }
@@ -234,9 +288,11 @@ export async function changePassword(oldPw, newPw) {
   catch { throw new Error('Das bisherige Passwort stimmt nicht.'); }
   const newK = await deriveKeys(email, newPw);
   await syncNow();
+  await imageKey().catch(() => null); // Bilder-Schlüssel noch mit dem alten Passwort holen
   await call('/auth/v1/user', { method: 'PUT', body: { password: newK.authPw } });
   encKey = newK.key; await idb('readwrite', s => s.put(newK.key, 'key'));
   dirty = true; await push();
+  if (imgKey) { meta.rewrap = true; saveMeta(); await rewrapImgKey().catch(() => {}); }
   const fresh = await call('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email, password: newK.authPw } });
   setSession(fresh); set('ok');
 }

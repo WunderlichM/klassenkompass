@@ -122,3 +122,42 @@ end;
 $$;
 revoke all on function public.clear_live_quiz() from public, anon;
 grant execute on function public.clear_live_quiz() to authenticated;
+
+-- ---------- Quiz-Bilder im Konto (ab Version 1.8.0) ----------
+-- Bilder liegen im Dateispeicher (nicht in der Datenbank), je Konto im Ordner <user_id>/.
+-- Sie werden auf dem Gerät verschlüsselt; der Server speichert nur unlesbare Daten.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('quiz-images', 'quiz-images', false, 3145728, array['application/octet-stream'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "eigene Quiz-Bilder lesen" on storage.objects;
+create policy "eigene Quiz-Bilder lesen" on storage.objects for select to authenticated
+  using (bucket_id = 'quiz-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "eigene Quiz-Bilder anlegen" on storage.objects;
+create policy "eigene Quiz-Bilder anlegen" on storage.objects for insert to authenticated
+  with check (bucket_id = 'quiz-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "eigene Quiz-Bilder ersetzen" on storage.objects;
+create policy "eigene Quiz-Bilder ersetzen" on storage.objects for update to authenticated
+  using (bucket_id = 'quiz-images' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'quiz-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "eigene Quiz-Bilder löschen" on storage.objects;
+create policy "eigene Quiz-Bilder löschen" on storage.objects for delete to authenticated
+  using (bucket_id = 'quiz-images' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- Schlüssel für die Bilder: zufällig je Konto, mit dem Passwort-Schlüssel verschlüsselt
+create table if not exists public.image_keys (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  ciphertext text not null,
+  iv         text not null,
+  updated_at timestamptz not null default now(),
+  constraint image_key_size check (length(ciphertext) <= 1000)
+);
+alter table public.image_keys enable row level security;
+drop policy if exists "eigenen Bilder-Schlüssel lesen" on public.image_keys;
+create policy "eigenen Bilder-Schlüssel lesen" on public.image_keys for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "eigenen Bilder-Schlüssel anlegen" on public.image_keys;
+create policy "eigenen Bilder-Schlüssel anlegen" on public.image_keys for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "eigenen Bilder-Schlüssel ändern" on public.image_keys;
+create policy "eigenen Bilder-Schlüssel ändern" on public.image_keys for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+revoke all on public.image_keys from anon;
+grant select, insert, update on public.image_keys to authenticated;
