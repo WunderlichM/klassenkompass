@@ -5,13 +5,13 @@ import * as technik from './technik.js';
 import * as sport from './sport.js';
 import * as screen from './screen.js';
 import * as quiz from './quiz.js';
-import * as sync from './sync.js';
+import * as backup from './backup.js';
 import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 import * as theme from './theme.js';
 
-export const VERSION = '1.10.0';
+export const VERSION = '1.11.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -71,29 +71,22 @@ function menuDialog() {
     <p class="muted">Alle Klassen, Sportgruppen, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
     <div class="menu-grid">
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
-      ${sync.supported && account.status().state === 'off' ? `<button type="button" class="menu-item" data-m="sync">${icon('repeat')}<span><b>Sync-Datei ${sync.status().state === 'off' ? 'einrichten' : '· ' + esc(sync.status().fileName)}</b><small>${sync.status().state === 'off' ? 'Daten über eine Datei im Google-Drive-Ordner zwischen deinen PCs abgleichen.' : 'Verbunden – Daten werden automatisch abgeglichen. Hier trennen oder neu wählen.'}</small></span></button>` : ''}
       <div class="menu-item theme-item">${icon('moon')}<span><b>Design</b><small>Automatisch folgt der Einstellung des Geräts. Gilt nur für dieses Gerät.</small></span>
         <div class="seg" role="group" aria-label="Design">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button type="button" data-theme-opt="${v}" class="${theme.get() === v ? 'on' : ''}" aria-pressed="${theme.get() === v}">${l}</button>`).join('')}</div></div>
-      <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
+      <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Mit Passwort verschlüsselte Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
       <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
       <button type="button" class="menu-item danger" data-m="reset">${icon('trash')}<span><b>Alles zurücksetzen</b><small>Alle Daten auf diesem Gerät löschen und mit der Demo neu beginnen.</small></span></button>
     </div>
     <input type="file" id="import-file" accept="application/json,.json" hidden>`,
     onOpen: (el, close) => {
-      el.querySelector('[data-m=export]').onclick = async () => {
-        // Quiz-Bilder liegen nur auf diesem Gerät und kommen deshalb mit in die Sicherung
-        let text = store.exportJson();
-        try { const pics = await images.pack(images.idsIn(store.get().quiz)); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o, null, 1); } } catch {}
-        downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, text); toast('Sicherung heruntergeladen.');
-      };
+      el.querySelector('[data-m=export]').onclick = () => { close(); exportDialog(); };
       el.querySelectorAll('[data-theme-opt]').forEach(b => b.onclick = () => {
         theme.set(b.dataset.themeOpt);
         el.querySelectorAll('[data-theme-opt]').forEach(o => { const on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
       });
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
-      const sb = el.querySelector('[data-m=sync]'); if (sb) sb.onclick = () => { close(); syncDialog(); };
       const file = el.querySelector('#import-file');
       el.querySelector('[data-m=import]').onclick = () => file.click();
       file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); importFile(f); };
@@ -105,11 +98,50 @@ function menuDialog() {
     } });
 }
 
+// Sicherung immer mit Passwort verschlüsselt (Quiz-Bilder dieses Geräts kommen mit hinein)
+function exportDialog() {
+  dialog({ title: 'Daten exportieren', submit: 'Sicherung herunterladen', body: `
+    <p>Die Sicherung wird mit einem Passwort verschlüsselt. Ohne dieses Passwort lässt sie sich nicht mehr öffnen – auch nicht vom Betreiber.</p>
+    <label class="field">Passwort für die Sicherung<input name="pw" type="password" class="input" autocomplete="new-password" minlength="8" required></label>
+    <label class="field">Passwort wiederholen<input name="pw2" type="password" class="input" autocomplete="new-password" minlength="8" required></label>
+    <p class="muted small-text">Mindestens 8 Zeichen. Für Schülerdaten die Datei nicht in Cloud-Ordnern (z. B. Google Drive, OneDrive, Dropbox) ablegen, sondern auf dem eigenen Gerät oder einem verschlüsselten USB-Stick.</p>`,
+    onSubmit: async (fd, form) => {
+      const pw = String(fd.get('pw') || '');
+      if (pw.length < 8) throw new Error('Das Passwort muss mindestens 8 Zeichen lang sein.');
+      if (pw !== String(fd.get('pw2') || '')) throw new Error('Die Passwörter stimmen nicht überein.');
+      const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Wird verschlüsselt …';
+      try {
+        let text = store.exportJson();
+        try { const pics = await images.pack(images.idsIn(store.get().quiz)); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o); } } catch {}
+        downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, await backup.encrypt(text, pw));
+      } finally { sub.disabled = false; sub.textContent = 'Sicherung herunterladen'; }
+      toast('Verschlüsselte Sicherung heruntergeladen.');
+    } });
+}
+
+// Fragt das Passwort einer verschlüsselten Sicherung ab; liefert den entschlüsselten Text oder null (abgebrochen)
+function askBackupPassword(raw) {
+  return new Promise(resolve => {
+    let done = false;
+    const d = dialog({ title: 'Sicherung öffnen', submit: 'Öffnen', body: `
+      <p>Diese Sicherung ist verschlüsselt${raw.exportedAt ? ` (erstellt ${esc(fmt(raw.exportedAt))})` : ''}.</p>
+      <label class="field">Passwort der Sicherung<input name="pw" type="password" class="input" autocomplete="current-password" required></label>`,
+      onSubmit: async (fd, form) => {
+        const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Wird entschlüsselt …';
+        try { const text = await backup.decrypt(raw, String(fd.get('pw') || '')); done = true; resolve(text); }
+        finally { sub.disabled = false; sub.textContent = 'Öffnen'; }
+      } });
+    d.el.addEventListener('close', () => { if (!done) resolve(null); });
+  });
+}
+
 async function importFile(f) {
   let incoming;
   try {
     if (f.size > 60 * 1024 * 1024) throw new Error('Die Datei ist zu groß.');
-    const text = await f.text();
+    let text = await f.text();
+    const raw = JSON.parse(text);
+    if (backup.isEncrypted(raw)) { text = await askBackupPassword(raw); if (text == null) return; }
     incoming = store.parseImport(text);
     try { const n = await images.unpack(JSON.parse(text).images); if (n) { toast(`${n} Quiz-Bild(er) übernommen.`); dispatchEvent(new Event('kk-images')); } } catch {}
   } catch (e) { return toast('Import nicht möglich: ' + (e instanceof SyntaxError ? 'Die Datei ist keine gültige JSON-Datei.' : e.message), { kind: 'warn' }); }
@@ -138,12 +170,12 @@ function helpDialog() {
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, unter „Einteilung anpassen“ festlegen, wer nicht in dieselbe Gruppe soll (nur im Fenster sichtbar, nicht auf der Hauptseite), und oben „Neu mischen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
       <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
-      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ oder die Sync-Datei auf andere Geräte.</li>
+      <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
-      <li><b>Ohne Konto, mehrere PCs:</b> Über Zahnrad → „Sync-Datei einrichten“ eine Datei im Google-Drive-Ordner anlegen und auf den anderen PCs dieselbe Datei wählen. Die App gleicht dann automatisch ab (Chrome/Edge).</li>
+      <li><b>Ohne Konto, mehrere Geräte:</b> Zahnrad → „Daten exportieren“ (mit Passwort verschlüsselt) und auf dem anderen Gerät „Daten importieren“.</li>
       <li><b>Als App nutzen:</b> Oben rechts auf ${icon('install', 14)} tippen – dort steht die Anleitung für iPhone, Android und PC. Danach funktioniert KlassenKompass auch ohne Internet.</li>
     </ul>
     <h3>Datenschutz</h3>
@@ -153,7 +185,7 @@ function helpDialog() {
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Kind. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
-      <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei enthält die Vornamen – bitte entsprechend sorgfältig aufbewahren.</li>
+      <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
     <h3>Datenschutzhinweise im Einzelnen</h3>
@@ -267,16 +299,14 @@ navigate();
 tour();
 function renderStatus() {
   const el = document.getElementById('status'); if (!el) return;
-  const err = store.storageError(), ac = account.status(), st = ac.state !== 'off' ? { ...ac, fileName: ac.email } : sync.status();
+  const err = store.storageError(), ac = account.status(), st = ac.state !== 'off' ? { ...ac, fileName: ac.email } : { state: 'off' };
   const time = st.lastSync ? new Date(st.lastSync).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
   let cls = '', html, title;
   if (err) { cls = 'warn attn'; html = `${icon('x', 14)} Nicht gespeichert`; title = err; }
-  else if (st.state === 'permission') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync freigeben`; title = 'Der Browser braucht deine Freigabe, um die Sync-Datei zu lesen und zu schreiben. Hier klicken.'; }
-  else if (st.state === 'conflict') { cls = 'warn attn'; html = `${icon('repeat', 14)} Sync-Konflikt`; title = 'Hier klicken, um zu entscheiden, welcher Stand gilt.'; }
-  else if (st.state === 'error') { cls = 'warn attn'; html = `${icon('x', 14)} Sync-Fehler`; title = st.error + ' – Hier klicken für die Sync-Einstellungen.'; }
+  else if (st.state === 'error') { cls = 'warn attn'; html = `${icon('x', 14)} Sync-Fehler`; title = st.error + ' – Hier klicken für die Kontoeinstellungen.'; }
   else if (st.state === 'login') { cls = 'warn attn'; html = `${icon('user', 14)} Anmelden`; title = st.error || 'Bitte erneut anmelden.'; }
   else if (st.state === 'offline') { html = `${icon('repeat', 14)} Offline – wird später abgeglichen`; title = 'Änderungen bleiben auf diesem Gerät und werden abgeglichen, sobald wieder Internet da ist.'; }
-  else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = (ac.state !== 'off' ? 'Konto: ' : 'Sync-Datei: ') + st.fileName; }
+  else if (st.state === 'ok') { html = `${icon('repeat', 14)} ${st.dirty ? 'Wird abgeglichen …' : 'Synchronisiert' + (time ? ' · ' + time : '')}`; title = 'Konto: ' + st.fileName; }
   else { html = `${icon('check', 14)} Auf diesem Gerät gespeichert`; title = 'Alle Daten bleiben auf diesem Gerät'; }
   el.className = 'status ' + cls; el.innerHTML = html; el.title = title;
   const fs = document.getElementById('foot-store'); if (fs && fs.textContent !== footStore()) fs.textContent = footStore();
@@ -285,60 +315,12 @@ setInterval(renderStatus, 2000);
 document.getElementById('status').onclick = async () => {
   const ast = account.status().state;
   if (ast !== 'off') { if (ast === 'conflict') account.retryConflict(); else accountDialog(); return; }
-  const st = sync.status().state;
-  if (st === 'permission') { if (await sync.grant()) toast('Sync-Datei freigegeben.'); }
-  else if (st === 'conflict') sync.retryConflict();
-  else if (account.enabled) accountDialog();
-  else if (sync.supported) syncDialog();
+  if (account.enabled) accountDialog();
 };
 
-// ---------- Sync-Datei ----------
+// ---------- Hilfsfunktionen für Konto und Sicherung ----------
 const fmt = iso => iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
 const summary = data => `${data?.technik?.classes?.length ?? 0} Klasse(n), ${data?.sport?.groups?.length ?? 0} Sportgruppe(n), ${data?.quiz?.sets?.length ?? 0} Fragensatz/-sätze`;
-
-function chooseVersion(raw, { title, intro }) {
-  return new Promise(resolve => {
-    let done = false;
-    const d = dialog({ title, submit: null, cancel: 'Abbrechen', body: `<p>${intro}</p>
-      <div class="menu-grid">
-        <button type="button" class="menu-item" data-c="file">${icon('download')}<span><b>Stand aus der Sync-Datei übernehmen</b><small>Gespeichert ${esc(fmt(raw.savedAt))} · ${esc(summary(raw.data))}. Ersetzt die Daten auf diesem Gerät.</small></span></button>
-        <button type="button" class="menu-item" data-c="local">${icon('upload')}<span><b>Stand dieses Geräts behalten</b><small>${esc(summary(store.get()))}. Überschreibt die Sync-Datei.</small></span></button>
-      </div>`,
-      onOpen: (el, close) => el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { done = true; close(); resolve(b.dataset.c); }) });
-    d.el.addEventListener('close', () => { if (!done) resolve(null); });
-  });
-}
-
-function syncDialog() {
-  const st = sync.status(), on = st.state !== 'off';
-  dialog({ title: 'Sync-Datei', submit: null, cancel: 'Schließen', body: on ? `
-    <p>Verbunden mit <b>${esc(st.fileName)}</b>${st.lastSync ? ` · zuletzt abgeglichen ${esc(fmt(st.lastSync))}` : ''}.</p>
-    ${st.state === 'error' ? `<p class="notice">${esc(st.error)}</p>` : ''}
-    <p class="muted small-text">Änderungen werden automatisch in die Datei geschrieben. Beim Öffnen und alle 20 Sekunden prüft die App, ob ein anderer PC etwas geändert hat. Google Drive für Desktop überträgt die Datei zwischen deinen PCs.</p>
-    <div class="menu-grid">
-      <button type="button" class="menu-item" data-s="now">${icon('repeat')}<span><b>Jetzt abgleichen</b></span></button>
-      <button type="button" class="menu-item" data-s="open">${icon('upload')}<span><b>Andere Sync-Datei wählen</b></span></button>
-      <button type="button" class="menu-item danger" data-s="off">${icon('x')}<span><b>Verbindung trennen</b><small>Die Daten bleiben auf diesem Gerät und in der Datei erhalten.</small></span></button>
-    </div>` : `
-    <p>Mit einer Sync-Datei bleiben deine Daten auf allen PCs gleich – ohne Konto und ohne Server.</p>
-    <ol class="help-list">
-      <li><b>Auf dem ersten PC:</b> „Neue Sync-Datei anlegen“ und sie in einem Ordner speichern, den Google Drive für Desktop abgleicht, z. B. <code>KWS/1. Schule Allgemein/09 Organisation</code>.</li>
-      <li><b>Auf jedem weiteren PC:</b> KlassenKompass öffnen, „Vorhandene Sync-Datei wählen“ und dieselbe Datei auswählen.</li>
-      <li>Nach einem Neustart fragt der Browser manchmal noch einmal nach Erlaubnis – dann oben auf „Sync freigeben“ klicken.</li>
-    </ol>
-    <div class="menu-grid">
-      <button type="button" class="menu-item" data-s="new">${icon('plus')}<span><b>Neue Sync-Datei anlegen</b><small>Speichert die Daten dieses Geräts in eine neue Datei.</small></span></button>
-      <button type="button" class="menu-item" data-s="open">${icon('upload')}<span><b>Vorhandene Sync-Datei wählen</b><small>Für jeden weiteren PC.</small></span></button>
-    </div>
-    <p class="muted small-text">Funktioniert in Chrome und Edge am PC. Handy und Tablet nutzen weiter Export und Import.</p>`,
-    onOpen: (el, close) => {
-      const on = (k, fn) => { const b = el.querySelector(`[data-s=${k}]`); if (b) b.onclick = async () => { close(); try { await fn(); } catch (e) { if (e?.name !== 'AbortError') toast('Sync: ' + e.message, { kind: 'warn' }); } renderStatus(); }; };
-      on('new', async () => { await sync.createFile(); toast('Sync-Datei angelegt. Wähle sie auf deinen anderen PCs über „Vorhandene Sync-Datei wählen“.'); });
-      on('open', async () => { if (await sync.openFile(raw => chooseVersion(raw, { title: 'Welcher Stand soll gelten?', intro: 'Die gewählte Datei enthält bereits Daten.' }))) { navigate(); toast('Mit der Sync-Datei verbunden.'); } });
-      on('now', async () => { await sync.syncNow(); toast('Abgeglichen.'); });
-      on('off', async () => { await sync.disconnect(); toast('Sync-Datei getrennt.'); });
-    } });
-}
 
 // ---------- Konto ----------
 function remoteChoice(remote, { title, intro }) {
@@ -379,7 +361,6 @@ function accountDialog(startMode = 'login') {
         if (register && fd.get('ok') !== 'on') throw new Error('Bitte den Hinweis zum Passwort bestätigen.');
         const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Bitte warten …';
         try {
-          if (sync.status().state !== 'off') await sync.disconnect();
           await account.login(email, pw, { register, decide: remote => remoteChoice(remote, { title: 'Welcher Stand soll gelten?', intro: 'In deinem Konto und auf diesem Gerät sind schon Daten.' }) });
         } finally { sub.disabled = false; sub.textContent = register ? 'Konto anlegen' : 'Anmelden'; }
         navigate(); renderStatus();
@@ -415,10 +396,14 @@ account.init({
 
 cloudimages.init();
 
-sync.init({
-  changed: renderStatus,
-  conflict: raw => chooseVersion(raw, { title: 'Sync-Konflikt', intro: 'Auf einem anderen PC und auf diesem Gerät wurde seit dem letzten Abgleich etwas geändert. Welcher Stand soll gelten?' }).then(c => { if (c === 'file') setTimeout(navigate); return c; }),
-});
+// Die frühere Sync-Datei wird nicht mehr unterstützt: gespeicherten Dateizugriff entfernen, einmal Hinweis zeigen
+try {
+  const old = JSON.parse(localStorage.getItem('klassenkompass.sync') || 'null');
+  if (old) {
+    localStorage.removeItem('klassenkompass.sync'); indexedDB.deleteDatabase('klassenkompass-sync');
+    if (old.fileName) setTimeout(() => toast(`Die Sync-Datei wird nicht mehr unterstützt; die Daten auf diesem Gerät bleiben erhalten. Für mehrere Geräte das Konto oder „Daten exportieren“ nutzen. Die alte Datei „${old.fileName}“ enthält Namen im Klartext – bitte löschen.`, { kind: 'warn', action: 'OK' }), 1500);
+  }
+} catch {}
 
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; const b = document.getElementById('install-btn'); if (b) b.hidden = isInstalled(); });
 addEventListener('appinstalled', () => { const b = document.getElementById('install-btn'); if (b) b.hidden = true; toast('KlassenKompass wurde installiert.'); });

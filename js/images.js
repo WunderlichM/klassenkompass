@@ -1,7 +1,7 @@
 // Bilder für das Kartenquiz: liegen auf jedem Gerät in IndexedDB. Mit Konto werden sie zusätzlich verschlüsselt
 // im Supabase-Dateispeicher abgelegt und fehlende Bilder von dort geholt (siehe cloudimages.js).
 // Fragen speichern nur die Bildkennung („img_…“). Gleiche Bilder bekommen dieselbe Kennung (Inhalts-Prüfsumme),
-// deshalb lassen sie sich über Export/Import und die Sync-Datei gefahrlos zusammenführen.
+// deshalb lassen sie sich über Export/Import gefahrlos zusammenführen.
 const DB = 'klassenkompass.images', STORE = 'img';
 const MAX_SIDE = 1280, QUALITY = 0.82;
 export const ID_RE = /^img_[0-9a-f]{20}$/;
@@ -89,7 +89,7 @@ export function idsIn(quiz) {
   return [...ids].filter(x => ID_RE.test(x));
 }
 
-// Für Sicherung und Sync-Datei: { id: dataURL }
+// Für die Sicherung: { id: dataURL }
 export async function pack(ids) {
   const out = {};
   for (const id of ids) {

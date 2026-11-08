@@ -1,4 +1,4 @@
-// Design hell/dunkel. Die Wahl gilt nur für dieses Gerät (localStorage) und wird nicht über Konto oder Sync-Datei abgeglichen.
+// Design hell/dunkel. Die Wahl gilt nur für dieses Gerät (localStorage) und wird nicht über das Konto abgeglichen.
 // Die gleiche Auswertung steht als kleines Skript in index.html, damit beim Start nichts hell aufblitzt.
 const KEY = 'klassenkompass.theme';
 const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : { matches: false };
