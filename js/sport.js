@@ -2,6 +2,7 @@
 import * as store from './store.js';
 import { mixGroups, teamsAreCurrent, tournamentTable, individualTable, reconcileSeries, linkTournament, uid, FORMATS, formatOf, matchWinner, koPlan, koLabel, koSize, kotcPlan, kotcCourts, defaultCourtPoints, syncTournament, tournamentDone, createTournament } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, namesFromText, palStyle, toggleFullscreen, todayISO, displayDate, rulesDialog } from './ui.js';
+import * as hall from './hall.js';
 
 const SPORTS = ['Fußball', 'Basketball', 'Volleyball', 'Handball', 'Badminton', 'Tischtennis', 'Leichtathletik', 'Turnen', 'Hockey', 'Brennball'];
 const absentByGroup = new Map();
@@ -43,15 +44,16 @@ function draw(root) {
     ${g ? `
     <div class="tabs-row no-print">
       <div class="tabs" role="tablist">
-        ${[['teams', 'users', 'Teams'], ['turnier', 'trophy', 'Turnier'], ['rangliste', 'chart', 'Einzelrangliste']].map(([id, ic, label]) => `<button role="tab" aria-selected="${tab === id}" class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${icon(ic, 16)} ${label}</button>`).join('')}
+        ${[['teams', 'users', 'Teams'], ['turnier', 'trophy', 'Turnier'], ['rangliste', 'chart', 'Einzelrangliste'], ['hallenplan', 'hall', 'Hallenplan']].map(([id, ic, label]) => `<button role="tab" aria-selected="${tab === id}" class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${icon(ic, 16)} ${label}</button>`).join('')}
       </div>
       <div class="tools"><button class="btn ghost sm" data-act="print">${icon('print', 16)} Drucken / PDF</button><button class="btn ghost sm" data-act="present">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand', 16)} ${document.body.classList.contains('presenting') ? 'Ansicht verkleinern' : 'Ansicht vergrößern'}</button></div>
     </div>
-    <div class="work-grid">
+    ${tab === 'hallenplan' ? '<div class="print-area hall-host" id="hall-host"></div>' : `<div class="work-grid">
       <div class="main-col print-area">${tab === 'teams' ? teamsView(g) : tab === 'turnier' ? tournamentView(g) : seriesView(g)}</div>
       <aside class="side no-print">${sidebar(g)}</aside>
-    </div>` : `<div class="card empty"><p>Lege deine erste Sportgruppe an. Gespeichert werden nur Vornamen und Klasse.</p><button class="btn primary" data-act="new-group">${icon('plus')} Neue Sportgruppe</button></div>`}
+    </div>`}` : `<div class="card empty"><p>Lege deine erste Sportgruppe an. Gespeichert werden nur Vornamen und Klasse.</p><button class="btn primary" data-act="new-group">${icon('plus')} Neue Sportgruppe</button></div>`}
   </section>`;
+  const hh = root.querySelector('#hall-host'); if (hh) hall.attach(hh);
   drawPeople(root);
 }
 

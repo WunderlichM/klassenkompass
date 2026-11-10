@@ -10,8 +10,9 @@ import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 import * as theme from './theme.js';
+import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '1.11.0';
+export const VERSION = '1.12.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -73,6 +74,7 @@ function menuDialog() {
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
       <div class="menu-item theme-item">${icon('moon')}<span><b>Design</b><small>Automatisch folgt der Einstellung des Geräts. Gilt nur für dieses Gerät.</small></span>
         <div class="seg" role="group" aria-label="Design">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button type="button" data-theme-opt="${v}" class="${theme.get() === v ? 'on' : ''}" aria-pressed="${theme.get() === v}">${l}</button>`).join('')}</div></div>
+      <button type="button" class="menu-item" data-m="music">${icon('volume')}<span><b>Musik bei Signalen · ${esc(MUSIC_MODES[musicMode()].name)}</b><small>Läuft auf diesem Gerät Musik (z. B. Spotify, YouTube), kann die App sie bei Timer-Signalen leiser stellen oder kurz anhalten. Testen und auswählen.</small></span></button>
       <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Mit Passwort verschlüsselte Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
       <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
@@ -86,6 +88,7 @@ function menuDialog() {
         el.querySelectorAll('[data-theme-opt]').forEach(o => { const on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
       });
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
+      el.querySelector('[data-m=music]').onclick = () => { close(); musicDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
       const file = el.querySelector('#import-file');
       el.querySelector('[data-m=import]').onclick = () => file.click();
@@ -95,6 +98,33 @@ function menuDialog() {
         if (!(await confirmDialog('Alles zurücksetzen', 'Alle Klassen, Sportgruppen, Turniere, Ranglisten, Quizfragen und -ergebnisse und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
         store.replaceState(store.freshState()); navigate(); toast('Zurückgesetzt.');
       };
+    } });
+}
+
+// Musik bei Signalen: Varianten am Gerät ausprobieren; die zuletzt getestete bleibt eingestellt (gilt nur für dieses Gerät)
+function musicDialog() {
+  const row = ([id, m]) => `<div class="music-row ${musicMode() === id ? 'on' : ''}" data-mode="${id}">
+    <span class="music-txt"><b>${esc(m.name)}</b><small>${esc(m.hint)}</small></span>
+    <span class="music-btns"><button type="button" class="btn ghost sm" data-test="0">${icon('play', 14)} Jetzt</button><button type="button" class="btn ghost sm" data-test="5">${icon('clock', 14)} In 5 s</button></span></div>`;
+  dialog({ title: 'Musik bei Signalen', submit: null, cancel: 'Fertig', wide: true, body: `
+    ${musicSupported() ? '' : '<p class="notice">Dieser Browser kann andere Musik nicht beeinflussen. Das geht nur auf iPad und iPhone ab iOS 16.4 (Safari oder installierte App). Die Signale laufen hier wie bisher über die Musik.</p>'}
+    <ol class="help-list steps">
+      <li>Musik auf <b>diesem Gerät</b> starten (Spotify, YouTube …, gern über die Bluetooth-Box).</li>
+      <li>Zurück in KlassenKompass: bei einer Variante „Jetzt“ antippen. Wird die Musik leiser oder pausiert sie – und läuft sie danach wieder normal?</li>
+      <li>Dann „In 5 s“ antippen und nichts berühren. So klingt es später beim Timer, der von selbst endet.</li>
+    </ol>
+    <div class="music-list">${Object.entries(MUSIC_MODES).map(row).join('')}</div>
+    <p class="muted small-text">Die zuletzt getestete Variante bleibt eingestellt (markiert) und gilt für alle Timer, Stoppuhren und den Intervalltimer – nur auf diesem Gerät. Zurück zum bisherigen Verhalten: bei „Nicht beeinflussen“ testen.</p>
+    <p class="muted small-text" data-music-state aria-live="polite"></p>`,
+    onOpen: el => {
+      const state = el.querySelector('[data-music-state]');
+      el.querySelectorAll('[data-test]').forEach(b => b.onclick = () => {
+        const r = b.closest('[data-mode]'), d = Number(b.dataset.test);
+        testMusic(r.dataset.mode, d);
+        el.querySelectorAll('.music-row').forEach(x => x.classList.toggle('on', x === r));
+        state.textContent = d ? `Signal kommt in ${d} Sekunden – bitte nichts berühren.` : 'Signal läuft.';
+        setTimeout(() => { state.textContent = `Eingestellt: ${MUSIC_MODES[musicMode()].name}.`; }, (d + 3) * 1000);
+      });
     } });
 }
 
@@ -112,7 +142,7 @@ function exportDialog() {
       const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Wird verschlüsselt …';
       try {
         let text = store.exportJson();
-        try { const pics = await images.pack(images.idsIn(store.get().quiz)); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o); } } catch {}
+        try { const pics = await images.pack(images.usedIds(store.get())); if (Object.keys(pics).length) { const o = JSON.parse(text); o.images = pics; text = JSON.stringify(o); } } catch {}
         downloadFile(`KlassenKompass-Sicherung-${new Date().toISOString().slice(0, 10)}.json`, await backup.encrypt(text, pw));
       } finally { sub.disabled = false; sub.textContent = 'Sicherung herunterladen'; }
       toast('Verschlüsselte Sicherung heruntergeladen.');
@@ -143,7 +173,7 @@ async function importFile(f) {
     const raw = JSON.parse(text);
     if (backup.isEncrypted(raw)) { text = await askBackupPassword(raw); if (text == null) return; }
     incoming = store.parseImport(text);
-    try { const n = await images.unpack(JSON.parse(text).images); if (n) { toast(`${n} Quiz-Bild(er) übernommen.`); dispatchEvent(new Event('kk-images')); } } catch {}
+    try { const n = await images.unpack(JSON.parse(text).images); if (n) { toast(`${n} Bild(er) übernommen.`); dispatchEvent(new Event('kk-images')); } } catch {}
   } catch (e) { return toast('Import nicht möglich: ' + (e instanceof SyntaxError ? 'Die Datei ist keine gültige JSON-Datei.' : e.message), { kind: 'warn' }); }
   const nC = incoming.technik.classes.length, nG = incoming.sport.groups.length, nW = incoming.screen.widgets.length;
   const hasDemoOnly = store.get().technik.classes.every(c => c.demo) && store.get().sport.groups.every(g => g.demo) && store.get().quiz.sets.every(t => t.demo) && store.get().quiz.classes.every(c => c.demo);
@@ -169,9 +199,9 @@ function helpDialog() {
     <h3>So funktioniert es</h3>
     <ul class="help-list">
       <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, unter „Einteilung anpassen“ festlegen, wer nicht in dieselbe Gruppe soll (nur im Fenster sichtbar, nicht auf der Hauptseite), und oben „Neu mischen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
-      <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
+      <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen. <b>Hallenplan:</b> Bereiche, Hütchen, Kinder, Wege und Geräte aus der Leiste in die schräg gezeichnete Halle ziehen, verschieben, drehen und in der Größe ändern; groß zeigen oder als A4 quer drucken. Eigene Gerätebilder (z. B. die Vlamingo-Einzelbilder) über „Gerätebilder hinzufügen“ – sie bleiben auf deinen Geräten bzw. verschlüsselt in deinem Konto.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Quiz-Klasse anlegen oder Namen aus Technik/Sport übernehmen, Antwortkarten der Klasse drucken (mit Nummer und Vorname zum Austeilen), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ auf andere Geräte.</li>
-      <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer und QR-Codes frei anordnen und groß zeigen.</li>
+      <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer, QR-Codes und Hallenpläne frei anordnen und groß zeigen. Läuft auf dem Gerät Musik, kann die App sie bei Signalen leiser stellen oder kurz anhalten (Zahnrad → „Musik bei Signalen“).</li>
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
@@ -251,7 +281,7 @@ function tour({ force = false } = {}) {
   const steps = [
     { ic: logo(34), title: 'Willkommen bei KlassenKompass', html: `<p>Deine Helfer für den Unterricht an einem Ort:</p>
       <ul class="tour-list"><li>${icon('technik')}<span><b>Technik</b> – Klassen anlegen, Sitzplan und Gruppen per Zufall verteilen.</span></li>
-      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere (jeder gegen jeden, K.-o., King of the Court) und Ranglisten.</span></li>
+      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere (jeder gegen jeden, K.-o., King of the Court), Ranglisten und Hallenpläne zum Zusammenstellen.</span></li>
       <li>${icon('cards')}<span><b>Quiz</b> – Kartenquiz: Kinder heben Antwortkarten, das Handy scannt die ganze Klasse.</span></li>
       <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Intervalltimer und QR-Codes groß zeigen.</span></li></ul>
       <p class="muted small-text">Zum Ausprobieren sind eine Demoklasse und eine Demogruppe mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },

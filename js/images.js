@@ -73,6 +73,22 @@ export async function add(file) {
   if (!blob || blob.type !== 'image/webp') blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', QUALITY));
   return put(blob, w, h);
 }
+// Hallenplan-Bilder (freigestellte Grafiken): Transparenz erhalten. Kleine PNG/WebP bleiben unverändert,
+// größere werden verkleinert (WebP mit Transparenz, sonst PNG).
+export async function addKeep(file, maxSide = 1000) {
+  if (!file || !/^image\//.test(file.type)) throw new Error('Das ist keine Bilddatei.');
+  if (file.size > 40 * 1024 * 1024) throw new Error('Das Bild ist zu groß (über 40 MB).');
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw new Error('Das Bild lässt sich nicht öffnen (Format nicht unterstützt?).'); }
+  const W0 = bmp.width, H0 = bmp.height;
+  if (/^image\/(png|webp)$/.test(file.type) && file.size <= 600 * 1024 && Math.max(W0, H0) <= 2000) { bmp.close?.(); return { id: await put(file, W0, H0), w: W0, h: H0 }; }
+  const k = Math.min(1, maxSide / Math.max(W0, H0)), w = Math.max(1, Math.round(W0 * k)), h = Math.max(1, Math.round(H0 * k));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(bmp, 0, 0, w, h); bmp.close?.();
+  let blob = await new Promise(r => cv.toBlob(r, 'image/webp', 0.9));
+  if (!blob || blob.type !== 'image/webp') blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+  return { id: await put(blob, w, h), w, h };
+}
 async function put(blob, w, h) {
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()));
   const id = 'img_' + [...hash.slice(0, 10)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -88,6 +104,15 @@ export function idsIn(quiz) {
   (quiz?.sessions || []).forEach(s => s.questions.forEach(take));
   return [...ids].filter(x => ID_RE.test(x));
 }
+
+// Alle Bildkennungen der Hallenpläne (Bildbibliothek und verwendete Bilder)
+export function hallIdsIn(sport) {
+  const ids = new Set((sport?.hallLib || []).map(e => e.id));
+  (sport?.halls || []).forEach(p => p.items.forEach(i => { if (i.img) ids.add(i.img); }));
+  return [...ids].filter(x => ID_RE.test(x));
+}
+// Alles, was die App an Bildern braucht (Quiz und Hallenpläne) – für Sicherung, Konto-Abgleich und Aufräumen
+export const usedIds = state => [...new Set([...idsIn(state?.quiz), ...hallIdsIn(state?.sport)])];
 
 // Für die Sicherung: { id: dataURL }
 export async function pack(ids) {

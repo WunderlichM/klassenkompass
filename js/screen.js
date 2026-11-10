@@ -1,9 +1,10 @@
 // Bereich Bildschirm: frei anordnbare Timer, Stoppuhren, Intervalltimer und QR-Codes
 import * as store from './store.js';
-import { SCREEN_H, stageW } from './store.js';
+import { SCREEN_H, SCREEN_W, SCREEN_W_WIDE } from './store.js';
 import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen } from './ui.js';
 import { qrSvg } from './qr.js';
+import * as hall from './hall.js';
 import { play, scheduleAlarm, ALARM_SECONDS, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
 
 const MAX_WIDGETS = 30, MAX_RESULTS = 200;
@@ -15,8 +16,9 @@ const ADD = [
   { kind: 'stopwatch', label: 'Stoppuhr', ic: 'stopwatch' },
   { kind: 'people', label: 'Mehrpersonen-Stoppuhr', ic: 'users' },
   { kind: 'interval', label: 'Intervalltimer', ic: 'repeat' },
+  { kind: 'hall', label: 'Hallenplan', ic: 'hall' },
 ];
-const MIN = { qr: [220, 300], stopwatch: [280, 210], people: [300, 380], interval: [300, 370], circle: [240, 320], egg: [240, 320], digital: [280, 210] };
+const MIN = { hall: [260, 200], qr: [220, 300], stopwatch: [280, 210], people: [300, 380], interval: [300, 370], circle: [240, 320], egg: [240, 320], digital: [280, 210] };
 const minFor = w => MIN[w.type === 'timer' ? w.style : w.type === 'stopwatch' && w.mode === 'people' ? 'people' : w.type] || [220, 200];
 
 let root = null, raf = 0, selected = null, scale = 1, muted = false;
@@ -24,7 +26,13 @@ const alarms = new Map(); // eingeplante Endtöne je Timer: Schlüssel id:endsAt
 const lastPhase = new Map(), lastCount = new Map();
 
 const scr = () => store.get().screen;
-const W = () => stageW(scr());
+// Bühnenbreite: 16:9 oder – auf Breitbildschirmen ab etwa 2:1 (z. B. 3440 × 1440) – 21:9. Wird je Gerät erkannt,
+// nicht eingestellt. Liegen Objekte weiter rechts (an einem Breitbildschirm angeordnet), wächst die Bühne mit.
+const deviceWide = () => { const a = Math.max(screen.width, screen.height), b = Math.min(screen.width, screen.height) || 1; return a / b >= 2; };
+const W = () => Math.min(SCREEN_W_WIDE, Math.max(deviceWide() ? SCREEN_W_WIDE : SCREEN_W, ...scr().widgets.map(w => w.x + w.width)));
+// Ansicht (Zoom) gilt nur für dieses Gerät und wird nicht abgeglichen; Standard: Automatisch
+const ZOOM_KEY = 'klassenkompass.screenZoom', ZOOMS = ['auto', 'fit', '0.5', '0.75', '1', '1.25', '1.5'];
+let zoom = (() => { try { const z = localStorage.getItem(ZOOM_KEY); return ZOOMS.includes(z) ? z : 'auto'; } catch { return 'auto'; } })();
 const wid = id => scr().widgets.find(w => w.id === id);
 const patch = (id, fn, opts) => store.update(s => { const w = s.screen.widgets.find(x => x.id === id); if (w) fn(w); }, opts);
 
@@ -36,9 +44,11 @@ export function mount(el) {
   el.onpointerdown = onPointerDown;
   el.onkeydown = onKey;
   addEventListener('resize', fit);
+  addEventListener('orientationchange', fitSoon);
+  window.visualViewport?.addEventListener('resize', fit);
   draw();
   raf = requestAnimationFrame(tick);
-  return () => { off(); cancelAnimationFrame(raf); keepAwake(false); removeEventListener('resize', fit); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
+  return () => { off(); cancelAnimationFrame(raf); keepAwake(false); removeEventListener('resize', fit); removeEventListener('orientationchange', fitSoon); window.visualViewport?.removeEventListener('resize', fit); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
 }
 
 function draw() {
@@ -63,25 +73,35 @@ function draw() {
       <div class="dock-row">
         <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte groß untereinander; „Große Ansicht“ füllt den ganzen Bildschirm. Die freie Anordnung zeigen PC und Tablet.</span>
         <span class="swatches" role="group" aria-label="Hintergrund">${['mint', 'paper', 'night'].map(b => `<button class="swatch sw-${b} ${s.background === b ? 'on' : ''}" data-act="bg" data-bg="${b}" title="${{ mint: 'Mint', paper: 'Papier', night: 'Nacht' }[b]}"></button>`).join('')}</span>
-        <label class="small-text" title="21:9 nutzt Ultrawide-Bildschirme (z. B. 3440 × 1440) ohne Ränder">Format <select class="select sm" id="format"><option value="std" ${s.format !== 'wide' ? 'selected' : ''}>16:9</option><option value="wide" ${s.format === 'wide' ? 'selected' : ''}>21:9 Breitbild</option></select></label>
-        <label class="small-text">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${String(s.zoom) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="small-text" title="Gilt nur für dieses Gerät. Das Format (16:9 oder 21:9) passt sich dem Bildschirm automatisch an.">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${zoom === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
     </div>
   </section>`;
   fit();
+  root.querySelectorAll('.hall-mini').forEach(hall.hydrateSvg);
   updateLive(Date.now(), false);
 }
 
 // Handy: Objekte groß untereinander statt verkleinerter 16:9-Bühne – immer, unabhängig von der
 // (mitsynchronisierten) Ansicht-Einstellung des PCs; in der großen Ansicht füllen sie den Bildschirm.
 const isStack = () => root?.querySelector('#stage-wrap')?.classList.contains('stack');
-const isPhone = () => (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) && Math.min(innerWidth, innerHeight) < 600;
+const isTouch = () => matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+const isPhone = () => isTouch() && Math.min(innerWidth, innerHeight) < 600;
+// Unterer Sicherheitsabstand (Home-Balken am iPad/iPhone), gemessen statt geschätzt
+let insetProbe = null;
+function bottomInset() {
+  if (!insetProbe) { insetProbe = document.createElement('div'); insetProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom,0px)'; document.body.append(insetProbe); }
+  return insetProbe.offsetHeight || 0;
+}
+let fitTimer = 0;
+function fitSoon() { clearTimeout(fitTimer); fit(); fitTimer = setTimeout(fit, 350); }
 
 function fit() {
   const wrap = root?.querySelector('#stage-wrap'), stage = root?.querySelector('#stage'); if (!wrap || !stage) return;
-  const z = scr().zoom, availW = wrap.clientWidth;
+  const z = zoom, availW = wrap.clientWidth;
   const presenting = document.body.classList.contains('presenting');
-  const stack = isPhone() || (availW < 640 && (z === 'auto' || presenting));
+  // Tablett hochkant in der großen Ansicht: Objekte groß untereinander statt einer kleinen 16:9-Bühne
+  const stack = isPhone() || (availW < 640 && (z === 'auto' || presenting)) || (presenting && isTouch() && innerHeight > innerWidth);
   wrap.classList.toggle('stack', stack);
   root.querySelector('.screen')?.classList.toggle('stacked', stack);
   if (stack) {
@@ -89,7 +109,8 @@ function fit() {
     return;
   }
   const vh = window.visualViewport?.height || innerHeight;
-  const availH = presenting ? vh - 24 : Math.max(320, vh - wrap.getBoundingClientRect().top - 150);
+  const top = wrap.getBoundingClientRect().top + (window.scrollY || 0);
+  const availH = presenting ? vh - top - Math.max(12, bottomInset()) - 2 : Math.max(320, vh - wrap.getBoundingClientRect().top - 150);
   if (z === 'fit' || presenting) scale = Math.min(availW / W(), availH / SCREEN_H);
   else if (z === 'auto') scale = Math.max(0.4, Math.min(availW / W(), 1.6, innerWidth >= 1800 ? availH / SCREEN_H : Infinity));
   else scale = Number(z) || 1;
@@ -136,6 +157,11 @@ function widgetHtml(w) {
   if (w.type === 'interval') {
     const running = w.startedAt !== null;
     return frame(w, `<p class="phase" data-live="phase"></p><div class="time big" data-live="iv"></div><p class="iv-meta" data-live="meta"></p><div class="bar"><span data-live="ivbar"></span></div>${ctrl(w, running)}<p class="w-state" data-live="ivtotal"></p>`, 'interval');
+  }
+  if (w.type === 'hall') {
+    const p = w.planId ? hall.planById(w.planId) : null;
+    return frame(w, p ? `<div class="hall-mini">${hall.boardSvg(p, { crop: true })}</div>`
+      : `<div class="hall-pick"><p class="muted small-text">${w.planId ? 'Dieser Hallenplan wurde gelöscht.' : 'Welcher Hallenplan soll hier stehen?'}</p><button class="btn primary sm" data-act="settings">${icon('hall', 15)} Hallenplan wählen</button><p class="muted small-text">Hallenpläne zeichnest du unter Sport → Hallenplan.</p></div>`, 'hall');
   }
   return '';
 }
@@ -286,6 +312,7 @@ function addWidget(kind) {
   else if (kind === 'qr') w = { ...base, type: 'qr', content: '', width: 280, height: 360 };
   else if (kind === 'stopwatch') w = { ...base, type: 'stopwatch', mode: 'single', elapsedMs: 0, startedAt: null, results: [], width: 340, height: 230 };
   else if (kind === 'people') w = { ...base, type: 'stopwatch', mode: 'people', elapsedMs: 0, startedAt: null, results: [], width: 340, height: 460 };
+  else if (kind === 'hall') { const list = hall.planList(), p = list.find(x => x.id === store.get().sport.activeHall) || list[0]; w = { ...base, type: 'hall', planId: p?.id ?? null, label: p?.title || 'Hallenplan', width: 500, height: 350 }; }
   else w = { ...base, type: 'interval', trainMs: 30000, pauseMs: 25000, sets: 12, rounds: 2, roundPauseMs: 120000, volume: 70, tones: { ...DEFAULT_INTERVAL_TONES }, elapsedMs: 0, startedAt: null, width: 340, height: 400 };
   Object.assign(w, freeSpot(w.width, w.height));
   selected = w.id;
@@ -339,12 +366,7 @@ async function onClick(e) {
 }
 
 function onChange(e) {
-  if (e.target.id === 'zoom') store.update(s => { s.screen.zoom = e.target.value; });
-  if (e.target.id === 'format') store.update(s => {
-    s.screen.format = e.target.value === 'wide' ? 'wide' : 'std';
-    const w = stageW(s.screen);  // Objekte bei schmalerer Bühne hineinschieben
-    s.screen.widgets.forEach(x => { x.width = Math.min(x.width, w); x.x = Math.max(0, Math.min(x.x, w - x.width)); });
-  });
+  if (e.target.id === 'zoom') { zoom = ZOOMS.includes(e.target.value) ? e.target.value : 'auto'; try { localStorage.setItem(ZOOM_KEY, zoom); } catch {} fit(); }
 }
 
 document.addEventListener('submit', e => {
@@ -414,6 +436,7 @@ function settingsDialog(w) {
   if (w.type === 'timer') body += `<div class="two">${durField('dur', 'Dauer', w.durationMs)}<label class="field">Darstellung<select name="style" class="select">${[['digital', 'Digital'], ['circle', 'Kreis'], ['egg', 'Ei']].map(([v, l]) => `<option value="${v}" ${w.style === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
     <label class="check"><input type="checkbox" name="sound" ${w.sound ? 'checked' : ''}> Signalton am Ende</label><p class="muted small-text">Eine geänderte Dauer setzt nur diesen Timer zurück.</p>`;
   if (w.type === 'qr') body += `<label class="field">Link oder Text<textarea name="content" class="input" rows="4" maxlength="2000">${esc(w.content)}</textarea></label><p class="muted small-text">Der QR-Code wird direkt auf diesem Gerät erzeugt; der Text wird an keinen Dienst gesendet.</p>`;
+  if (w.type === 'hall') { const list = hall.planList(); body += list.length ? `<label class="field">Hallenplan<select name="plan" class="select">${list.map(p => `<option value="${esc(p.id)}" ${p.id === w.planId ? 'selected' : ''}>${esc(p.title)}</option>`).join('')}</select></label><p class="muted small-text">Bearbeiten unter Sport → Hallenplan; Änderungen erscheinen hier sofort.</p>` : '<p class="muted">Noch kein Hallenplan. Lege einen unter Sport → Hallenplan an.</p>'; }
   if (w.type === 'stopwatch') body += `<p class="muted small-text">${w.mode === 'people' ? 'Mehrpersonen-Stoppuhr: gemeinsame Uhr starten, für jede Person „Zeit speichern“ drücken.' : 'Einfache Stoppuhr mit Hundertstelsekunden.'}</p>`;
   if (w.type === 'interval') {
     const tones = { ...DEFAULT_INTERVAL_TONES, ...(w.tones || {}) };
@@ -440,6 +463,7 @@ function settingsDialog(w) {
           if (d !== x.durationMs) { x.durationMs = d; x.remainingMs = d; x.endsAt = null; }
           x.style = fd.get('style'); x.sound = fd.get('sound') === 'on';
         }
+        if (x.type === 'hall' && fd.get('plan')) { const prevTitle = hall.planById(x.planId)?.title; x.planId = String(fd.get('plan')); const t = hall.planById(x.planId)?.title; if (t && (!x.label || x.label === prevTitle || x.label === 'Hallenplan')) x.label = t.slice(0, 60); }
         if (x.type === 'qr') { const v = String(fd.get('content')).trim(); if (v) qrSvg(v); x.content = v; }
         if (x.type === 'interval') {
           const next = { trainMs: Math.max(1000, readDur(fd, 'train')), pauseMs: readDur(fd, 'pause'), sets: clamp(Number(fd.get('sets')) || 1, 1, 99), rounds: clamp(Number(fd.get('rounds')) || 1, 1, 99), roundPauseMs: readDur(fd, 'rp') };
@@ -457,12 +481,14 @@ function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
       <li><b>Hinzufügen:</b> Unten Timer, Stoppuhr, Intervalltimer oder QR-Code wählen (bis zu 30 Objekte).</li>
-      <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
+      <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter.</li>
+      <li><b>Hallenplan:</b> Zeigt einen Plan aus Sport → Hallenplan, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
       <li><b>Intervalltimer:</b> Trainingszeit, Satzpause, Sätze, Runden, Rundenpause, Lautstärke und Töne einstellen. Die Phasen wechseln automatisch.</li>
-      <li><b>Töne:</b> Der Browser spielt Töne nur, solange die Seite geöffnet und das Gerät nicht gesperrt ist. Mit „Töne an/aus“ schaltest du alle Signale stumm.</li>
+      <li><b>Töne:</b> Der Browser spielt Töne nur, solange die Seite geöffnet und das Gerät nicht gesperrt ist. Mit „Töne an/aus“ schaltest du alle Signale stumm. Läuft auf dem Gerät Musik (Spotify, YouTube), kann die App sie bei Signalen leiser stellen oder kurz anhalten: Zahnrad oben rechts → „Musik bei Signalen“.</li>
       <li><b>Präsentieren:</b> „Große Ansicht“ blendet alles andere aus. Mit Esc oder „Ansicht verkleinern“ zurück.</li>
+      <li><b>Ansicht und Format:</b> „Ansicht“ gilt nur für dieses Gerät (Standard: Automatisch). Das Format passt sich dem Bildschirm selbst an: 16:9, an Breitbildschirmen (z. B. 3440 × 1440) 21:9.</li>
     </ul>` });
 }

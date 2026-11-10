@@ -79,7 +79,7 @@ async function reconcile({ list = false } = {}) {
       remote = await listRemote(); known = new Set(remote.keys()); meta.lastList = Date.now(); saveMeta();
     }
     // Hochladen, was verwendet wird und im Konto fehlt
-    const used = new Set(images.idsIn(store.get().quiz));
+    const used = new Set(images.usedIds(store.get()));
     for (const id of used) {
       if (known.has(id)) continue;
       const rec = await images.getRecord(id).catch(() => null);
@@ -105,7 +105,7 @@ export function init() {
   images.setRemote(download);
   account.onSynced(() => soon(500));
   // Neue Bilder in Fragen: kurz nach dem Speichern hochladen
-  store.subscribe(() => { if (account.loggedIn() && images.idsIn(store.get().quiz).some(id => !known.has(id))) soon(); });
+  store.subscribe(() => { if (account.loggedIn() && images.usedIds(store.get()).some(id => !known.has(id))) soon(); });
   addEventListener('online', () => soon(1000));
   // Konto löschen: zuerst alle Bilder im Dateispeicher entfernen
   account.setBeforeDelete(async () => {

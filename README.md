@@ -1,6 +1,6 @@
 # KlassenKompass
 
-Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Turniere & Ranglisten** (Sport), ein **Kartenquiz** (Quiz) und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer und QR-Codes.
+Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Turniere, Ranglisten & Hallenpläne** (Sport), ein **Kartenquiz** (Quiz) und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes und Hallenplänen.
 
 - Läuft im Browser auf PC, Tablet und Handy und lässt sich als App installieren.
 - Handy und Tablett: große Tippflächen, kein Zoom beim Antippen von Feldern, Dialoge von unten. Im Bildschirm stehen die Objekte auf dem Handy immer groß untereinander (unabhängig von der Ansicht-Einstellung des PCs); „Große Ansicht“ füllt im Hochformat den Bildschirm (ein Objekt ganz, mehrere je mindestens halbe Höhe), im Querformat stehen sie nebeneinander. Am Tablett lassen sie sich mit dem Finger an der Kopfzeile verschieben.
@@ -8,7 +8,10 @@ Web-App (PWA) für den Unterricht: **Sitzplan & Gruppen** (Technik), **Teams, Tu
 - **Ohne Konto:** Alle Daten bleiben im Browser des jeweiligen Geräts. Übertragen und Sichern über „Daten exportieren / importieren“ (Zahnrad oben rechts). Die Sicherungsdatei ist immer mit einem eigenen Passwort verschlüsselt (AES-256-GCM, PBKDF2 mit 600 000 Durchläufen, `js/backup.js`); ältere unverschlüsselte Sicherungen lassen sich weiterhin importieren.
 - **Mit Konto (optional):** Zahnrad → „Konto & Synchronisierung“. Die Daten werden auf dem Gerät mit dem eigenen Passwort verschlüsselt (AES-256-GCM, Schlüssel per PBKDF2 aus dem Passwort) und in Supabase (Frankfurt) gespeichert. Der Server sieht weder Passwort noch Namen. Passwort vergessen = Daten im Konto verloren.
 - Keine externen Bibliotheken, keine Analyse, keine Werbung. QR-Codes werden direkt im Browser erzeugt.
-- Breitbild: Ab etwa 1800 px Breite nutzt die App mehr Platz, ab 2600 px (z. B. 3440 × 1440) werden Schrift und Sitzplätze größer. Im Bildschirm lässt sich das Format 21:9 wählen.
+- Breitbild: Ab etwa 1800 px Breite nutzt die App mehr Platz, ab 2600 px (z. B. 3440 × 1440) werden Schrift und Sitzplätze größer. Im Bildschirm stellt sich das Format selbst ein: 16:9, an Bildschirmen ab etwa 2:1 (z. B. 3440 × 1440) 21:9. Objekte, die an einem Breitbildschirm weiter rechts stehen, bleiben auch an 16:9-Geräten sichtbar (die Bühne wird dann breiter).
+- Bildschirm „Ansicht“ (Automatisch, Alles anzeigen, 50–150 %) gilt nur für das jeweilige Gerät (localStorage `klassenkompass.screenZoom`) und wird nicht abgeglichen; Standard ist „Automatisch“.
+- Objekte im Bildschirm passen ihren Inhalt (Ziffern, Kreis, Ei, QR-Code) an die verfügbare Höhe an – auch mit den größeren Tippflächen am Tablett. Am Tablett hochkant stehen die Objekte in der großen Ansicht groß untereinander; quer wird der Sicherheitsabstand (Home-Balken) berücksichtigt.
+- **Musik bei Signalen** (Zahnrad, gilt je Gerät, `klassenkompass.musicMode`): Läuft auf demselben Gerät Musik (Spotify, YouTube, auch über Bluetooth), kann die App sie bei Signalen leiser stellen (`navigator.audioSession.type = 'transient'`) oder kurz anhalten (`'transient-solo'`). Nach dem letzten Ton (1,3 s Nachlauf, damit 3-2-1 und Phasenton im Intervalltimer ein Block sind) wird der Audio-Kontext angehalten und die Musik freigegeben. Timer-Endsignale werden in diesem Modus erst kurz vor dem Ende eingeschaltet (nicht im Voraus auf der Audio-Uhr). Funktioniert nur, wo der Browser die Audio-Sitzung kennt (Safari/iPadOS ab 16.4); im Dialog lassen sich die Varianten „Jetzt“ und „In 5 s“ testen. Die zuletzt getestete Variante bleibt eingestellt.
 - Dark Mode: Zahnrad → „Design“ → Automatisch (folgt dem Gerät), Hell oder Dunkel. Die Wahl gilt nur für das jeweilige Gerät (`js/theme.js`, localStorage) und wird nicht abgeglichen. Druck, Antwortkarten und QR-Codes bleiben immer hell.
 - Sitzplan: Jeder Tisch trägt Farbe und Nummer seiner Gruppe (G1, G2 …), darüber steht eine Legende.
 
@@ -28,6 +31,15 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.
 - Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).
 
+## Hallenplan (Sport)
+
+- Sport → „Hallenplan“: schräg von oben gezeichnete Halle (Perspektive wie die Vlamingo-Vorlagen, schematisch ohne Maße), mehrere Pläne (Neu mit Vorlage „drei/zwei Bereiche“ oder leer, Umbenennen, Kopie, Löschen), Untergrund mit/ohne Mittellinie oder ohne Fläche.
+- Elemente aus der Leiste in die Halle ziehen oder antippen (dann in die Mitte): Bereich (mit Gruppenname und Farbe), Hütchen (Nummer), Kind, Ball, Laufweg (blau), Weg nach Freigabe (orange gestrichelt), Sperrfläche X, Schild (S, LK), Text sowie einfache Geräte (Bank, Matte, Weichboden, Kasten, Tor). Ausgewählte Elemente: verschieben, Größe am Griff unten rechts, drehen am Griff oben, Beschriftung, Farbe, Kopie, vorn/hinten, löschen; Rückgängig/Wiederholen (Strg+Z/Strg+Y), Pfeiltasten, Entf.
+- **Gerätebilder** („Gerätebilder hinzufügen“, mehrere Dateien auf einmal): Dateinamen wie `V02-035 - Bank lang - quer.png` werden gelesen (Gruppe nach Kennung, Name, Ansicht); Ansichten desselben Geräts (quer/längs/…) wechselt „Ansicht wechseln“. Kleine PNG/WebP werden unverändert gespeichert (Transparenz bleibt), größere verkleinert. Die Bilder liegen wie die Quiz-Bilder in IndexedDB und – mit Konto – verschlüsselt im Dateispeicher des Kontos (`js/images.js`, `js/cloudimages.js`); im Zustand stehen nur Kennungen (`sport.hallLib`, `sport.halls[].items[].img`). **Die Vlamingo-/WIMASU-Grafiken gehören nicht in dieses öffentliche Repository** (Vervielfältigung und Veröffentlichung vorbehalten).
+- „Ansicht vergrößern“ zeigt nur die Zeichnung, „Drucken / PDF“ druckt A4 quer mit Titel und dem Hinweis „Schematisch · Abstände und nutzbaren Raum vor Ort prüfen“.
+- Im Bildschirm gibt es das Objekt „Hallenplan“ (Plan am Zahnrad wählen), z. B. neben dem Intervalltimer.
+- Das automatische Aufräumen der Bilder im Konto berücksichtigt Quiz und Hallenpläne (`images.usedIds`). Ältere App-Fassungen kennen die Hallenpläne nicht: Nach dem Update alle Geräte einmal öffnen und „Neue Version“ übernehmen.
+
 ## Turniere (Sport)
 
 - **Jeder gegen jeden:** Spielplan nach der Kreismethode, Punkte für Sieg/Unentschieden/Niederlage einstellbar.
@@ -38,6 +50,7 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 ## Technik der Konten
 
 - `js/config.js`: Supabase-URL und öffentlicher Publishable Key.
+- Bucket `quiz-images` enthält seit 1.12.0 auch die Hallenplan-Bilder (Name bleibt, damit nichts umgezogen werden muss).
 - `supabase/setup.sql`: Tabelle `vaults` (ein verschlüsselter Block je Konto, Row Level Security), Funktion `save_vault` mit Versionsprüfung, `delete_my_account`, `ping`; ab 1.6.0 zusätzlich Tabelle `live_quiz` mit `set_live_quiz` und `clear_live_quiz` für das Live-Quiz; ab 1.8.0 der private Bucket `quiz-images` (höchstens 3 MB je Datei, nur verschlüsselte Daten) mit Zugriff nur auf den eigenen Ordner und die Tabelle `image_keys` (Bilder-Schlüssel je Konto, mit dem Passwort-Schlüssel verschlüsselt, damit ein Passwortwechsel die Bilder nicht neu verschlüsseln muss). Das Skript kann gefahrlos erneut ausgeführt werden.
 - In Supabase ist „Confirm email“ ausgeschaltet (der kostenlose Mailversand erreicht keine fremden Adressen).
 - `.github/workflows/keepalive.yml` ruft alle drei Tage `ping` auf, damit das kostenlose Projekt nicht pausiert.

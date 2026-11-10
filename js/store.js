@@ -18,6 +18,23 @@ export function demoSportGroup() {
   return { id: uid(), name: 'Demogruppe Sport', demo: true, teamCount: 4, rules: [], teams: [], tournaments: [], series: [],
     students: DEMO_SPORT.map((name, i) => ({ id: uid(), name, className: i % 2 ? '6b' : '6a' })) };
 }
+// Hallenplan: Beispiel mit drei Bereichen hintereinander (schematisch, ohne Maße)
+export function demoHall() {
+  const it = (kind, x, y, w, h, extra = {}) => ({ id: uid(), kind, x, y, w, h, rot: 0, ...extra });
+  const zones = [['Gruppe 1', '#2e7d4f', 150], ['Gruppe 2', '#d9a521', 560], ['Gruppe 3', '#c94040', 970]];
+  const items = [];
+  zones.forEach(([t, color, x], i) => {
+    items.push(it('zone', x, 150, 420, 600, { color, text: t }));
+    items.push(it('cone', x + 230, 300, 70, 70, { color, text: 'H' + (i * 3 + 1) }));
+    items.push(it('cone', x - 40, 660, 70, 70, { color, text: 'H' + (i * 3 + 2) }));
+    items.push(it('cone', x + 250, 660, 70, 70, { color, text: 'H' + (i * 3 + 3) }));
+    items.push(it('arrow', x + 50, 672, 190, 44, { color: '#2f5e8e' }));
+  });
+  items.push(it('path', 90, 820, 1100, 34, { color: '#b0602a' }));
+  items.push(it('tag', 1180, 880, 90, 64, { text: 'S' }));
+  items.push(it('tag', 1300, 880, 110, 64, { text: 'LK' }));
+  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', items };
+}
 export function defaultScreen() {
   return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
     { id: uid(), type: 'timer', style: 'digital', label: 'Arbeitsphase', x: 52, y: 90, width: 390, height: 230, durationMs: 600000, remainingMs: 600000, endsAt: null, sound: true },
@@ -36,7 +53,8 @@ export function demoQuiz() {
 }
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
-  return { schema: SCHEMA, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
+  const h = demoHall();
+  return { schema: SCHEMA, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [] }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
 }
 
 let state;
@@ -119,9 +137,24 @@ function normSport(g) {
 }
 function normScreen(s) {
   if (!s || !Array.isArray(s.widgets)) return defaultScreen();
-  const widgets = s.widgets.filter(w => w && ['timer', 'qr', 'stopwatch', 'interval'].includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
+  const widgets = s.widgets.filter(w => w && ['timer', 'qr', 'stopwatch', 'interval', 'hall'].includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
     x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
+}
+// ---------- Hallenpläne ----------
+export const HALL_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'bench', 'mat', 'softmat', 'box', 'goal', 'img'];
+const COLOR_RE = /^#[0-9a-f]{6}$/i;
+function normHalls(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 60).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
+    floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
+    items: (Array.isArray(p?.items) ? p.items : []).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img))).slice(0, 400).map(i => ({
+      id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
+      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}) })) }));
+}
+function normHallLib(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).filter(e => e && IMG_RE.test(e.id) && !seen.has(e.id) && seen.add(e.id)).slice(0, 600).map(e => ({
+    id: e.id, name: str(e.name, 80) || 'Bild', view: str(e.view, 40), key: str(e.key, 120) || e.id, cat: str(e.cat, 60) || 'Eigene Bilder', code: str(e.code, 20), w: int(e.w, 1, 5000, 200), h: int(e.h, 1, 5000, 200) }));
 }
 const CARD_MAX = 40;
 const IMG_RE = /^img_[0-9a-f]{20}$/;
@@ -157,6 +190,11 @@ function normQuiz(q) {
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }
+function hallPart(sp) {
+  // Ältere Stände ohne Hallenpläne bekommen das Beispiel
+  const halls = Array.isArray(sp?.halls) ? normHalls(sp.halls) : [demoHall()];
+  return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib) };
+}
 export function normalize(raw) {
   const fresh = freshState();
   if (!raw || typeof raw !== 'object') return fresh;
@@ -164,7 +202,7 @@ export function normalize(raw) {
   const groups = (raw.sport?.groups || []).map(normSport);
   return { schema: SCHEMA,
     technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null },
-    sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null },
+    sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null, ...hallPart(raw.sport) },
     quiz: normQuiz(raw.quiz), screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
 }
 
@@ -198,6 +236,8 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.sport.groups = merge(next.sport.groups, incoming.sport.groups);
   if (incoming.technik.classes.length) next.technik.activeId = incoming.technik.classes[0].id;
   if (incoming.sport.groups.length) next.sport.activeId = incoming.sport.groups[0].id;
+  next.sport.halls = merge(next.sport.halls, incoming.sport.halls.filter(h => !h.demo));
+  next.sport.hallLib = merge(next.sport.hallLib, incoming.sport.hallLib);
   const iq = incoming.quiz, nq = next.quiz;
   nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions);
   if (!nq.classes.some(c => c.id === nq.activeClassId)) nq.activeClassId = nq.classes[0]?.id ?? null;
