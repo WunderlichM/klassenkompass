@@ -30,6 +30,8 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - Die Erkennung (`js/detect.js`) läuft vollständig im Browser, ohne Bibliothek: örtlicher Schwellwert, zusammenhängende Flächen, Viereck, Raster abtasten, Code mit Prüfabstand (`js/cards.js`, mindestens 7 Felder Unterschied auch gedreht). Kamerabilder werden nicht gespeichert.
 - Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“.
 - Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).
+- **Fragensätze importieren / exportieren (seit 1.14.0):** Pfeil-Symbol neben „Neuer Fragensatz“ liest eine `.json`-Datei oder eingefügten Text; „Exportieren“ beim Bearbeiten eines Fragensatzes schreibt eine solche Datei. Format: `{ "app": "KlassenKompass", "kind": "quiz-sets", "v": 1, "sets": [ { "title": "…", "questions": [ { "text": "…", "options": ["…", "…"], "correct": "A" } ] } ] }` – `correct` ist ein Buchstabe A–D, eine Zahl ab 0 oder `null` (Umfrage). Importierte Sätze kommen dazu, nichts wird überschrieben; Bilder sind nicht enthalten.
+- **Decknamen (seit 1.14.0):** Unter „So geht’s“ öffnet der unauffällige Link „Ansicht“ die Einstellung „Decknamen verwenden“. Dann zeigt das Quiz keine Klassenlisten: Es gibt nur die Anzahl der Kinder, jede Karte trägt einen festen Fantasienamen (Adler, Biber, …) – auf der gedruckten Karte, im Quiz, im Ergebnis und in der CSV. Klassen und frühere Ergebnisse bleiben gespeichert und sind ausgeblendet, bis der Haken wieder entfernt wird (`quiz.alias`). Technik und Sport sind davon nicht betroffen.
 
 ## Hallenplan (Sport)
 

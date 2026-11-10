@@ -12,7 +12,15 @@ const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localSt
 const TYPES = { abcd: { name: 'A – D (4 Antworten)', n: 4 }, abc: { name: 'A – C (3 Antworten)', n: 3 }, ab: { name: 'A – B (2 Antworten)', n: 2 }, tf: { name: 'Richtig / Falsch', n: 2 } };
 
 const Q = () => store.get().quiz;
-const cls = () => Q().classes.find(c => c.id === Q().activeClassId) || null;
+// Decknamen: Ist die Ansicht eingeschaltet, zeigt das Quiz keine Klassenlisten. Es gibt nur eine Anzahl Kinder;
+// jede Karte trägt einen festen Fantasienamen (auch im Druck, im Quiz, im Ergebnis und in der CSV).
+const ALIAS = ['Adler', 'Biber', 'Dachs', 'Delfin', 'Eule', 'Falke', 'Fuchs', 'Gecko', 'Hase', 'Igel', 'Jaguar', 'Koala', 'Lama', 'Luchs', 'Marder', 'Möwe', 'Nashorn', 'Otter', 'Panda', 'Pinguin',
+  'Qualle', 'Rabe', 'Robbe', 'Specht', 'Storch', 'Tiger', 'Uhu', 'Wal', 'Wolf', 'Zebra', 'Ameise', 'Bär', 'Elch', 'Fasan', 'Giraffe', 'Hamster', 'Kiwi', 'Lemur', 'Milan', 'Puma'];
+const ALIAS_ID = 'alias';
+const aliasOn = () => !!Q().alias?.on;
+const aliasClass = () => ({ id: ALIAS_ID, name: 'Lerngruppe', alias: true,
+  students: Array.from({ length: Math.max(1, Math.min(CARD_COUNT, Q().alias?.count || 16)) }, (_, i) => ({ id: `${ALIAS_ID}-${i + 1}`, name: ALIAS[i], card: i + 1 })) });
+const cls = () => aliasOn() ? aliasClass() : Q().classes.find(c => c.id === Q().activeClassId) || null;
 const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
 const present = s => s.students.filter(x => !s.absent?.includes(x.id));
@@ -112,9 +120,11 @@ function confetti(id) {
 // Startseite
 // ======================================================================
 function drawHome() {
-  const q = Q(), c = cls(), t = qset();
-  const done = q.sessions.filter(x => x.done).slice().reverse();
-  const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId);
+  const q = Q(), c = cls(), t = qset(), al = aliasOn();
+  // Mit Decknamen bleiben Ergebnisse der echten Klassen ausgeblendet (sie sind nicht gelöscht)
+  const mine = x => !al || x.classId === ALIAS_ID;
+  const done = q.sessions.filter(x => x.done && mine(x)).slice().reverse();
+  const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId && mine(x));
   root.innerHTML = `
   <section class="page quiz">
     <div class="page-head">
@@ -124,14 +134,15 @@ function drawHome() {
         <p class="sub">Jede Karte eine Stimme – ohne Handys für die Kinder.</p>
       </div>
       <div class="picker">
-        <label class="eyebrow" for="quiz-class">Deine Klasse</label>
+        ${al ? `<label class="eyebrow" for="quiz-count">Anzahl Kinder</label>
+        <div class="picker-row"><input id="quiz-count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${c.students.length}" inputmode="numeric" style="max-width:110px"></div>` : `<label class="eyebrow" for="quiz-class">Deine Klasse</label>
         <div class="picker-row">
           <select id="quiz-class" class="select">${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeClassId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${q.classes.length ? '' : '<option>Noch keine Klasse</option>'}</select>
           <button class="icon-btn" data-act="classes" title="Klassen verwalten" aria-label="Klassen verwalten">${icon('sliders')}</button>
-        </div>
+        </div>`}
       </div>
     </div>
-    ${technikMissing().length ? `<p class="notice">${technikMissing().length} Technik-Klasse(n) (${technikMissing().map(c => esc(c.name)).join(', ')}) sind noch nicht im Quiz. <button class="link" data-act="import-technik"><b>Jetzt übernehmen</b></button></p>` : ''}
+    ${!al && technikMissing().length ? `<p class="notice">${technikMissing().length} Technik-Klasse(n) (${technikMissing().map(c => esc(c.name)).join(', ')}) sind noch nicht im Quiz. <button class="link" data-act="import-technik"><b>Jetzt übernehmen</b></button></p>` : ''}
     ${live.remote ? `<div class="card live-banner"><div><b>${icon('camera', 18)} Live-Quiz auf einem anderen Gerät</b><span class="muted">${esc(live.remote.className)} · Frage ${live.remote.index + 1}/${live.remote.total}</span></div><button class="btn primary big" data-act="scan-remote">${icon('camera')} Karten scannen</button></div>` : ''}
     <div class="work-grid">
       <div>
@@ -140,6 +151,7 @@ function drawHome() {
             <div><p class="eyebrow">Fragensatz</p>
               <div class="picker-row"><select id="quiz-set" class="select">${q.sets.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeSetId ? 'selected' : ''}>${esc(x.title)} (${x.questions.length})</option>`).join('')}${q.sets.length ? '' : '<option>Noch kein Fragensatz</option>'}</select>
               <button class="icon-btn" data-act="set-new" title="Neuer Fragensatz" aria-label="Neuer Fragensatz">${icon('plus')}</button>
+              <button class="icon-btn" data-act="set-import" title="Fragensätze importieren (Datei oder Text)" aria-label="Fragensätze importieren">${icon('upload')}</button>
               ${t ? `<button class="icon-btn" data-act="set-edit" title="Umbenennen, kopieren oder löschen" aria-label="Fragensatz bearbeiten">${icon('edit')}</button>` : ''}</div>
             </div>
           </div>
@@ -162,10 +174,10 @@ function drawHome() {
         <div class="card">
           <div class="card-head small">
             <h3>${icon('cards', 16)} Klasse &amp; Karten ${c ? `<span class="badge">${c.students.length}</span>` : ''}</h3>
-            ${c ? `<button class="icon-btn sm" data-act="students-add" title="Schüler hinzufügen" aria-label="Schüler hinzufügen">${icon('plus', 16)}</button>` : ''}
+            ${c && !al ? `<button class="icon-btn sm" data-act="students-add" title="Schüler hinzufügen" aria-label="Schüler hinzufügen">${icon('plus', 16)}</button>` : ''}
           </div>
-          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span><span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button><button class="icon-btn xs" data-act="student-edit" data-id="${esc(s.id)}" title="Kartennummer ändern oder entfernen" aria-label="${esc(s.name)} bearbeiten">${icon('edit', 14)}</button></li>`).join('')}</ul>
-          <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind behält seine Kartennummer; gedruckt werden nur die Karten dieser Klasse mit Namen.</p>`; })() : `<p class="muted">Lege eine Klasse an oder übernimm die Namen aus Technik oder Sport.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
+          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span><span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button>${al ? '' : `<button class="icon-btn xs" data-act="student-edit" data-id="${esc(s.id)}" title="Kartennummer ändern oder entfernen" aria-label="${esc(s.name)} bearbeiten">${icon('edit', 14)}</button>`}</li>`).join('')}</ul>
+          <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. ${al ? 'Jede Karte hat eine feste Nummer und einen Decknamen; beides steht auch auf der gedruckten Karte.' : 'Jedes Kind behält seine Kartennummer; gedruckt werden nur die Karten dieser Klasse mit Namen.'}</p>`; })() : `<p class="muted">Lege eine Klasse an oder übernimm die Namen aus Technik oder Sport.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
           <button class="btn ghost full" data-act="print">${icon('print', 16)} Karten drucken</button>
         </div>
         <div class="card">
@@ -176,6 +188,7 @@ function drawHome() {
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
             <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf seinen Namen → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
           </ol>
+          <p class="small-text" style="margin:10px 0 0;text-align:right"><button class="link muted" data-act="view-settings">Ansicht</button></p>
         </div>
       </aside>
     </div>
@@ -276,6 +289,7 @@ function onChange(e) {
   const t = e.target;
   if (t.id === 'quiz-class') store.update(s => { s.quiz.activeClassId = t.value; });
   else if (t.id === 'quiz-set') store.update(s => { s.quiz.activeSetId = t.value; });
+  else if (t.id === 'quiz-count') store.update(s => { s.quiz.alias = { on: true, count: Math.max(1, Math.min(CARD_COUNT, Math.round(Number(t.value)) || 1)) }; });
   else if (t.dataset.act === 'names') { showNames = t.checked; draw(); }
   else if (t.dataset.act === 'auto') store.update(s => { s.quiz.autoReveal = t.checked; });
   else if (t.dataset.act === 'set-correct' && t.value !== '') updateRun(s => { s.questions[s.index].correct = Number(t.value); });
@@ -293,6 +307,8 @@ function onClick(e) {
     case 'student-absent': { const off = absentFor(cls().id), id = b.dataset.id; off.has(id) ? off.delete(id) : off.add(id); return draw(); }
     case 'print': return printDialog();
     case 'set-new': return setDialog();
+    case 'set-import': return importSetsDialog();
+    case 'view-settings': return viewDialog();
     case 'set-edit': return setDialog(qset());
     case 'q-add': return questionDialog(qset());
     case 'q-edit': return questionDialog(qset(), i);
@@ -597,15 +613,71 @@ function studentDialog(c, id) {
 function setDialog(t) {
   dialog({ title: t ? 'Fragensatz bearbeiten' : 'Neuer Fragensatz', submit: 'Speichern', body: `
     <label class="field">Titel<input name="title" class="input" value="${esc(t?.title || '')}" maxlength="80" placeholder="z. B. Werkzeugkunde – Wiederholung" required></label>
-    ${t ? `<div class="tools"><button type="button" class="btn ghost sm" data-m="copy">Kopie anlegen</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Löschen</button></div>` : ''}`,
+    ${t ? `<div class="tools"><button type="button" class="btn ghost sm" data-m="copy">Kopie anlegen</button><button type="button" class="btn ghost sm" data-m="export">${icon('download', 15)} Exportieren</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Löschen</button></div>` : ''}`,
     onOpen: (el, close) => {
       el.querySelector('[data-m=copy]')?.addEventListener('click', () => { close(); const copy = { ...structuredClone(t), id: uid(), demo: false, title: t.title + ' (Kopie)' }; copy.questions.forEach(x => { x.id = uid(); }); store.update(s => { s.quiz.sets.push(copy); s.quiz.activeSetId = copy.id; }); });
+      el.querySelector('[data-m=export]')?.addEventListener('click', () => downloadFile(`Fragensatz-${t.title}.json`.replace(/[\\/:*?"<>|]/g, '_'), exportSets([t])));
       el.querySelector('[data-m=del]')?.addEventListener('click', async () => { close(); if (await confirmDialog('Fragensatz löschen', `„${t.title}“ mit ${t.questions.length} Frage(n) löschen? Gespeicherte Ergebnisse bleiben erhalten.`)) store.update(s => { s.quiz.sets = s.quiz.sets.filter(x => x.id !== t.id); if (s.quiz.activeSetId === t.id) s.quiz.activeSetId = s.quiz.sets[0]?.id ?? null; }); });
     },
     onSubmit: fd => {
       const title = String(fd.get('title')).trim(); if (!title) throw new Error('Bitte einen Titel eingeben.');
       if (t) store.update(s => { s.quiz.sets.find(x => x.id === t.id).title = title; });
       else { const n = { id: uid(), title, questions: [] }; store.update(s => { s.quiz.sets.push(n); s.quiz.activeSetId = n.id; }); setTimeout(() => questionDialog(qset()), 50); }
+    } });
+}
+
+// ---------- Fragensätze als Datei: nur Texte (Bilder liegen auf dem Gerät und werden nicht mitgegeben)
+const SETS_KIND = 'quiz-sets';
+function exportSets(sets) {
+  return JSON.stringify({ app: 'KlassenKompass', kind: SETS_KIND, v: 1, sets: sets.map(t => ({ title: t.title,
+    questions: t.questions.map(x => ({ text: x.text, options: x.options, correct: x.correct === null ? null : LETTERS[x.correct] })) })) }, null, 2);
+}
+// Liest eine Datei mit einem oder mehreren Fragensätzen. Erlaubt: { sets: [...] }, eine Liste von Sätzen oder ein einzelner Satz.
+// „correct“ darf ein Buchstabe (A–D), eine Zahl ab 0 oder null (Umfrage) sein.
+export function parseSets(text) {
+  let raw;
+  try { raw = JSON.parse(String(text).replace(/^\uFEFF/, '')); } catch { throw new Error('Das ist keine gültige Fragensatz-Datei (JSON).'); }
+  if (raw?.app === 'KlassenKompass' && raw.kind && raw.kind !== SETS_KIND) throw new Error('Das ist eine Sicherung der ganzen App – bitte über „Daten importieren“ einlesen.');
+  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.sets) ? raw.sets : raw && Array.isArray(raw.questions) ? [raw] : null;
+  if (!list || !list.length) throw new Error('In der Datei wurde kein Fragensatz gefunden.');
+  const txt = (v, n) => String(v ?? '').trim().slice(0, n);
+  return list.slice(0, 50).map((t, k) => {
+    const questions = (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map((x, i) => {
+      const options = (Array.isArray(x?.options) ? x.options : []).map(o => txt(o, 120)).slice(0, 4);
+      if (options.length < 2) throw new Error(`Satz ${k + 1}, Frage ${i + 1}: Es braucht 2 bis 4 Antworten.`);
+      let c = x?.correct;
+      if (typeof c === 'string') c = c.trim() === '' ? null : LETTERS.indexOf(c.trim().toUpperCase());
+      if (c !== null && c !== undefined && !(Number.isInteger(c) && c >= 0 && c < options.length)) throw new Error(`Satz ${k + 1}, Frage ${i + 1}: „correct“ passt nicht zu den Antworten.`);
+      return { id: uid(), text: txt(x?.text, 400), options, correct: c ?? null };
+    });
+    if (!questions.length) throw new Error(`Satz ${k + 1} enthält keine Fragen.`);
+    return { id: uid(), title: txt(t?.title, 80) || 'Importierter Fragensatz', questions };
+  });
+}
+function importSetsDialog() {
+  dialog({ title: 'Fragensätze importieren', submit: 'Importieren', body: `
+    <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“ beim Bearbeiten eines Fragensatzes)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
+    <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "sets": [ { "title": "…", "questions": [ { "text": "…", "options": ["…", "…"], "correct": "A" } ] } ] }'></textarea></label>
+    <p class="muted small-text">Die Fragensätze kommen zu den vorhandenen dazu; nichts wird überschrieben. Bilder sind in der Datei nicht enthalten.</p>`,
+    onOpen: el => { el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
+    onSubmit: fd => {
+      const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
+      const sets = parseSets(text), titles = new Set(Q().sets.map(x => x.title));
+      sets.forEach(t => { const base = t.title; let n = 2; while (titles.has(t.title)) t.title = `${base} (${n++})`.slice(0, 80); titles.add(t.title); });
+      store.update(s => { s.quiz.sets.push(...sets); s.quiz.activeSetId = sets[0].id; });
+      toast(`${sets.length === 1 ? '1 Fragensatz' : sets.length + ' Fragensätze'} mit ${sets.reduce((a, t) => a + t.questions.length, 0)} Fragen importiert.`);
+    } });
+}
+// ---------- Ansicht: Decknamen statt Klassenlisten
+function viewDialog() {
+  const a = Q().alias || { on: false, count: 16 };
+  dialog({ title: 'Ansicht', submit: 'Speichern', body: `
+    <label class="check"><input type="checkbox" name="on" ${a.on ? 'checked' : ''}> Decknamen verwenden</label>
+    <p class="muted small-text">Das Quiz zeigt dann keine Klassenlisten und keine Namen von Kindern. Du gibst nur die Anzahl der Kinder ein; jede Karte bekommt einen festen Fantasienamen (${esc(ALIAS.slice(0, 3).join(', '))} …). Er steht auf der gedruckten Karte, im Quiz und im Ergebnis. Deine Klassen und ihre Ergebnisse bleiben gespeichert und sind wieder da, sobald du den Haken entfernst.</p>
+    <label class="field">Anzahl Kinder<input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${a.count}" inputmode="numeric"></label>`,
+    onSubmit: fd => {
+      const count = Math.max(1, Math.min(CARD_COUNT, Math.round(Number(fd.get('count'))) || a.count));
+      store.update(s => { s.quiz.alias = { on: fd.get('on') === 'on', count }; });
     } });
 }
 

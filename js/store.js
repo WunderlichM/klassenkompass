@@ -50,7 +50,7 @@ export function demoQuiz() {
     q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
     q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
     q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
-  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true };
+  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true, alias: { on: false, count: 16 } };
 }
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
@@ -197,7 +197,8 @@ function normQuiz(q) {
     absent: (Array.isArray(x?.absent) ? x.absent : []).map(String),
     questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y),
       answers: Object.fromEntries(Object.entries(y?.answers || {}).filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 4)) })) }));
-  return { classes, sets, sessions, autoReveal: q.autoReveal !== false,
+  // Decknamen (seit 1.14.0): statt der Klassenlisten nur eine Anzahl Kinder mit festen Fantasienamen
+  return { classes, sets, sessions, autoReveal: q.autoReveal !== false, alias: { on: !!q.alias?.on, count: int(q.alias?.count, 1, CARD_MAX, 16) },
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }
