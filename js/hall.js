@@ -36,7 +36,7 @@ const hasText = k => ['zone', 'cone', 'kid', 'tag', 'text'].includes(k);
 const hasColor = k => ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(k);
 
 // Vlamingo-Einzelbilder: „V02-035 - Bank lang - quer.png“ → Gruppe, Name, Ansicht
-const CATS = { V02: 'Matten, Kästen, Bänke', V03: 'Sprossenwand, Barren, Reck', V04: 'Körbe, Seile, Sprunggeräte', V05: 'Balken, Netze, Tore, Technik', V06: 'Kleingeräte', V07: 'Tischtennis, Banden, Türen', W04: 'WIMASU-Ergänzungen' };
+const CATS = { V02: 'Matten, Kästen, Bänke', V03: 'Sprossenwand, Barren, Reck', V04: 'Körbe, Seile, Sprunggeräte', V05: 'Balken, Netze, Tore, Technik', V06: 'Kleingeräte, Hütchen, Bälle', V07: 'Tischtennis, Banden, Türen', V08: 'Kinder in Bewegung', V09: 'Kinder (auch sitzend)', W04: 'WIMASU-Ergänzungen' };
 export function parseImageName(file) {
   const base = String(file).replace(/\.[a-z0-9]+$/i, '').trim();
   const m = base.match(/^([A-Z]\d{2})-(\d{3})\s*-\s*(.+?)(?:\s+-\s+([^-]+))?$/);
