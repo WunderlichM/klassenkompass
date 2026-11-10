@@ -883,6 +883,7 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
 .hall-work { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; align-items: start; }
 .hall-palette { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 10px 10px; max-height: calc(100dvh - 120px); overflow: auto; position: sticky; top: 80px; }
 .hall-palette summary { margin: 8px 0 6px; font-size: 13px; }
+.hall-palette .h-head { margin: 12px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .h-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .h-tile { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: #3a3c45; font-size: 11px; line-height: 1.15; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: grab; min-width: 0; }
 .h-tile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

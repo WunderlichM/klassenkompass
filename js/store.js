@@ -1,5 +1,6 @@
 // Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage).
 import { uid } from './engine.js';
+import { GEAR, gearSize } from './hallgear.js';
 
 const KEY = 'klassenkompass.v1';
 export const SCHEMA = 1;
@@ -142,14 +143,24 @@ function normScreen(s) {
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
 // ---------- Hallenpläne ----------
-export const HALL_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'bench', 'mat', 'softmat', 'box', 'goal', 'img'];
-const COLOR_RE = /^#[0-9a-f]{6}$/i;
+export const HALL_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
+// Einfache Geräte bis 1.12 → Geräte aus dem Katalog (Kennung, Ansicht, damalige Standardbreite)
+const OLD_GEAR = { bench: ['bank_lang', 'quer', 340], mat: ['turnmatte', 'quer', 230], softmat: ['weichboden', 'quer', 290], box: ['kasten4', 'quer', 120], goal: ['tor', 'frontal', 200] };
+const COLOR_RE = /^#[0-9a-f]{6}$/i, GEAR_RE = /^[a-z0-9_]{1,30}$/, VIEW_RE = /^[a-z]{1,20}$/;
+function oldGear(i) {
+  const o = OLD_GEAR[i?.kind]; if (!o) return i;
+  // gleiche Breite wie bisher, Höhe aus dem neuen Gerät
+  const [gear, view, w0] = o, s = gearSize(gear, view), f = Math.max(0.1, (Number(i.w) || w0) / s.w), w = Math.round(s.w * f), h = Math.round(s.h * f);
+  const cx = (Number(i.x) || 0) + (Number(i.w) || w0) / 2, cy = (Number(i.y) || 0) + (Number(i.h) || 0) / 2;
+  return { id: i.id, kind: 'gear', gear, view, x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), w, h, rot: i.rot };
+}
 function normHalls(list) {
   return (Array.isArray(list) ? list : []).slice(0, 60).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
-    items: (Array.isArray(p?.items) ? p.items : []).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img))).slice(0, 400).map(i => ({
+    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
       id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
-      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}) })) }));
+      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
+      ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) })) }));
 }
 function normHallLib(list) {
   const seen = new Set();

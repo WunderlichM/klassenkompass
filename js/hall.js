@@ -1,10 +1,11 @@
 // Hallenplaner (Sport): schräg von oben gesehene Halle, Elemente aus der Leiste hineinziehen, verschieben,
-// drehen und in der Größe ändern. Eigene Planungssymbole (Bereiche, Hütchen, Kinder, Pfeile …) zeichnet die App selbst.
-// Gerätebilder (z. B. die Vlamingo-Einzelbilder) fügt jede Lehrkraft selbst hinzu: Sie liegen nur auf ihren Geräten
-// (IndexedDB) und verschlüsselt im eigenen Konto – nie im öffentlichen Quellcode.
+// drehen und in der Größe ändern. Planungssymbole (Bereiche, Hütchen, Kinder, Pfeile …) und Geräte (hallgear.js)
+// zeichnet die App selbst. Zusätzlich kann jede Lehrkraft eigene Bilder hinzufügen: Sie liegen nur auf ihren
+// Geräten (IndexedDB) und verschlüsselt im eigenen Konto – nie im öffentlichen Quellcode.
 import * as store from './store.js';
 import * as images from './images.js';
 import { uid } from './engine.js';
+import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
 
 export const BW = 1600, BH = 1000;  // Zeichenfläche (Einheiten der viewBox)
@@ -23,19 +24,16 @@ const KINDS = {
   cross: { label: 'Sperrfläche', w: 64, h: 64, color: '#25272e', keep: true },
   tag: { label: 'Schild S/LK', w: 90, h: 64, text: 'S' },
   text: { label: 'Text', w: 260, h: 54, text: 'Text', color: '#25272e' },
-  bench: { label: 'Bank', w: 340, h: 54 },
-  mat: { label: 'Matte', w: 230, h: 90 },
-  softmat: { label: 'Weichboden', w: 290, h: 150 },
-  box: { label: 'Kasten', w: 120, h: 120 },
-  goal: { label: 'Tor', w: 200, h: 130 },
+  gear: { label: 'Gerät', keep: true },
   img: { label: 'Bild', keep: true },
 };
 const PLAN_TOOLS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text'];
-const SIMPLE_GEAR = ['bench', 'mat', 'softmat', 'box', 'goal'];
 const hasText = k => ['zone', 'cone', 'kid', 'tag', 'text'].includes(k);
-const hasColor = k => ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(k);
+const hasColor = i => (i.kind === 'gear' ? !!gear.GEAR[i.gear]?.color : ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(i.kind));
+// Seitenverhältnis beim Ziehen am Griff beibehalten (Geräte quer wie Bank oder Netz dürfen länger werden)
+const keepOf = i => (i.kind === 'gear' ? !gear.isStretch(i.gear, i.view) : !!KINDS[i.kind].keep);
 
-// Vlamingo-Einzelbilder: „V02-035 - Bank lang - quer.png“ → Gruppe, Name, Ansicht
+// Eigene Bilder mit Namen nach dem Muster „V02-035 - Bank lang - quer.png“ → Gruppe, Name, Ansicht
 const CATS = { V02: 'Matten, Kästen, Bänke', V03: 'Sprossenwand, Barren, Reck', V04: 'Körbe, Seile, Sprunggeräte', V05: 'Balken, Netze, Tore, Technik', V06: 'Kleingeräte, Hütchen, Bälle', V07: 'Tischtennis, Banden, Türen', V08: 'Kinder in Bewegung', V09: 'Kinder (auch sitzend)', W04: 'WIMASU-Ergänzungen' };
 export function parseImageName(file) {
   const base = String(file).replace(/\.[a-z0-9]+$/i, '').trim();
@@ -46,7 +44,8 @@ export function parseImageName(file) {
 }
 
 // ---------- Zustand ----------
-let host = null, selected = null, drag = null, libOpen = new Set();
+let host = null, selected = null, drag = null;
+const libOpen = new Set(['g:' + gear.GROUPS[0]]); // geöffnete Gruppen der Leiste
 const history = new Map(); // Plan-ID → { undo: [], redo: [] }
 const sp = () => store.get().sport;
 const plan = () => sp().halls.find(h => h.id === sp().activeHall) || sp().halls[0] || null;
@@ -122,24 +121,8 @@ function shape(i) {
       return `<rect x="3" y="3" width="${w - 6}" height="${h - 6}" fill="#fff" stroke="#1f2a3c" stroke-width="5"/><text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(h * .52)}" text-anchor="middle" class="h-label">${esc(i.text || '')}</text>`;
     case 'text':
       return `<text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(h * .72)}" text-anchor="middle" class="h-label" fill="${c}">${esc(i.text || '')}</text>`;
-    case 'bench': {
-      const top = h * .55;
-      return `<polygon points="${para(w, top)}" fill="#c99561" stroke="#6b4423" stroke-width="3"/><path d="M0 ${num(top)}h${num(w - top * K)}v${num(h * .18)}H0z" fill="#9c6a3a" stroke="#6b4423" stroke-width="3"/><path d="M${num(w * .1)} ${num(top + h * .18)}v${num(h * .27)}M${num(w * .85 - top * K)} ${num(top + h * .18)}v${num(h * .27)}" stroke="#6b4423" stroke-width="6"/>`;
-    }
-    case 'mat': {
-      const top = h * .8;
-      return `<polygon points="${para(w, top)}" fill="#4f7fc4" stroke="#24406e" stroke-width="3"/><path d="M0 ${num(top)}h${num(w - top * K)}v${num(h - top)}H0z" fill="#365f9c" stroke="#24406e" stroke-width="3"/>`;
-    }
-    case 'softmat': {
-      const top = h * .72;
-      return `<polygon points="${para(w, top)}" fill="#9cc0ea" stroke="#3d6fb5" stroke-width="3"/><path d="M0 ${num(top)}h${num(w - top * K)}v${num(h - top)}H0z" fill="#7aa5da" stroke="#3d6fb5" stroke-width="3"/>`;
-    }
-    case 'box': {
-      const top = h * .3, fw = w - top * K;
-      return `<polygon points="${para(w, top)}" fill="#f2ead8" stroke="#6b4423" stroke-width="3"/><rect x="0" y="${num(top)}" width="${num(fw)}" height="${num(h - top)}" fill="#c99561" stroke="#6b4423" stroke-width="3"/>${[1, 2, 3].map(n => `<line x1="0" x2="${num(fw)}" y1="${num(top + (h - top) * n / 4)}" y2="${num(top + (h - top) * n / 4)}" stroke="#6b4423" stroke-width="2"/>`).join('')}`;
-    }
-    case 'goal':
-      return `<rect x="4" y="4" width="${w - 8}" height="${h - 8}" fill="url(#h-net)" stroke="#c94040" stroke-width="8"/>`;
+    case 'gear':
+      return gear.gearSvg(i);
     case 'img':
       return `<rect class="h-ph" width="${w}" height="${h}" rx="6"/><text class="h-ph-t" x="${w / 2}" y="${h / 2}" dy=".35em" text-anchor="middle" font-size="${num(clamp(Math.min(w, h) * .16, 12, 28))}">Bild fehlt</text><image data-img="${esc(i.img)}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
   }
@@ -212,19 +195,26 @@ function tile(kind, extra = '') {
   const k = KINDS[kind], i = { id: 't', kind, x: 0, y: 0, w: k.w, h: k.h, rot: 0, color: k.color, text: kind === 'zone' ? '' : k.text };
   return `<button class="h-tile" data-add="${kind}" ${extra} title="${esc(k.label)} – ziehen oder antippen"><svg viewBox="-6 -6 ${k.w + 12} ${k.h + 12}" class="h-tile-svg">${defs}${shape(i)}</svg><span>${esc(k.label)}</span></button>`;
 }
+function gearTile(g) {
+  const v = g.views[0], { w, h } = gear.gearSize(g.id, v), i = { kind: 'gear', gear: g.id, view: v, w, h };
+  return `<button class="h-tile" data-add="gear" data-gear="${esc(g.id)}" title="${esc(g.name)}${g.views.length > 1 ? ` (${g.views.length} Ansichten)` : ''} – ziehen oder antippen"><svg viewBox="-4 -4 ${w + 8} ${h + 8}" class="h-tile-svg">${defs}${shape(i)}</svg><span>${esc(g.short)}</span></button>`;
+}
 function paletteHtml() {
   const lib = sp().hallLib, byKey = new Map();
   for (const e of [...lib].sort((a, b) => (a.code || '~').localeCompare(b.code || '~') || a.name.localeCompare(b.name))) if (!byKey.has(e.key)) byKey.set(e.key, e);
   const cats = new Map();
   for (const e of byKey.values()) { if (!cats.has(e.cat)) cats.set(e.cat, []); cats.get(e.cat).push(e); }
   const imgTile = e => { const n = lib.filter(x => x.key === e.key).length; return `<button class="h-tile img" data-addimg="${esc(e.id)}" title="${esc(e.name)}${n > 1 ? ` (${n} Ansichten)` : ''} – ziehen oder antippen">${images.imgTag(e.id, 'h-thumb')}<span>${esc(e.name)}</span></button>`; };
+  const gearCats = gear.GROUPS.map(c => [c, gear.gearList().filter(g => g.group === c)]);
   return `<details open><summary>Planung</summary><div class="h-tiles">${PLAN_TOOLS.map(k => tile(k)).join('')}</div></details>
-    <details ${lib.length ? '' : 'open'}><summary>Geräte (einfach)</summary><div class="h-tiles">${SIMPLE_GEAR.map(k => tile(k)).join('')}</div></details>
+    <p class="h-head">Geräte</p>
+    ${gearCats.map(([c, list]) => `<details data-cat="${esc('g:' + c)}" ${libOpen.has('g:' + c) ? 'open' : ''}><summary>${esc(c)} <span class="muted">${list.length}</span></summary><div class="h-tiles gear">${list.map(gearTile).join('')}</div></details>`).join('')}
+    ${cats.size ? '<p class="h-head">Eigene Bilder</p>' : ''}
     ${[...cats.entries()].map(([c, list]) => `<details data-cat="${esc(c)}" ${libOpen.has(c) ? 'open' : ''}><summary>${esc(c)} <span class="muted">${list.length}</span></summary><div class="h-tiles imgs">${list.map(imgTile).join('')}</div></details>`).join('')}
     <div class="h-lib">
-      <button class="btn ghost sm" data-h="import">${icon('upload', 15)} Gerätebilder hinzufügen</button>
+      <button class="btn ghost sm" data-h="import">${icon('upload', 15)} Eigene Bilder hinzufügen</button>
       ${lib.length ? `<button class="link small-text" data-h="lib">${lib.length} Bilder verwalten</button>` : ''}
-      <p class="muted small-text">Z. B. die Einzelbilder des Hallenplanbretts (Vlamingo/WIMASU, PNG) – alle auf einmal auswählen. Sie bleiben auf deinen Geräten und, mit Konto, verschlüsselt in deinem Konto; sie werden nicht veröffentlicht.</p>
+      <p class="muted small-text">Optional, die Geräte oben sind immer da. Eigene Bilder (PNG) bleiben auf deinen Geräten und, mit Konto, verschlüsselt in deinem Konto; sie werden nicht veröffentlicht.</p>
       <input type="file" data-hc="files" accept="image/png,image/webp,image/*" multiple hidden>
     </div>`;
 }
@@ -233,11 +223,14 @@ function selBarHtml(p) {
   const i = itemOf(p, selected);
   if (!i) return `<span class="muted small-text">Elemente aus der Leiste in die Halle ziehen oder antippen. Ein Element antippen, um es zu bearbeiten.</span>`;
   const variants = i.kind === 'img' ? sp().hallLib.filter(e => e.key === libEntry(i.img)?.key) : [];
-  const cur = libEntry(i.img);
-  return `<b class="small-text">${esc(i.kind === 'img' ? (cur ? cur.name + (cur.view ? ' · ' + cur.view : '') : 'Bild') : KINDS[i.kind].label)}</b>
+  const cur = libEntry(i.img), g = i.kind === 'gear' ? gear.GEAR[i.gear] : null;
+  const views = g ? g.views : variants, vi = g ? Math.max(0, g.views.indexOf(i.view)) : variants.indexOf(cur);
+  const label = i.kind === 'img' ? (cur ? cur.name + (cur.view ? ' · ' + cur.view : '') : 'Bild')
+    : i.kind === 'gear' ? (g ? g.name + (g.views.length > 1 ? ' · ' + gear.viewLabel(g.views[vi]) : '') : 'Gerät') : KINDS[i.kind].label;
+  return `<b class="small-text">${esc(label)}</b>
     ${hasText(i.kind) ? (i.kind === 'zone' ? `<textarea class="input sm h-text" data-hc="text" rows="1" maxlength="60" aria-label="Beschriftung">${esc(i.text || '')}</textarea>` : `<input class="input sm h-text" data-hc="text" maxlength="${i.kind === 'text' ? 60 : 8}" value="${esc(i.text || '')}" aria-label="Beschriftung">`) : ''}
-    ${hasColor(i.kind) ? `<span class="h-colors">${COLORS.map(([c, n]) => `<button class="h-color ${i.color === c ? 'on' : ''}" style="--c:${c}" data-h="color" data-color="${c}" title="${n}" aria-label="${n}"></button>`).join('')}</span>` : ''}
-    ${variants.length > 1 ? `<button class="btn ghost sm" data-h="view">${icon('repeat', 15)} Ansicht wechseln <span class="muted">${variants.indexOf(cur) + 1}/${variants.length}</span></button>` : ''}
+    ${hasColor(i) ? `<span class="h-colors">${COLORS.map(([c, n]) => `<button class="h-color ${i.color === c ? 'on' : ''}" style="--c:${c}" data-h="color" data-color="${c}" title="${n}" aria-label="${n}"></button>`).join('')}</span>` : ''}
+    ${views.length > 1 ? `<button class="btn ghost sm" data-h="view">${icon('repeat', 15)} Ansicht wechseln <span class="muted">${vi + 1}/${views.length}</span></button>` : ''}
     ${KINDS[i.kind].rotate === false ? '' : `<button class="icon-btn sm" data-h="rot" data-d="-15" title="Nach links drehen" aria-label="Nach links drehen">${icon('reset', 16)}</button><button class="icon-btn sm h-flip" data-h="rot" data-d="15" title="Nach rechts drehen" aria-label="Nach rechts drehen">${icon('reset', 16)}</button>`}
     <button class="icon-btn sm" data-h="size" data-d="0.85" title="Kleiner" aria-label="Kleiner">−</button><button class="icon-btn sm" data-h="size" data-d="1.18" title="Größer" aria-label="Größer">+</button>
     <button class="btn ghost sm" data-h="dup">Kopie</button>
@@ -269,11 +262,13 @@ function toBoard(svg, cx, cy) {
   const pt = new DOMPoint(cx, cy).matrixTransform(m.inverse()); return { x: pt.x, y: pt.y };
 }
 
-function newItem(kind, at, imgEntry) {
+function newItem(kind, at, imgEntry, gearId) {
   const k = KINDS[kind];
   let w = k.w, h = k.h;
+  const g = kind === 'gear' ? gear.GEAR[gearId] : null;
+  if (kind === 'gear') { if (!g) return; ({ w, h } = gear.gearSize(g.id, g.views[0])); }
   if (kind === 'img') {
-    // Vlamingo-Bilder haben einen gemeinsamen Maßstab (≈ 0,3), WIMASU-Bilder sind kleiner gezeichnet; eigene Bilder: höchstens 240
+    // Bilder mit Kennung V… (Hallenplanbrett) haben einen gemeinsamen Maßstab (≈ 0,3), W… sind kleiner gezeichnet; sonst höchstens 240
     const k0 = /^V/.test(imgEntry.code) ? 0.3 : /^W/.test(imgEntry.code) ? 1 : 240 / Math.max(imgEntry.w, imgEntry.h);
     const s = Math.min(k0, 420 / Math.max(imgEntry.w, imgEntry.h)); w = Math.max(24, Math.round(imgEntry.w * s)); h = Math.max(24, Math.round(imgEntry.h * s));
   }
@@ -282,6 +277,7 @@ function newItem(kind, at, imgEntry) {
   const i = { id: uid(), kind, x: Math.round(pos.x - w / 2), y: Math.round(pos.y - h / 2), w, h, rot: 0 };
   if (k.color) i.color = k.color;
   if (kind === 'img') i.img = imgEntry.id;
+  if (g) { i.gear = g.id; i.view = g.views[0]; if (g.color) i.color = g.color; }
   if (kind === 'cone') i.text = 'H' + (p.items.filter(x => x.kind === 'cone').length + 1);
   else if (kind === 'kid') i.text = String(p.items.filter(x => x.kind === 'kid').length + 1);
   else if (kind === 'zone') i.text = 'Gruppe ' + (p.items.filter(x => x.kind === 'zone').length + 1);
@@ -294,7 +290,7 @@ function newItem(kind, at, imgEntry) {
 // ---------- Bedienung ----------
 async function onClick(e) {
   const t = e.target.closest('[data-add],[data-addimg]');
-  if (t && e.detail === 0) return newItem(t.dataset.add || 'img', null, t.dataset.addimg ? libEntry(t.dataset.addimg) : null); // Tastatur
+  if (t && e.detail === 0) return newItem(t.dataset.add || 'img', null, t.dataset.addimg ? libEntry(t.dataset.addimg) : null, t.dataset.gear); // Tastatur
   const b = e.target.closest('[data-h]'); if (!b) return;
   const act = b.dataset.h, p = plan();
   const i = itemOf(p, selected);
@@ -326,6 +322,12 @@ async function onClick(e) {
     case 'back': return commit(x => { const k = x.items.findIndex(y => y.id === i.id); x.items.unshift(...x.items.splice(k, 1)); });
     case 'del': selected = null; return commit(x => { x.items = x.items.filter(y => y.id !== i.id); });
     case 'view': {
+      if (i.kind === 'gear') {
+        const g = gear.GEAR[i.gear]; if (!g || g.views.length < 2) return;
+        const nv = g.views[(Math.max(0, g.views.indexOf(i.view)) + 1) % g.views.length];
+        return commit(x => { const t = itemOf(x, i.id), a = gear.gearSize(g.id, t.view), b2 = gear.gearSize(g.id, nv), f = Math.sqrt((t.w * t.h) / (a.w * a.h)), cx = t.x + t.w / 2, cy = t.y + t.h / 2;
+          t.view = nv; t.w = Math.round(b2.w * f); t.h = Math.round(b2.h * f); t.x = Math.round(cx - t.w / 2); t.y = Math.round(cy - t.h / 2); });
+      }
       const cur = libEntry(i.img), vs = sp().hallLib.filter(e => e.key === cur?.key); if (vs.length < 2) return;
       const nx = vs[(vs.indexOf(cur) + 1) % vs.length];
       return commit(x => { const t = itemOf(x, i.id), area = t.w * t.h, r = nx.w / nx.h, cx = t.x + t.w / 2, cy = t.y + t.h / 2;
@@ -373,7 +375,7 @@ function onPointerDown(e) {
   if (selected !== i.id) select(i.id);
   host.querySelector('.hall-board')?.focus({ preventScroll: true });
   const el = host.querySelector(`.hi[data-hid="${CSS.escape(i.id)}"]`), sel = host.querySelector('[data-sel]');
-  const start = toBoard(svg, e.clientX, e.clientY), o = { ...i }, mode = grip?.dataset.grip || 'move', keep = KINDS[i.kind].keep;
+  const start = toBoard(svg, e.clientX, e.clientY), o = { ...i }, mode = grip?.dataset.grip || 'move', keep = keepOf(i);
   let cur = { ...i }, moved = false;
   const apply = () => { const tr = `translate(${num(cur.x)} ${num(cur.y)})${cur.rot ? ` rotate(${cur.rot} ${num(cur.w / 2)} ${num(cur.h / 2)})` : ''}`; el.setAttribute('transform', tr); sel.setAttribute('transform', tr); };
   const move = ev => {
@@ -406,7 +408,7 @@ function onPointerDown(e) {
 
 function startTileDrag(e, tileEl) {
   e.preventDefault();
-  const kind = tileEl.dataset.add || 'img', entry = tileEl.dataset.addimg ? libEntry(tileEl.dataset.addimg) : null;
+  const kind = tileEl.dataset.add || 'img', entry = tileEl.dataset.addimg ? libEntry(tileEl.dataset.addimg) : null, gid = tileEl.dataset.gear;
   const sx = e.clientX, sy = e.clientY;
   let ghost = null;
   const move = ev => {
@@ -420,9 +422,9 @@ function startTileDrag(e, tileEl) {
     removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
     const wasDrag = !!ghost; ghost?.remove();
     if (ev.type === 'pointercancel') return;
-    if (!wasDrag) return newItem(kind, null, entry);       // nur angetippt: in die Mitte setzen
+    if (!wasDrag) return newItem(kind, null, entry, gid);  // nur angetippt: in die Mitte setzen
     const svg = host?.querySelector('.hall-board svg'), over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.hall-board svg');
-    if (svg && over === svg) newItem(kind, toBoard(svg, ev.clientX, ev.clientY), entry);
+    if (svg && over === svg) newItem(kind, toBoard(svg, ev.clientX, ev.clientY), entry, gid);
   };
   addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
 }
@@ -461,7 +463,7 @@ async function importImages(files) {
 function libDialog() {
   const lib = sp().hallLib, cats = [...new Set(lib.map(e => e.cat))];
   const usedIds = new Set(sp().halls.flatMap(p => p.items.map(i => i.img).filter(Boolean)));
-  dialog({ title: 'Gerätebilder verwalten', submit: null, cancel: 'Schließen', wide: true, body: `
+  dialog({ title: 'Eigene Bilder verwalten', submit: null, cancel: 'Schließen', wide: true, body: `
     <p class="muted small-text">Entfernt nur Bilder aus der Leiste. Bilder, die in einem Hallenplan stehen, bleiben dort erhalten.</p>
     ${cats.map(c => `<div class="h-libcat"><b>${esc(c)}</b> <span class="muted">${lib.filter(e => e.cat === c).length}</span> <button type="button" class="link small-text" data-delcat="${esc(c)}">Gruppe entfernen</button></div>`).join('')}
     <p><button type="button" class="btn ghost sm danger" data-delall>Alle Bilder aus der Leiste entfernen</button></p>
