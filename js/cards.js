@@ -1,4 +1,5 @@
 // Antwortkarten für das Kartenquiz: Muster, Druckbild und Auswertung der Drehung.
+import { animalSvg } from './animals.js';
 // Jede Karte trägt ein 7 × 7-Raster: schwarzer Rand und innen 5 × 5 Felder mit einem eigenen Code.
 // Die 40 Codes unterscheiden sich untereinander – auch gedreht – in mindestens 7 Feldern.
 export const CARD_COUNT = 40;
@@ -34,7 +35,8 @@ export function matchCode(read, maxErr = 1) {
 // Druckbild einer Karte als SVG. Maße in Rastereinheiten: Rand 2,2 Einheiten um das 7er-Raster.
 const M = 2.2, SIZE = 7 + 2 * M;
 // name: Vorname gut sichtbar oben links neben der Nummer (zum Austeilen); bleibt mit Abstand außerhalb des Musters
-export function cardSvg(n, { name = '', size = '100%' } = {}) {
+// animal: Tiersymbol vor dem Namen (Karte n = festes Tier)
+export function cardSvg(n, { name = '', size = '100%', animal = false } = {}) {
   const code = CODES[n - 1];
   let cells = '';
   for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
@@ -47,14 +49,19 @@ export function cardSvg(n, { name = '', size = '100%' } = {}) {
     <rect width="${SIZE}" height="${SIZE}" fill="#fff"/>
     <g fill="#111">${cells}</g>
     ${letter('A', mid, off, 0)}${letter('B', SIZE - off, mid, 90)}${letter('C', mid, SIZE - off, 180)}${letter('D', off, mid, -90)}
-    ${name ? nameText(n, name) : `<text x="0.45" y="0.55" font-size="0.42" fill="#9a9aa3" dominant-baseline="hanging">${n}</text>`}
+    ${name ? nameText(n, name, animal) : `<text x="0.45" y="0.55" font-size="0.42" fill="#9a9aa3" dominant-baseline="hanging">${n}</text>`}
   </svg>`;
 }
 // Nummer und Name in der Ecke oben links; lange Namen werden auf den Platz bis vor das „A“ gestaucht
-function nameText(n, name) {
+function nameText(n, name, animal = false) {
   const t = String(name).replace(/[&<>"]/g, '').trim();
-  const fs = 0.6, x = 0.45, room = SIZE / 2 - 0.65 - x;
+  const sy = animal ? animalSvg(n, { size: '1.25', title: false }).replace('<svg ', `<svg x="${(0.45 + String(n).length * 0.36 + 0.15).toFixed(2)}" y="0.22" `) : '';
+  const fs = 0.6, x = 0.45, room = SIZE / 2 - 0.65 - x - (animal ? 1.45 : 0);
   const est = (String(n).length + 1.5 + t.length) * fs * 0.56;
   const fit = est > room ? ` textLength="${room.toFixed(2)}" lengthAdjust="spacingAndGlyphs"` : '';
+  if (animal) {
+    const nx = 0.45 + String(n).length * 0.36 + 1.55, room2 = SIZE / 2 - 0.65 - nx, fit2 = t.length * fs * 0.56 > room2 ? ` textLength="${room2.toFixed(2)}" lengthAdjust="spacingAndGlyphs"` : '';
+    return `<text x="${x}" y="0.42" font-size="${fs}" font-weight="700" fill="#55555d" dominant-baseline="hanging">${n}</text>${sy}<text x="${nx.toFixed(2)}" y="0.42" font-size="${fs}" font-weight="600" fill="#55555d" dominant-baseline="hanging"${fit2}>${t}</text>`;
+  }
   return `<text x="${x}" y="0.42" font-size="${fs}" fill="#55555d" dominant-baseline="hanging"${fit}><tspan font-weight="700">${n}</tspan><tspan font-weight="600" dx="${(fs * 0.5).toFixed(2)}">${t}</tspan></text>`;
 }

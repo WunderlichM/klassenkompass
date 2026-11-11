@@ -2,7 +2,8 @@
 import * as store from './store.js';
 import * as account from './account.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, namesFromText, todayISO, displayDate, downloadFile, toggleFullscreen } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen } from './ui.js';
+import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
 import * as images from './images.js';
@@ -12,15 +13,10 @@ const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localSt
 const TYPES = { abcd: { name: 'A – D (4 Antworten)', n: 4 }, abc: { name: 'A – C (3 Antworten)', n: 3 }, ab: { name: 'A – B (2 Antworten)', n: 2 }, tf: { name: 'Richtig / Falsch', n: 2 } };
 
 const Q = () => store.get().quiz;
-// Decknamen: Ist die Ansicht eingeschaltet, zeigt das Quiz keine Klassenlisten. Es gibt nur eine Anzahl Kinder;
-// jede Karte trägt einen festen Fantasienamen (auch im Druck, im Quiz, im Ergebnis und in der CSV).
-const ALIAS = ['Adler', 'Biber', 'Dachs', 'Delfin', 'Eule', 'Falke', 'Fuchs', 'Gecko', 'Hase', 'Igel', 'Jaguar', 'Koala', 'Lama', 'Luchs', 'Marder', 'Möwe', 'Nashorn', 'Otter', 'Panda', 'Pinguin',
-  'Qualle', 'Rabe', 'Robbe', 'Specht', 'Storch', 'Tiger', 'Uhu', 'Wal', 'Wolf', 'Zebra', 'Ameise', 'Bär', 'Elch', 'Fasan', 'Giraffe', 'Hamster', 'Kiwi', 'Lemur', 'Milan', 'Puma'];
-const ALIAS_ID = 'alias';
-const aliasOn = () => !!Q().alias?.on;
-const aliasClass = () => ({ id: ALIAS_ID, name: 'Lerngruppe', alias: true,
-  students: Array.from({ length: Math.max(1, Math.min(CARD_COUNT, Q().alias?.count || 16)) }, (_, i) => ({ id: `${ALIAS_ID}-${i + 1}`, name: ALIAS[i], card: i + 1 })) });
-const cls = () => aliasOn() ? aliasClass() : Q().classes.find(c => c.id === Q().activeClassId) || null;
+// Seit 1.17.0 nur Tiernamen: Jede Quiz-Klasse hat Name und Kinderzahl; Karte 1 ist immer der Adler, Karte 2 der Biber …
+// Wer welches Tier ist, steht nur auf dem Zuordnungsblatt der Lehrkraft (Papier), nie in der App.
+const cls = () => Q().classes.find(c => c.id === Q().activeClassId) || null;
+const sym = (card, size = '1.35em') => animalSvg(card, { size, title: false });
 const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
 const present = s => s.students.filter(x => !s.absent?.includes(x.id));
@@ -30,7 +26,7 @@ const absentByClass = new Map();
 const absentFor = id => { if (!absentByClass.has(id)) absentByClass.set(id, new Set()); return absentByClass.get(id); };
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
-let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null;
+let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null, rankId = null;
 // Nur für die Optik: welche Antworten schon gezeigt wurden (Kachel „springt“ nur beim ersten Mal), welche Auflösung schon animiert wurde, welches Podium schon Konfetti hatte
 const seenAns = new Set(); let seenQ = '', revealAnim = '', confettiFor = '';
 const live = { remote: null, scanTimer: null, keep: null, lastControl: '', lastCmd: null, applied: new Map(), phoneAt: 0, lastScanAt: 0, error: '' };
@@ -52,7 +48,8 @@ function draw() {
   if (!root) return;
   const s = running();
   if (s) { drawRun(s); startScanPoll(); syncControl(s); checkAuto(s); }
-  else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId); if (p) drawPodium(p); else { podiumId = null; drawHome(); } }
+  else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId), r = !p && rankId && Q().classes.find(x => x.id === rankId);
+    if (p) drawPodium(p); else if (r) drawRanking(r); else { podiumId = rankId = null; drawHome(); } }
   images.hydrate(root);
   keepAwake(!!(s || podiumId));
 }
@@ -85,14 +82,14 @@ function checkAuto(s) {
 function ranking(s) {
   const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
   if (!graded.length) return { graded: 0, places: [] };
-  const scores = s.students.map(x => ({ name: x.name, score: graded.filter(q => q.answers[x.id] === q.correct).length })).filter(x => x.score > 0);
+  const scores = s.students.map(x => ({ name: x.name, card: x.card, score: graded.filter(q => q.answers[x.id] === q.correct).length })).filter(x => x.score > 0);
   const levels = [...new Set(scores.map(x => x.score))].sort((a, b) => b - a).slice(0, 3);
-  return { graded: graded.length, places: levels.map((score, i) => ({ place: i + 1, score, names: scores.filter(x => x.score === score).map(x => x.name).sort((a, b) => a.localeCompare(b, 'de')) })) };
+  return { graded: graded.length, places: levels.map((score, i) => ({ place: i + 1, score, names: scores.filter(x => x.score === score).sort((a, b) => a.name.localeCompare(b.name, 'de')) })) };
 }
 function drawPodium(s) {
   const { graded, places } = ranking(s);
   const step = n => { const p = places[n - 1]; if (!p) return `<div class="pod-col empty"></div>`;
-    return `<div class="pod-col p${n}"><div class="pod-names ${p.names.length > 4 ? 'many' : ''}">${p.names.map(x => `<span>${esc(x)}</span>`).join('')}</div>
+    return `<div class="pod-col p${n}"><div class="pod-names ${p.names.length > 4 ? 'many' : ''}">${p.names.map(x => `<span>${sym(x.card, '1.2em')} ${esc(x.name)}</span>`).join('')}</div>
       <div class="pod-step"><span class="pod-place">${n}</span><span class="pod-score">${p.score} / ${graded} richtig</span></div></div>`; };
   root.innerHTML = `
   <section class="page quiz quiz-podium">
@@ -120,11 +117,9 @@ function confetti(id) {
 // Startseite
 // ======================================================================
 function drawHome() {
-  const q = Q(), c = cls(), t = qset(), al = aliasOn();
-  // Mit Decknamen bleiben Ergebnisse der echten Klassen ausgeblendet (sie sind nicht gelöscht)
-  const mine = x => !al || x.classId === ALIAS_ID;
-  const done = q.sessions.filter(x => x.done && mine(x)).slice().reverse();
-  const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId && mine(x));
+  const q = Q(), c = cls(), t = qset();
+  const done = q.sessions.filter(x => x.done).slice().reverse();
+  const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId);
   root.innerHTML = `
   <section class="page quiz">
     <div class="page-head">
@@ -134,15 +129,13 @@ function drawHome() {
         <p class="sub">Jede Karte eine Stimme – ohne Handys für die Kinder.</p>
       </div>
       <div class="picker">
-        ${al ? `<label class="eyebrow" for="quiz-count">Anzahl Kinder</label>
-        <div class="picker-row"><input id="quiz-count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${c.students.length}" inputmode="numeric" style="max-width:110px"></div>` : `<label class="eyebrow" for="quiz-class">Deine Klasse</label>
+        <label class="eyebrow" for="quiz-class">Deine Klasse</label>
         <div class="picker-row">
           <select id="quiz-class" class="select">${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeClassId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${q.classes.length ? '' : '<option>Noch keine Klasse</option>'}</select>
           <button class="icon-btn" data-act="classes" title="Klassen verwalten" aria-label="Klassen verwalten">${icon('sliders')}</button>
-        </div>`}
+        </div>
       </div>
     </div>
-    ${!al && technikMissing().length ? `<p class="notice">${technikMissing().length} Technik-Klasse(n) (${technikMissing().map(c => esc(c.name)).join(', ')}) sind noch nicht im Quiz. <button class="link" data-act="import-technik"><b>Jetzt übernehmen</b></button></p>` : ''}
     ${live.remote ? `<div class="card live-banner"><div><b>${icon('camera', 18)} Live-Quiz auf einem anderen Gerät</b><span class="muted">${esc(live.remote.className)} · Frage ${live.remote.index + 1}/${live.remote.total}</span></div><button class="btn primary big" data-act="scan-remote">${icon('camera')} Karten scannen</button></div>` : ''}
     <div class="work-grid">
       <div>
@@ -169,26 +162,27 @@ function drawHome() {
           ${other.length ? other.map(x => `<p class="notice">Auf einem anderen Gerät läuft noch: ${esc(x.title)} · ${esc(x.className)} <button class="link" data-act="end-other" data-id="${esc(x.id)}">als beendet markieren</button></p>`).join('') : ''}
           ${done.length ? `<ul class="result-list">${done.map(x => { const st = stats(x); return `<li><button class="result-row" data-act="result" data-id="${esc(x.id)}"><span class="r-date">${esc(displayDate(x.date))}</span><span class="r-title"><b>${esc(x.title)}</b><small>${esc(x.className)} · ${x.questions.length} Frage(n) · ${st.answered} Antworten</small></span><span class="r-score">${st.pct === null ? '–' : st.pct + ' %'}</span></button></li>`; }).join('')}</ul>` : '<p class="muted small-text">Noch keine Ergebnisse. Nach jedem Quiz erscheinen sie hier.</p>'}
         </div>
+        ${c ? rankCard(c) : ''}
       </div>
       <aside class="side">
         <div class="card">
           <div class="card-head small">
             <h3>${icon('cards', 16)} Klasse &amp; Karten ${c ? `<span class="badge">${c.students.length}</span>` : ''}</h3>
-            ${c && !al ? `<button class="icon-btn sm" data-act="students-add" title="Schüler hinzufügen" aria-label="Schüler hinzufügen">${icon('plus', 16)}</button>` : ''}
+            ${c ? `<button class="icon-btn sm" data-act="class-edit" title="Name oder Kinderzahl ändern" aria-label="Klasse bearbeiten">${icon('edit', 16)}</button>` : ''}
           </div>
-          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span><span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button>${al ? '' : `<button class="icon-btn xs" data-act="student-edit" data-id="${esc(s.id)}" title="Kartennummer ändern oder entfernen" aria-label="${esc(s.name)} bearbeiten">${icon('edit', 14)}</button>`}</li>`).join('')}</ul>
-          <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. ${al ? 'Jede Karte hat eine feste Nummer und einen Decknamen; beides steht auch auf der gedruckten Karte.' : 'Jedes Kind behält seine Kartennummer; gedruckt werden nur die Karten dieser Klasse mit Namen.'}</p>`; })() : `<p class="muted">Lege eine Klasse an oder übernimm die Namen aus Technik oder Sport.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
+          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span>${sym(s.card)}<span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button></li>`).join('')}</ul>
+          <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind hat ein festes Tier (Karte 1 Adler, 2 Biber …) – in allen Klassen gleich. Wer welches Tier ist, steht nur auf deinem Zuordnungsblatt.</p>`; })() : `<p class="muted">Lege eine Klasse an: Name und Anzahl der Kinder genügen.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
           <button class="btn ghost full" data-act="print">${icon('print', 16)} Karten drucken</button>
+          <button class="btn ghost full" data-act="print-sheet" style="margin-top:8px">${icon('print', 16)} Zuordnungsblatt drucken</button>
         </div>
         <div class="card">
           <h3>${icon('help', 16)} So geht’s</h3>
           <ol class="help-list steps small-text">
-            <li>Karten der Klasse drucken (am besten auf festem Papier). Nummer und Vorname stehen auf jeder Karte – so ist schnell ausgeteilt.</li>
+            <li>Einen Kartensatz drucken (am besten auf festem Papier) – er passt für alle Klassen. Jede Karte trägt Nummer und Tier. Mit dem Zuordnungsblatt notieren die Kinder einmal, welches Tier sie haben; das Blatt bleibt bei dir.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
-            <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf seinen Namen → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
+            <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf sein Tier → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
           </ol>
-          <p class="small-text" style="margin:10px 0 0;text-align:right"><button class="link muted" data-act="view-settings">Ansicht</button></p>
         </div>
       </aside>
     </div>
@@ -270,12 +264,12 @@ function drawRun(s) {
     <div class="card">
       <div class="card-head small"><h3>${icon('users', 16)} ${esc(s.className)}</h3>
         <div class="tools no-present"><label class="check"><input type="checkbox" data-act="auto" ${Q().autoReveal !== false ? 'checked' : ''}> Automatisch auflösen, wenn alle geantwortet haben</label>
-        <label class="check"><input type="checkbox" data-act="names" ${showNames ? 'checked' : ''}> Antworten bei den Namen zeigen</label></div></div>
-      <div class="tiles">${s.students.slice().sort((a, b) => a.name.localeCompare(b.name, 'de')).map(x => {
-        if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
+        <label class="check"><input type="checkbox" data-act="names" ${showNames ? 'checked' : ''}> Antworten bei den Tieren zeigen</label></div></div>
+      <div class="tiles">${s.students.slice().sort((a, b) => a.card - b.card).map(x => {
+        if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
         const a = byStudent[x.id], has = a !== undefined, open = s.reveal && showNames && has;
         const cl = !has ? '' : open && q.correct !== null ? (a === q.correct ? 'right' : 'miss') : 'done';
-        return `<button class="tile ${cl} ${has && fresh(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span><span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
+        return `<button class="tile ${cl} ${has && fresh(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
       }).join('')}</div>
       <p class="hint no-present">${phone}${live.error ? ` · <span class="warn-text">${esc(live.error)}</span>` : ''}</p>
     </div>
@@ -289,7 +283,6 @@ function onChange(e) {
   const t = e.target;
   if (t.id === 'quiz-class') store.update(s => { s.quiz.activeClassId = t.value; });
   else if (t.id === 'quiz-set') store.update(s => { s.quiz.activeSetId = t.value; });
-  else if (t.id === 'quiz-count') store.update(s => { s.quiz.alias = { on: true, count: Math.max(1, Math.min(CARD_COUNT, Math.round(Number(t.value)) || 1)) }; });
   else if (t.dataset.act === 'names') { showNames = t.checked; draw(); }
   else if (t.dataset.act === 'auto') store.update(s => { s.quiz.autoReveal = t.checked; });
   else if (t.dataset.act === 'set-correct' && t.value !== '') updateRun(s => { s.questions[s.index].correct = Number(t.value); });
@@ -301,14 +294,16 @@ function onClick(e) {
   switch (act) {
     case 'classes': return classesDialog();
     case 'class-new': return classDialog();
-    case 'import-technik': return importTechnik();
-    case 'students-add': return studentsAddDialog(cls());
-    case 'student-edit': return studentDialog(cls(), b.dataset.id);
+    case 'class-edit': return classEditDialog(cls());
     case 'student-absent': { const off = absentFor(cls().id), id = b.dataset.id; off.has(id) ? off.delete(id) : off.add(id); return draw(); }
     case 'print': return printDialog();
+    case 'print-sheet': return sheetDialog();
+    case 'rank-show': rankId = cls()?.id || null; draw(); return scrollTo(0, 0);
+    case 'rank-close': rankId = null; if (document.body.classList.contains('presenting')) toggleFullscreen(); return draw();
+    case 'rank-csv': return rankCsv(cls());
+    case 'rank-reset': return rankReset(cls());
     case 'set-new': return setDialog();
     case 'set-import': return importSetsDialog();
-    case 'view-settings': return viewDialog();
     case 'set-edit': return setDialog(qset());
     case 'q-add': return questionDialog(qset());
     case 'q-edit': return questionDialog(qset(), i);
@@ -342,7 +337,7 @@ function start(quick) {
   const questions = quick ? [{ id: uid(), text: '', options: ['', '', '', ''], correct: null }] : t.questions.filter(x => x.options.length >= 2);
   store.update(s => {
     if (old) s.quiz.sessions.find(x => x.id === old.id).done = true;
-    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), index: 0, reveal: false, done: false, absent: c.students.filter(x => absentFor(c.id).has(x.id)).map(x => x.id),
+    s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), at: Date.now(), index: 0, reveal: false, done: false, absent: c.students.filter(x => absentFor(c.id).has(x.id)).map(x => x.id),
       students: c.students.map(x => ({ id: x.id, name: x.name, card: x.card })), questions: questions.map(x => ({ ...structuredClone(x), id: uid(), answers: {} })) });
   });
   live.applied.clear(); live.lastCmd = null; live.lastControl = '';
@@ -516,95 +511,110 @@ function applyScans(s, p) {
 function classesDialog() {
   const q = Q();
   dialog({ title: 'Quiz-Klassen', submit: null, cancel: 'Schließen', body: `
-    <ul class="manage-list">${q.classes.map(c => `<li><span class="name"><b>${esc(c.name)}</b> <small class="muted">${c.students.length} Schüler</small></span>
-      <button type="button" class="icon-btn sm" data-m="edit" data-id="${esc(c.id)}" title="Umbenennen" aria-label="Umbenennen">${icon('edit', 15)}</button>
+    <ul class="manage-list">${q.classes.map(c => `<li><span class="name"><b>${esc(c.name)}</b> <small class="muted">${c.count} Kinder · ${esc(ANIMALS[0])} bis ${esc(ANIMALS[c.count - 1])}</small></span>
+      <button type="button" class="icon-btn sm" data-m="edit" data-id="${esc(c.id)}" title="Name oder Kinderzahl ändern" aria-label="Bearbeiten">${icon('edit', 15)}</button>
       <button type="button" class="icon-btn sm" data-m="del" data-id="${esc(c.id)}" title="Löschen" aria-label="Löschen">${icon('trash', 15)}</button></li>`).join('') || '<li class="muted">Noch keine Klasse.</li>'}</ul>
-    <button type="button" class="btn primary full" data-m="new">${icon('plus')} Neue Klasse</button>
-    <button type="button" class="btn ghost full" data-m="technik" style="margin-top:8px">${icon('technik')} Technik-Klassen übernehmen / aktualisieren</button>`,
+    <button type="button" class="btn primary full" data-m="new">${icon('plus')} Neue Klasse</button>`,
     onOpen: (el, close) => el.querySelectorAll('[data-m]').forEach(b => b.onclick = async () => {
       const id = b.dataset.id, c = Q().classes.find(x => x.id === id);
       if (b.dataset.m === 'new') { close(); return classDialog(); }
-      if (b.dataset.m === 'technik') { close(); return importTechnik(); }
-      if (b.dataset.m === 'edit') { close(); return renameClass(c); }
+      if (b.dataset.m === 'edit') { close(); return classEditDialog(c); }
       close();
-      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
+      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten, die Rangliste der Klasse entfällt.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
     }) });
 }
-function renameClass(c) {
-  dialog({ title: 'Klasse umbenennen', body: `<label class="field">Name<input name="name" class="input" value="${esc(c.name)}" maxlength="60" required></label>`,
-    onSubmit: fd => { const n = String(fd.get('name')).trim(); if (!n) throw new Error('Bitte einen Namen eingeben.'); store.update(s => { s.quiz.classes.find(x => x.id === c.id).name = n; }); } });
+const countField = (n = 16) => `<label class="field">Anzahl Kinder <small class="muted">(Karte 1 bis ${CARD_COUNT})</small><input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${n}" inputmode="numeric" required></label>`;
+const readCount = fd => { const n = Math.round(Number(fd.get('count'))); if (!(n >= 1 && n <= CARD_COUNT)) throw new Error(`Bitte eine Anzahl von 1 bis ${CARD_COUNT} eingeben.`); return n; };
+function classDialog() {
+  dialog({ title: 'Neue Quiz-Klasse', submit: 'Anlegen', body: `
+    <label class="field">Name der Klasse<input name="name" class="input" maxlength="60" placeholder="z. B. Technik 6" required></label>
+    ${countField(16)}
+    <p class="muted small-text">Die Kinder bekommen die Karten 1 bis zur Anzahl mit festem Tier (1 Adler, 2 Biber, 3 Dachs …). Bei weniger Kindern fallen die letzten Tiere weg. Vornamen werden nicht eingegeben – wer welches Tier ist, notierst du auf dem Zuordnungsblatt.</p>`,
+    onSubmit: fd => {
+      const name = String(fd.get('name')).trim(), count = readCount(fd);
+      if (!name) throw new Error('Bitte einen Namen eingeben.');
+      const id = uid(), c = { id, name, demo: false, count, resetAt: 0, students: store.quizStudents(id, count) };
+      store.update(s => { s.quiz.classes.push(c); s.quiz.activeClassId = c.id; });
+      toast(`Klasse angelegt: Karten 1 bis ${count} (${ANIMALS[0]} bis ${ANIMALS[count - 1]}).`);
+    } });
 }
-function sources() {
-  const s = store.get();
-  return [...s.technik.classes.map(c => ({ id: 't:' + c.id, label: `Technik · ${c.name}`, names: c.students.map(x => x.name) })),
-    ...s.sport.groups.map(g => ({ id: 's:' + g.id, label: `Sport · ${g.name}`, names: g.students.map(x => x.name) }))];
-}
-// Technik-Klassen als Quiz-Klassen übernehmen; bereits übernommene werden ergänzt (neue Kinder, geänderte Namen)
-const technikOwn = () => store.get().technik.classes.filter(c => !c.demo);
-const technikMissing = () => technikOwn().filter(c => !Q().classes.some(x => x.src === 't:' + c.id));
-function importTechnik() {
-  const tc = technikOwn();
-  if (!tc.length) return toast('Unter Technik gibt es noch keine eigenen Klassen.', { kind: 'warn' });
-  let created = 0, added = 0; const full = [];
-  store.update(s => {
-    for (const c of tc) {
-      let k = s.quiz.classes.find(x => x.src === 't:' + c.id);
-      if (!k) { k = { id: uid(), name: c.name, demo: false, src: 't:' + c.id, students: [] }; s.quiz.classes.push(k); created++; }
-      const used = new Set(k.students.map(x => x.card));
-      for (const stu of c.students) {
-        const have = k.students.find(x => x.srcId === stu.id);
-        if (have) { have.name = stu.name; continue; }
-        if (k.students.length >= CARD_COUNT) { full.push(stu.name); continue; }
-        let no = 1; while (used.has(no)) no++; used.add(no);
-        k.students.push({ id: uid(), name: stu.name, card: no, srcId: stu.id }); added++;
-      }
-    }
-    const first = s.quiz.classes.find(x => x.src === 't:' + tc[0].id);
-    if (created && first) s.quiz.activeClassId = first.id;
-  });
-  toast(`${created} Klasse(n) neu, ${added} Kind(er) übernommen.${full.length ? ` Mehr als ${CARD_COUNT} Kinder – nicht übernommen: ${full.join(', ')}` : ''}`);
+function classEditDialog(c) {
+  if (!c) return;
+  dialog({ title: `Klasse ${c.name}`, submit: 'Speichern', body: `
+    <label class="field">Name<input name="name" class="input" value="${esc(c.name)}" maxlength="60" required></label>
+    ${countField(c.count)}
+    <p class="muted small-text">Wird die Anzahl kleiner, fallen die letzten Tiere weg; frühere Ergebnisse bleiben gespeichert.</p>`,
+    onSubmit: fd => {
+      const name = String(fd.get('name')).trim(), count = readCount(fd);
+      if (!name) throw new Error('Bitte einen Namen eingeben.');
+      store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); if (!k) return; k.name = name; k.count = count; k.students = store.quizStudents(k.id, count, k.students); k.demo = false; });
+    } });
 }
 
-function classDialog() {
-  const src = sources();
-  dialog({ title: 'Neue Quiz-Klasse', submit: 'Anlegen', body: `
-    <label class="field">Name der Klasse<input name="name" class="input" maxlength="60" placeholder="z. B. Informatik 8" required></label>
-    ${src.length ? `<label class="field">Namen übernehmen aus<select name="src" class="select"><option value="">– eigene Liste eingeben –</option>${src.map(x => `<option value="${esc(x.id)}">${esc(x.label)} (${x.names.length})</option>`).join('')}</select></label>` : ''}
-    <label class="field">Vornamen <small class="muted">(eine Zeile pro Kind, höchstens ${CARD_COUNT})</small><textarea name="names" class="input" rows="6" placeholder="Amelie&#10;Ben&#10;…"></textarea></label>`,
-    onOpen: el => { const sel = el.querySelector('[name=src]'); if (sel) sel.onchange = () => { const x = src.find(y => y.id === sel.value); if (x) { el.querySelector('[name=names]').value = x.names.join('\n'); if (!el.querySelector('[name=name]').value) el.querySelector('[name=name]').value = x.label.split(' · ')[1]; } }; },
-    onSubmit: fd => {
-      const name = String(fd.get('name')).trim(), names = namesFromText(String(fd.get('names') || ''));
-      if (!name) throw new Error('Bitte einen Namen eingeben.');
-      if (names.length > CARD_COUNT) throw new Error(`Höchstens ${CARD_COUNT} Kinder – es gibt ${CARD_COUNT} Karten.`);
-      const c = { id: uid(), name, students: names.map((n, i) => ({ id: uid(), name: n, card: i + 1 })) };
-      store.update(s => { s.quiz.classes.push(c); s.quiz.activeClassId = c.id; });
-      toast(`Klasse angelegt: Karten 1 bis ${names.length || 0} vergeben.`);
-    } });
+// ======================================================================
+// Rangliste je Klasse: alle beendeten Quiz seit dem letzten „Neu beginnen“, sortiert nach Anteil richtig
+// ======================================================================
+const sessTime = x => x.at || Date.parse(`${x.date}T00:00:00`) || 0;
+const rankSessions = c => Q().sessions.filter(x => x.done && x.classId === c.id && sessTime(x) >= (c.resetAt || 0));
+function classRanking(c) {
+  const ses = rankSessions(c), rows = new Map();
+  for (let n = 1; n <= c.count; n++) rows.set(n, { card: n, name: ANIMALS[n - 1], quizzes: 0, right: 0, asked: 0 });
+  for (const x of ses) {
+    const graded = x.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+    if (!graded.length) continue;
+    for (const stu of x.students) {
+      const r = rows.get(stu.card); if (!r) continue;
+      if (x.absent?.includes(stu.id) && !graded.some(q => q.answers[stu.id] !== undefined)) continue;
+      r.quizzes++; r.asked += graded.length; r.right += graded.filter(q => q.answers[stu.id] === q.correct).length;
+    }
+  }
+  const list = [...rows.values()].map(r => ({ ...r, pct: r.asked ? r.right / r.asked : null }));
+  list.sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || b.right - a.right || a.card - b.card);
+  let place = 0, prev = null;
+  list.forEach((r, i) => { const key = r.pct === null ? null : `${r.pct}|${r.right}`; if (key === null) r.place = null; else { if (key !== prev) place = i + 1; prev = key; r.place = place; } });
+  return { sessions: ses.length, list };
 }
-function studentsAddDialog(c) {
+const pctText = r => r.pct === null ? '–' : `${Math.round(r.pct * 100)} %`;
+function rankTable(c, limit = 0) {
+  const { list } = classRanking(c), rows = limit ? list.filter(r => r.place !== null).slice(0, limit) : list;
+  return `<table class="table-std rank-table"><thead><tr><th>Platz</th><th>Tier</th><th>Richtig</th><th>Antworten</th><th>Quiz</th></tr></thead><tbody>${rows.map(r => `
+    <tr class="${r.place === 1 ? 'gold' : r.place === 2 ? 'silver' : r.place === 3 ? 'bronze' : ''} ${r.place === null ? 'none' : ''}"><td class="place">${r.place ?? '–'}</td><th>${sym(r.card)} <span>${esc(r.name)}</span> <small class="muted">${r.card}</small></th><td class="pct">${pctText(r)}</td><td>${r.asked ? `${r.right} / ${r.asked}` : '–'}</td><td>${r.quizzes}</td></tr>`).join('')}</tbody></table>`;
+}
+function rankCard(c) {
+  const { sessions, list } = classRanking(c), any = list.some(r => r.place !== null);
+  return `<div class="card">
+    <div class="card-head small"><h3>${icon('trophy', 16)} Rangliste · ${esc(c.name)}</h3>
+      <div class="tools">${any ? `<button class="btn ghost sm" data-act="rank-show">${icon('expand', 15)} Zeigen</button><button class="icon-btn sm" data-act="rank-csv" title="Als Tabelle (CSV)" aria-label="Als Tabelle (CSV)">${icon('download', 15)}</button>` : ''}
+      <button class="icon-btn sm" data-act="rank-reset" title="Neu beginnen" aria-label="Rangliste neu beginnen">${icon('reset', 15)}</button></div></div>
+    ${any ? `<div class="table-scroll">${rankTable(c, 5)}</div><p class="muted small-text">Sortiert nach Anteil richtiger Antworten; bei Gleichstand zählen mehr richtige Antworten. ${sessions} Quiz${c.resetAt ? ` seit ${esc(displayDate(new Date(c.resetAt).toISOString().slice(0, 10)))}` : ''}. „Zeigen“ öffnet die ganze Liste.</p>`
+      : `<p class="muted small-text">Noch keine Quiz mit richtiger Antwort${c.resetAt ? ' seit dem Neubeginn' : ''}. Nach jedem beendeten Quiz wächst die Rangliste der Klasse.</p>`}
+  </div>`;
+}
+function drawRanking(c) {
+  const { sessions } = classRanking(c);
+  root.innerHTML = `
+  <section class="page quiz quiz-rank">
+    <div class="run-head">
+      <div><p class="eyebrow">Kartenquiz · ${esc(c.name)} · ${sessions} Quiz</p><h1>Rangliste<span class="dot">.</span></h1></div>
+      <div class="tools">
+        <button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>
+        <button class="btn primary sm" data-act="rank-close">${icon('check', 16)} Fertig</button>
+      </div>
+    </div>
+    <div class="card"><div class="table-scroll">${rankTable(c)}</div></div>
+  </section>`;
+}
+function rankCsv(c) {
   if (!c) return;
-  dialog({ title: `Schüler zu ${c.name} hinzufügen`, submit: 'Hinzufügen', body: `<label class="field">Vornamen <small class="muted">(eine Zeile pro Kind)</small><textarea name="names" class="input" rows="5"></textarea></label>`,
-    onSubmit: fd => {
-      const names = namesFromText(String(fd.get('names') || ''));
-      if (c.students.length + names.length > CARD_COUNT) throw new Error(`Höchstens ${CARD_COUNT} Kinder pro Klasse.`);
-      store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id), used = new Set(k.students.map(x => x.card));
-        names.forEach(n => { let no = 1; while (used.has(no)) no++; used.add(no); k.students.push({ id: uid(), name: n, card: no }); }); });
-    } });
+  const { list } = classRanking(c);
+  const lines = [['Platz', 'Karte', 'Tier', 'Anteil richtig', 'Richtig', 'Antworten', 'Quiz'], ...list.map(r => [r.place ?? '', r.card, r.name, r.pct === null ? '' : Math.round(r.pct * 100) + ' %', r.right, r.asked, r.quizzes])];
+  downloadFile(`Rangliste-${c.name}-${todayISO()}.csv`.replace(/[\\/:*?"<>|]/g, '_'), '﻿' + lines.map(l => l.join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 }
-function studentDialog(c, id) {
-  const stu = c.students.find(x => x.id === id); if (!stu) return;
-  const owner = no => c.students.find(x => x.card === no && x.id !== id);
-  dialog({ title: stu.name, submit: 'Speichern', body: `
-    <label class="field">Vorname<input name="name" class="input" value="${esc(stu.name)}" maxlength="40" required></label>
-    <label class="field">Kartennummer<select name="card" class="select">${Array.from({ length: CARD_COUNT }, (_, i) => i + 1).map(no => `<option value="${no}" ${no === stu.card ? 'selected' : ''}>${no}${owner(no) ? ` – tauschen mit ${esc(owner(no).name)}` : ''}</option>`).join('')}</select></label>
-    <button type="button" class="btn ghost danger-text" data-m="del">${icon('trash', 16)} Aus der Klasse entfernen</button>`,
-    onOpen: (el, close) => el.querySelector('[data-m=del]').onclick = async () => { close(); if (await confirmDialog('Entfernen', `${stu.name} aus der Quiz-Klasse entfernen?`, 'Entfernen')) store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); k.students = k.students.filter(x => x.id !== id); }); },
-    onSubmit: fd => {
-      const name = String(fd.get('name')).trim(), no = Number(fd.get('card'));
-      if (!name) throw new Error('Bitte einen Namen eingeben.');
-      store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id), me = k.students.find(x => x.id === id), other = k.students.find(x => x.card === no && x.id !== id);
-        if (other) other.card = me.card; me.card = no; me.name = name; });
-    } });
+async function rankReset(c) {
+  if (!c) return;
+  if (!(await confirmDialog('Rangliste neu beginnen', `Die Rangliste von „${c.name}“ ab jetzt neu zählen? Die bisherigen Ergebnisse bleiben unter „Ergebnisse“ gespeichert.`, 'Neu beginnen'))) return;
+  store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); if (k) k.resetAt = Date.now(); });
+  toast('Die Rangliste beginnt neu.');
 }
 
 // ======================================================================
@@ -668,19 +678,6 @@ function importSetsDialog() {
       toast(`${sets.length === 1 ? '1 Fragensatz' : sets.length + ' Fragensätze'} mit ${sets.reduce((a, t) => a + t.questions.length, 0)} Fragen importiert.`);
     } });
 }
-// ---------- Ansicht: Decknamen statt Klassenlisten
-function viewDialog() {
-  const a = Q().alias || { on: false, count: 16 };
-  dialog({ title: 'Ansicht', submit: 'Speichern', body: `
-    <label class="check"><input type="checkbox" name="on" ${a.on ? 'checked' : ''}> Decknamen verwenden</label>
-    <p class="muted small-text">Das Quiz zeigt dann keine Klassenlisten und keine Namen von Kindern. Du gibst nur die Anzahl der Kinder ein; jede Karte bekommt einen festen Fantasienamen (${esc(ALIAS.slice(0, 3).join(', '))} …). Er steht auf der gedruckten Karte, im Quiz und im Ergebnis. Deine Klassen und ihre Ergebnisse bleiben gespeichert und sind wieder da, sobald du den Haken entfernst.</p>
-    <label class="field">Anzahl Kinder<input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${a.count}" inputmode="numeric"></label>`,
-    onSubmit: fd => {
-      const count = Math.max(1, Math.min(CARD_COUNT, Math.round(Number(fd.get('count'))) || a.count));
-      store.update(s => { s.quiz.alias = { on: fd.get('on') === 'on', count }; });
-    } });
-}
-
 function questionDialog(t, index = -1) {
   if (!t) return;
   const old = index >= 0 ? t.questions[index] : null;
@@ -746,23 +743,49 @@ function questionDialog(t, index = -1) {
 // ======================================================================
 // Kartendruck
 // ======================================================================
+// Ein Kartensatz passt für alle Klassen: Karte n trägt immer dasselbe Tier.
 function printDialog() {
-  const c = cls(), mine = c?.students.slice().sort((a, b) => a.card - b.card) || [];
-  const first = mine[0];
+  const c = cls(), n = c?.count || 16;
   dialog({ title: 'Antwortkarten drucken', submit: 'Drucken', body: `
-    <div class="print-preview">${cardSvg(first?.card || 1, { size: '120', name: first?.name || '' })}<p class="small-text muted">Jede Karte hat ein eigenes Muster. Nummer und Vorname stehen oben links – so lassen sich die Karten schnell austeilen. Die Kinder halten die Karte so, dass der Buchstabe ihrer Antwort <b>oben</b> steht. Die Buchstaben sind klein und hell, damit die Nachbarn sie kaum lesen können.</p></div>
+    <div class="print-preview">${cardSvg(1, { size: '120', name: ANIMALS[0], animal: true })}<p class="small-text muted">Jede Karte hat ein eigenes Muster und trägt Nummer, Tiersymbol und Tiername. Karte 1 ist in jeder Klasse der Adler, Karte 2 der Biber … – ein Kartensatz reicht für alle Klassen. Die Kinder halten die Karte so, dass der Buchstabe ihrer Antwort oben steht.</p></div>
     <label class="field">Karten pro Seite (A4)<select name="per" class="select"><option value="2" selected>2 – groß, für Räume bis etwa 8 m</option><option value="1">1 – sehr groß, für Halle oder großen Raum</option><option value="4">4 – klein, für kleine Räume</option></select></label>
-    <label class="field">Welche Karten<select name="which" class="select">${mine.length ? `<option value="class" selected>Klasse ${esc(c.name)}: ${mine.length} Karten mit Namen</option>` : ''}<optgroup label="Weitere (leere Karten ohne Namen)"><option value="all">Alle ${CARD_COUNT} Karten</option><option value="range">Bereich wählen …</option></optgroup></select></label>
-    <div class="two" data-range hidden><label class="field">Von<input name="from" type="number" class="input" min="1" max="${CARD_COUNT}" value="1"></label><label class="field">Bis<input name="to" type="number" class="input" min="1" max="${CARD_COUNT}" value="${CARD_COUNT}"></label></div>
-    <p class="muted small-text">Karten mit Namen gelten nur für diese Klasse. Kommt ein Kind dazu oder ändert sich eine Kartennummer, nur diese Karte neu drucken (Bereich wählen bzw. Klasse). Tipp: auf festes Papier drucken oder laminieren (matte Folie spiegelt weniger). Im Druckdialog „Tatsächliche Größe“ bzw. 100 % wählen.</p>`,
+    <label class="field">Welche Karten<select name="which" class="select"><option value="16" ${n <= 16 ? 'selected' : ''}>Karten 1–16 (${ANIMALS[0]} bis ${ANIMALS[15]})</option><option value="32" ${n > 16 && n <= 32 ? 'selected' : ''}>Karten 1–32 (bis ${ANIMALS[31]})</option><option value="all" ${n > 32 ? 'selected' : ''}>Alle ${CARD_COUNT} Karten</option><option value="range">Bereich …</option></select></label>
+    <div class="two" data-range hidden><label class="field">Von<input name="from" type="number" class="input" min="1" max="${CARD_COUNT}" value="1"></label><label class="field">Bis<input name="to" type="number" class="input" min="1" max="${CARD_COUNT}" value="${n}"></label></div>
+    <p class="muted small-text">Geht eine Karte verloren, nur diese neu drucken (Bereich wählen). Tipp: auf festes Papier drucken oder laminieren (matte Folie spiegelt weniger). Im Druckdialog „Tatsächliche Größe“ wählen.</p>`,
     onOpen: el => { const w = el.querySelector('[name=which]'), r = el.querySelector('[data-range]'); const sync = () => { r.hidden = w.value !== 'range'; r.style.display = r.hidden ? 'none' : ''; }; w.onchange = sync; sync(); },
     onSubmit: fd => {
-      const which = fd.get('which'); let cards;
-      if (which === 'class') cards = mine.map(x => ({ n: x.card, name: x.name }));
-      else if (which === 'range') { const a = Math.max(1, Math.min(CARD_COUNT, Number(fd.get('from')) || 1)), b = Math.max(a, Math.min(CARD_COUNT, Number(fd.get('to')) || CARD_COUNT)); cards = Array.from({ length: b - a + 1 }, (_, i) => ({ n: a + i })); }
-      else cards = Array.from({ length: CARD_COUNT }, (_, i) => ({ n: i + 1 }));
-      printCards(cards, Number(fd.get('per')));
+      const which = fd.get('which'); let a = 1, b = CARD_COUNT;
+      if (which === '16') b = 16; else if (which === '32') b = 32;
+      else if (which === 'range') { a = Math.max(1, Math.min(CARD_COUNT, Number(fd.get('from')) || 1)); b = Math.max(a, Math.min(CARD_COUNT, Number(fd.get('to')) || CARD_COUNT)); }
+      printCards(Array.from({ length: b - a + 1 }, (_, i) => ({ n: a + i, name: ANIMALS[a + i - 1] })), Number(fd.get('per')));
     } });
+}
+// Zuordnungsblatt: Nummer, Symbol und Tier sind vorgedruckt, die Kinder tragen nur ihren Namen ein. Bleibt bei der Lehrkraft.
+function sheetDialog() {
+  const c = cls(), n = c?.count || 16;
+  dialog({ title: 'Zuordnungsblatt drucken', submit: 'Drucken', body: `
+    <p class="small-text">Auf dem Blatt stehen Nummer, Tiersymbol und Tiername schon. Die Kinder tragen nur Vor- und Nachnamen neben ihrem Tier ein. Das Blatt bleibt bei dir und wird <b>nicht</b> in die App übertragen.</p>
+    <label class="field">Klasse (oben auf dem Blatt)<input name="cls" class="input" maxlength="60" value="${esc(c?.name || '')}"></label>
+    <label class="field">Tiere<select name="which" class="select"><option value="1" ${n <= 16 ? 'selected' : ''}>1–16 (${ANIMALS[0]} bis ${ANIMALS[15]})</option><option value="2">17–32 (${ANIMALS[16]} bis ${ANIMALS[31]})</option><option value="3" ${n > 16 ? 'selected' : ''}>beide Blätter (1–32)</option></select></label>`,
+    onSubmit: fd => {
+      const w = fd.get('which'), pages = w === '1' ? [1] : w === '2' ? [17] : [1, 17];
+      printSheet(String(fd.get('cls') || '').trim(), pages);
+    } });
+}
+function printSheet(className, starts) {
+  document.getElementById('print-cards')?.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'print-cards'; wrap.className = 'ps';
+  wrap.innerHTML = starts.map(a => `<section class="ps-page">
+    <div class="ps-head"><span>Klasse: <b>${esc(className)}</b></span><span>Datum:</span></div>
+    <h1>Kartenquiz: Welches Tier bist du?</h1>
+    <p>Suche dein Tier (es steht auch auf deiner Antwortkarte) und schreibe deinen Namen daneben.</p>
+    <table><thead><tr><th>Nr.</th><th colspan="2">Tier</th><th>Vorname</th><th>Nachname</th></tr></thead><tbody>${Array.from({ length: 16 }, (_, i) => a + i).map(k => `<tr><td class="no">${k}</td><td class="sym">${animalSvg(k, { size: '9mm', title: false })}</td><td class="an">${esc(ANIMALS[k - 1])}</td><td></td><td></td></tr>`).join('')}</tbody></table>
+    <p class="ps-foot">Bleibt bei der Lehrkraft – nicht in die App übertragen.</p></section>`).join('');
+  document.body.append(wrap); document.body.classList.add('printing-cards');
+  const done = () => { wrap.remove(); document.body.classList.remove('printing-cards'); removeEventListener('afterprint', done); };
+  addEventListener('afterprint', done);
+  setTimeout(() => print(), 60);
 }
 function printCards(cards, per) {
   document.getElementById('print-cards')?.remove();
@@ -770,7 +793,7 @@ function printCards(cards, per) {
   wrap.id = 'print-cards'; wrap.className = 'pc-' + per;
   const pages = [];
   for (let i = 0; i < cards.length; i += per) pages.push(cards.slice(i, i + per));
-  wrap.innerHTML = pages.map(p => `<section class="pc-page">${p.map(x => `<div class="pc-cell">${cardSvg(x.n, { name: x.name || '' })}</div>`).join('')}</section>`).join('');
+  wrap.innerHTML = pages.map(p => `<section class="pc-page">${p.map(x => `<div class="pc-cell">${cardSvg(x.n, { name: x.name || '', animal: true })}</div>`).join('')}</section>`).join('');
   document.body.append(wrap); document.body.classList.add('printing-cards');
   const done = () => { wrap.remove(); document.body.classList.remove('printing-cards'); removeEventListener('afterprint', done); };
   addEventListener('afterprint', done);
@@ -783,17 +806,17 @@ function printCards(cards, per) {
 function resultDialog(id) {
   const s = Q().sessions.find(x => x.id === id); if (!s) return;
   const st = stats(s), graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
-  const rows = s.students.slice().sort((a, b) => a.name.localeCompare(b.name, 'de')).map(stu => {
+  const rows = s.students.slice().sort((a, b) => a.card - b.card).map(stu => {
     const right = graded.filter(q => q.answers[stu.id] === q.correct).length;
-    if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) return `<tr class="absent"><th>${esc(stu.name)} <small class="muted">${stu.card}</small></th><td class="none" colspan="${s.questions.length + 1}">fehlte</td></tr>`;
-    return `<tr><th>${esc(stu.name)} <small class="muted">${stu.card}</small></th>${s.questions.map(q => { const a = q.answers[stu.id]; return `<td class="${a === undefined ? 'none' : q.correct === null ? '' : a === q.correct ? 'right' : 'miss'}">${a === undefined ? '–' : LETTERS[a]}</td>`; }).join('')}<td class="sum">${graded.length ? `${right}/${graded.length}` : '–'}</td></tr>`;
+    if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) return `<tr class="absent"><th>${sym(stu.card)} ${esc(stu.name)} <small class="muted">${stu.card}</small></th><td class="none" colspan="${s.questions.length + 1}">fehlte</td></tr>`;
+    return `<tr><th>${sym(stu.card)} ${esc(stu.name)} <small class="muted">${stu.card}</small></th>${s.questions.map(q => { const a = q.answers[stu.id]; return `<td class="${a === undefined ? 'none' : q.correct === null ? '' : a === q.correct ? 'right' : 'miss'}">${a === undefined ? '–' : LETTERS[a]}</td>`; }).join('')}<td class="sum">${graded.length ? `${right}/${graded.length}` : '–'}</td></tr>`;
   }).join('');
   const qpct = q => { const v = Object.values(q.answers); return q.correct === null || !v.length ? '–' : Math.round(v.filter(x => x === q.correct).length / v.length * 100) + ' %'; };
   dialog({ title: `${s.title} · ${s.className}`, submit: null, cancel: 'Schließen', wide: true, body: `
     <p class="muted">${esc(displayDate(s.date))} · ${s.questions.length} Frage(n) · ${st.answered} Antworten${st.pct !== null ? ` · <b>${st.pct} % richtig</b>` : ''}</p>
     <ol class="result-qs">${s.questions.map((q, i) => `<li>${q.img ? images.imgTag(q.img, 'opt-thumb') + ' ' : ''}<b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]} · ${qpct(q)}` : 'ohne richtige Antwort'}</span>
       <span class="q-dist">${q.options.map((o, k) => `<span class="${q.correct === k ? 'ok' : ''}">${LETTERS[k]}: ${Object.values(q.answers).filter(v => v === k).length}</span>`).join('')}</span></li>`).join('')}</ol>
-    <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Name</th>${s.questions.map((_, i) => `<th>F${i + 1}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Tier</th>${s.questions.map((_, i) => `<th>F${i + 1}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="tools">${ranking(s).places.length ? `<button type="button" class="btn ghost sm" data-m="podium">${icon('trophy', 15)} Podium zeigen</button>` : ''}<button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
     onOpen: (el, close) => {
       images.hydrate(el);
@@ -805,9 +828,9 @@ function resultDialog(id) {
 function csv(s) {
   const cell = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
-  const lines = [['Name', 'Karte', ...s.questions.map((q, i) => `F${i + 1}${q.text ? ': ' + q.text : ''}`), 'Richtig', 'Bewertete Fragen']];
+  const lines = [['Tier', 'Karte', ...s.questions.map((q, i) => `F${i + 1}${q.text ? ': ' + q.text : ''}`), 'Richtig', 'Bewertete Fragen']];
   lines.push(['Richtige Antwort', '', ...s.questions.map(q => q.correct === null ? '' : LETTERS[q.correct]), '', '']);
-  for (const stu of s.students) if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) lines.push([stu.name, stu.card, 'fehlte', ...s.questions.slice(1).map(() => ''), '', '']);
+  for (const stu of s.students.slice().sort((a, b) => a.card - b.card)) if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) lines.push([stu.name, stu.card, 'fehlte', ...s.questions.slice(1).map(() => ''), '', '']);
   else lines.push([stu.name, stu.card, ...s.questions.map(q => q.answers[stu.id] === undefined ? '' : LETTERS[q.answers[stu.id]]), graded.filter(q => q.answers[stu.id] === q.correct).length, graded.length]);
   return '﻿' + lines.map(l => l.map(cell).join(';')).join('\r\n');
 }

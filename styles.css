@@ -652,7 +652,7 @@ body.t-quiz { --accent: #a65a2a; --accent-dark: #86461e; --accent-soft: #f7eadf;
 .run-dots i { width: 22px; height: 6px; border-radius: 99px; background: var(--line); }
 .run-dots i.past { background: color-mix(in srgb, var(--accent) 45%, var(--surface)); } .run-dots i.now { background: var(--accent); width: 34px; }
 .run-correct { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 8px; margin-top: 8px; }
 .tile { display: flex; align-items: center; gap: 7px; padding: 8px 9px; border-radius: 11px; border: 1px solid var(--line); background: var(--soft); color: var(--muted); font-size: 14px; text-align: left; min-height: 42px; }
 .tile .t-no { background: #b8b8c0; }
 .tile { transition: background .25s, border-color .25s, color .25s; }
@@ -675,12 +675,12 @@ body.presenting .run-letter { width: clamp(56px, 4.6vw, 84px); height: clamp(56p
 body.presenting .run-stat b { font-size: clamp(30px, 3vw, 54px); }
 body.presenting .ring { width: 66px; height: 66px; } body.presenting .rp-text b, body.presenting .rp-right b { font-size: 32px; }
 body.presenting .quiz-run .card + .card { margin-top: 12px; padding: 12px 16px; }
-body.presenting .tiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } body.presenting .tile { font-size: 17px; min-height: 50px; }
+body.presenting .tiles { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } body.presenting .tile { font-size: 17px; min-height: 50px; }
 @media (max-width: 760px) {
   .run-opts, .run-opts.n3 { grid-template-columns: 1fr; }
   .run-card { padding: 16px; } .run-opt { min-height: 56px; padding: 10px 12px; } .run-letter { width: 38px; height: 38px; font-size: 20px; }
   .run-foot .tools { width: 100%; } .run-foot .tools .btn { flex: 1; }
-  .tiles { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .r-date { width: 70px; }
 }
 
@@ -944,3 +944,37 @@ body.presenting .hall-host { margin-top: 0; }
   .hall-svg * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media (max-width: 430px) { .sport .tabs button .ic { display: none; } }
+
+/* ---------- Kartenquiz: Tiersymbole, Rangliste, Zuordnungsblatt (seit 1.17.0) ---------- */
+svg.animal { flex: none; vertical-align: -0.3em; }
+.student-list svg.animal, .tile svg.animal { width: 1.45em; height: 1.45em; }
+.pod-names span { display: inline-flex; align-items: center; gap: .3em; }
+.result-table th svg.animal { vertical-align: middle; }
+.rank-table { width: 100%; }
+.rank-table th, .rank-table td { padding: 6px 8px; text-align: left; }
+.rank-table thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+.rank-table tbody th { font-weight: 650; white-space: nowrap; font-size: inherit; color: var(--ink, inherit); }
+.rank-table svg.animal { width: 1.6em; height: 1.6em; }
+.rank-table { font-size: 14.5px; }
+.rank-table tbody th span { margin-left: 2px; }
+.rank-table td.place { font-weight: 800; width: 3.2em; text-align: center; }
+.rank-table td.pct { font-weight: 750; color: var(--accent-dark); }
+.rank-table tr.gold td.place { color: #b98a10; } .rank-table tr.silver td.place { color: #7d8794; } .rank-table tr.bronze td.place { color: #a8622f; }
+.rank-table tr.none { color: var(--muted); }
+.quiz-rank .rank-table { font-size: clamp(15px, 1.6vw, 22px); }
+.quiz-rank .rank-table svg.animal { width: 1.6em; height: 1.6em; }
+body.presenting .quiz-rank .rank-table { font-size: clamp(18px, 2vw, 28px); }
+@media print {
+  .ps-page { break-after: page; page-break-after: always; font-family: Calibri, "Segoe UI", Arial, sans-serif; color: #000; padding: 4mm 6mm; }
+  .ps-page:last-child { break-after: auto; page-break-after: auto; }
+  .ps-head { display: flex; gap: 40mm; font-size: 10pt; border-bottom: 0.4mm solid #000; padding-bottom: 2mm; margin-bottom: 5mm; }
+  .ps-page h1 { font-size: 20pt; font-weight: 400; margin: 0 0 2mm; }
+  .ps-page p { font-size: 11pt; margin: 0 0 4mm; }
+  .ps-page table { width: 100%; border-collapse: collapse; font-size: 12pt; }
+  .ps-page th, .ps-page td { border: 0.3mm solid #444; padding: 0 2.5mm; height: 13.2mm; text-align: left; }
+  .ps-page thead th { height: 8mm; background: #eee; font-size: 10.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ps-page td.no { width: 10mm; text-align: center; } .ps-page td.sym { width: 11mm; border-right: 0; text-align: center; } .ps-page td.an { width: 30mm; border-left: 0; font-weight: 700; }
+  .ps-page td.sym svg { -webkit-print-color-adjust: exact; print-color-adjust: exact; vertical-align: middle; }
+  .ps-foot { margin-top: 3mm !important; font-size: 9pt !important; color: #555; }
+}
+.tile { gap: 6px; } .tile svg.animal { width: 1.6em; height: 1.6em; }

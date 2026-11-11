@@ -2,6 +2,7 @@
 import { uid } from './engine.js';
 import { GEAR, gearSize, scaleOf } from './hallgear.js';
 import { MARKS, fromOldFloor } from './hallfloor.js';
+import { animalName } from './animals.js';
 
 const KEY = 'klassenkompass.v1';
 export const SCHEMA = 1;
@@ -44,14 +45,21 @@ export function defaultScreen() {
     { id: uid(), type: 'qr', label: 'Unterrichtsmaterial', x: 834, y: 114, width: 278, height: 354, content: '' },
   ] };
 }
+// Quiz-Klasse: nur Name und Kinderzahl. Die Kinder sind Karte 1 … n mit festem Tier (Karte 1 = Adler …).
+// Vorhandene Kennungen je Karte bleiben erhalten (Antworten früherer Quiz hängen daran).
+export function quizStudents(classId, count, old = []) {
+  const byCard = new Map(old.map(s => [s.card, s.id]));
+  return Array.from({ length: count }, (_, i) => ({ id: byCard.get(i + 1) || `${classId}-${i + 1}`, name: animalName(i + 1), card: i + 1 }));
+}
 export function demoQuiz() {
-  const cls = { id: uid(), name: 'Demoklasse', demo: true, students: DEMO_NAMES.map((name, i) => ({ id: uid(), name, card: i + 1 })) };
+  const id = uid();
+  const cls = { id, name: 'Demoklasse', demo: true, count: 16, resetAt: 0, students: quizStudents(id, 16) };
   const q = (text, options, correct) => ({ id: uid(), text, options, correct });
   const set = { id: uid(), title: 'Demo: Werkzeugkunde', demo: true, questions: [
     q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
     q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
     q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
-  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true, alias: { on: false, count: 16 } };
+  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true };
 }
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
@@ -182,15 +190,20 @@ const CARD_MAX = 40;
 const IMG_RE = /^img_[0-9a-f]{20}$/;
 function normQuiz(q) {
   if (!q || typeof q !== 'object') return demoQuiz();
+  // Seit 1.17.0 nur noch Tiernamen: Klassen bestehen aus Name und Kinderzahl. Ältere Klassen mit Vornamen werden
+  // umgestellt – jedes Kind behält seine Kartennummer und heißt nun wie das Tier dieser Karte.
   const classes = (Array.isArray(q.classes) ? q.classes : []).map(c => {
-    const used = new Set();
-    const students = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id && str(s.name)).slice(0, CARD_MAX).map(s => {
-      let card = int(s.card, 1, CARD_MAX, 0); if (!card || used.has(card)) card = 0; if (card) used.add(card);
-      return { id: String(s.id), name: str(s.name, 40), card, ...(s.srcId ? { srcId: str(s.srcId, 60) } : {}) };
-    });
-    students.forEach(s => { if (!s.card) { let n = 1; while (used.has(n)) n++; s.card = n; used.add(n); } });
-    return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, src: str(c?.src, 80), students };
+    const id = String(c?.id || uid());
+    const old = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id).map(s => ({ id: String(s.id), card: int(s.card, 1, CARD_MAX, 0) })).filter(s => s.card);
+    const count = int(c?.count, 1, CARD_MAX, 0) || Math.max(0, ...old.map(s => s.card)) || 16;
+    const resetAt = Number.isFinite(Number(c?.resetAt)) && Number(c.resetAt) > 0 ? Number(c.resetAt) : 0;
+    return { id, name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, count, resetAt, students: quizStudents(id, count, old) };
   });
+  // Frühere „Decknamen“-Ansicht (1.14–1.16): ihre Ergebnisse bekommen eine eigene Klasse „Lerngruppe“
+  if (Array.isArray(q.sessions) && q.sessions.some(x => x?.classId === 'alias') && !classes.some(c => c.id === 'alias')) {
+    const count = int(q.alias?.count, 1, CARD_MAX, 16);
+    classes.push({ id: 'alias', name: 'Lerngruppe', demo: false, count, resetAt: 0, students: quizStudents('alias', count) });
+  }
   const normQ = x => {
     const options = (Array.isArray(x?.options) ? x.options : []).map(o => str(o, 120)).slice(0, 4);
     while (options.length < 2) options.push('');
@@ -204,12 +217,12 @@ function normQuiz(q) {
     questions: (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map(normQ) }));
   const sessions = (Array.isArray(q.sessions) ? q.sessions : []).slice(-200).map(x => ({ id: String(x?.id || uid()), device: str(x?.device, 40), classId: String(x?.classId || ''), className: str(x?.className, 60),
     setId: String(x?.setId || ''), title: str(x?.title, 80), date: str(x?.date, 10), index: int(x?.index, 0, 99, 0), reveal: !!x?.reveal, done: !!x?.done,
-    students: (Array.isArray(x?.students) ? x.students : []).map(s => ({ id: String(s.id), name: str(s.name, 40), card: int(s.card, 1, CARD_MAX, 0) })),
+    at: Number.isFinite(Number(x?.at)) && Number(x.at) > 0 ? Number(x.at) : 0,
+    students: (Array.isArray(x?.students) ? x.students : []).map(s => { const card = int(s?.card, 1, CARD_MAX, 0); return { id: String(s?.id), name: card ? animalName(card) : str(s?.name, 40), card }; }),
     absent: (Array.isArray(x?.absent) ? x.absent : []).map(String),
     questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y),
       answers: Object.fromEntries(Object.entries(y?.answers || {}).filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 4)) })) }));
-  // Decknamen (seit 1.14.0): statt der Klassenlisten nur eine Anzahl Kinder mit festen Fantasienamen
-  return { classes, sets, sessions, autoReveal: q.autoReveal !== false, alias: { on: !!q.alias?.on, count: int(q.alias?.count, 1, CARD_MAX, 16) },
+  return { classes, sets, sessions, autoReveal: q.autoReveal !== false,
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }
