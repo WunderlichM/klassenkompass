@@ -8,9 +8,8 @@ import { uid } from './engine.js';
 import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
 
-export const BW = 1600, BH = 1000;  // Zeichenfläche (Einheiten der viewBox)
-const K = 0.31;                       // Schräge der Hallenperspektive (waagerechter Versatz je Höhe)
-const FLOOR = { top: 110, bottom: 930, left: 60, width: 1230 };
+import { BW, BH, K, FLOOR, HALL, MARKS, fp, floorPoints, marksSvg, badmintonCourts } from './hallfloor.js';
+export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
 // Elementarten: Standardgröße, Farbe, Text; keep = Seitenverhältnis beim Vergrößern beibehalten
@@ -74,14 +73,12 @@ function undo(redo = false) {
 const num = v => Math.round(v * 10) / 10;
 function floorSvg(p) {
   if (p.floor === 'leer') return '';
-  const { top, bottom, left, width } = FLOOR, d = (bottom - top) * K;
-  const pts = `${left + d},${top} ${left + d + width},${top} ${left + width},${bottom} ${left},${bottom}`;
   let lines = '';
   if (p.floor === 'linien') {
-    const mx = left + width / 2, my = (top + bottom) / 2;
-    lines = `<line x1="${mx + d}" y1="${top}" x2="${mx}" y2="${bottom}" class="hf-line"/><ellipse cx="${mx + d / 2}" cy="${my}" rx="120" ry="95" class="hf-line" fill="none"/>`;
+    const a = fp(HALL.len / 2, 0), b = fp(HALL.len / 2, HALL.dep), c = Array.from({ length: 40 }, (_, i) => { const t = i / 40 * 2 * Math.PI; return fp(HALL.len / 2 + 2.2 * Math.cos(t), HALL.dep / 2 + 2.2 * Math.sin(t)).map(num).join(','); }).join(' ');
+    lines = `<line x1="${num(a[0])}" y1="${num(a[1])}" x2="${num(b[0])}" y2="${num(b[1])}" class="hf-line"/><polygon points="${c}" class="hf-line"/>`;
   }
-  return `<polygon points="${pts}" class="hf-floor"/>${lines}`;
+  return `<polygon points="${floorPoints()}" class="hf-floor"/>${lines}${marksSvg(p.lines)}`;
 }
 function para(w, h, k = K) { const d = h * k; return `${num(d)},0 ${num(w)},0 ${num(w - d)},${num(h)} 0,${num(h)}`; }
 function textLines(t, x, y, size, cls = '') {
@@ -134,7 +131,7 @@ const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="use
 function contentBox(p) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
-  if (p.floor !== 'leer') add(FLOOR.left, FLOOR.top, FLOOR.left + FLOOR.width + (FLOOR.bottom - FLOOR.top) * K, FLOOR.bottom);
+  if (p.floor !== 'leer') add(FLOOR.left, FLOOR.top, FLOOR.left + FLOOR.width + FLOOR.height * K, FLOOR.bottom);
   p.items.forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
   if (!Number.isFinite(x0)) return `0 0 ${BW} ${BH}`;
   const pad = 24; return `${num(x0 - pad)} ${num(y0 - pad)} ${num(x1 - x0 + 2 * pad)} ${num(y1 - y0 + 2 * pad)}`;
@@ -178,6 +175,9 @@ function editorHtml(p) {
       <label class="small-text">Halle <select class="select sm" data-hc="floor">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
       <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${icon('forward', 16)}</button>
+    </div>
+    <div class="hall-bar hall-marks no-print"><span class="small-text muted">Spielfeldlinien</span>
+      ${MARKS.map(m => `<button class="h-mark ${p.lines?.includes(m.id) ? 'on' : ''}" style="--c:${m.color}" data-h="mark" data-mark="${m.id}" aria-pressed="${p.lines?.includes(m.id) ? 'true' : 'false'}" ${p.floor === 'leer' ? 'disabled' : ''}><i></i>${esc(m.label)}</button>`).join('')}
     </div>
     <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
     <div class="hall-work">
@@ -273,7 +273,7 @@ function newItem(kind, at, imgEntry, gearId) {
     const s = Math.min(k0, 420 / Math.max(imgEntry.w, imgEntry.h)); w = Math.max(24, Math.round(imgEntry.w * s)); h = Math.max(24, Math.round(imgEntry.h * s));
   }
   const p = plan(), count = p.items.length;
-  const pos = at || { x: 700 + (count % 6) * 24, y: 480 + (count % 6) * 18 };
+  const pos = at || { x: 760 + (count % 6) * 24, y: 470 + (count % 6) * 18 };
   const i = { id: uid(), kind, x: Math.round(pos.x - w / 2), y: Math.round(pos.y - h / 2), w, h, rot: 0 };
   if (k.color) i.color = k.color;
   if (kind === 'img') i.img = imgEntry.id;
@@ -307,6 +307,7 @@ async function onClick(e) {
       selected = null; history.delete(p.id);
       return store.update(s => { s.sport.halls = s.sport.halls.filter(x => x.id !== p.id); s.sport.activeHall = s.sport.halls[0]?.id ?? null; s.screen.widgets.forEach(w => { if (w.type === 'hall' && w.planId === p.id) w.planId = null; }); });
     }
+    case 'mark': return commit(x => { const m = b.dataset.mark, cur = x.lines || []; x.lines = cur.includes(m) ? cur.filter(y => y !== m) : MARKS.map(y => y.id).filter(y => y === m || cur.includes(y)); });
     case 'undo': return undo();
     case 'redo': return undo(true);
     case 'import': return host.querySelector('[data-hc=files]').click();
@@ -316,7 +317,7 @@ async function onClick(e) {
   switch (act) {
     case 'color': return commit(x => { itemOf(x, i.id).color = b.dataset.color; });
     case 'rot': return commit(x => { const t = itemOf(x, i.id); t.rot = ((t.rot + Number(b.dataset.d)) % 360 + 360) % 360; if (t.rot > 180) t.rot -= 360; });
-    case 'size': return commit(x => { const t = itemOf(x, i.id), f = Number(b.dataset.d), cx = t.x + t.w / 2, cy = t.y + t.h / 2; t.w = clamp(Math.round(t.w * f), 16, 1600); t.h = clamp(Math.round(t.h * f), 16, 1000); t.x = Math.round(cx - t.w / 2); t.y = Math.round(cy - t.h / 2); });
+    case 'size': return commit(x => { const t = itemOf(x, i.id), f = Number(b.dataset.d), cx = t.x + t.w / 2, cy = t.y + t.h / 2; t.w = clamp(Math.round(t.w * f), 16, 1600); t.h = clamp(Math.round(t.h * f), 16, 1400); t.x = Math.round(cx - t.w / 2); t.y = Math.round(cy - t.h / 2); });
     case 'dup': { const c = { ...structuredClone(i), id: uid(), x: i.x + 30, y: i.y + 30 }; selected = c.id; return commit(x => { x.items.splice(x.items.findIndex(y => y.id === i.id) + 1, 0, c); }); }
     case 'front': return commit(x => { const k = x.items.findIndex(y => y.id === i.id); x.items.push(...x.items.splice(k, 1)); });
     case 'back': return commit(x => { const k = x.items.findIndex(y => y.id === i.id); x.items.unshift(...x.items.splice(k, 1)); });
@@ -430,16 +431,39 @@ function startTileDrag(e, tileEl) {
 }
 
 // ---------- Pläne und Bilder ----------
+// Vorlagen: Maße in Metern auf dem Hallenboden (x von links, y von vorn nach hinten)
+const zoneAt = (x0, x1, y0, y1, color, text) => { const a = fp(x0, y0), b = fp(x0, y1), h = a[1] - b[1]; return { id: uid(), kind: 'zone', x: Math.round(a[0]), y: Math.round(b[1]), w: Math.round((x1 - x0) / HALL.len * FLOOR.width + h * K), h: Math.round(h), rot: 0, color, text }; };
+// Gerät so setzen, dass der Punkt (ax, ay) seines Rahmens (Anteile 0…1) auf dem Bodenpunkt liegt; f = Größe, len = Breite in Einheiten bei verlängerbaren Geräten
+function gearAt(id, view, x, y, { f = 0.6, fh = f, ax = 0.5, ay = 0.9, len = 0 } = {}) {
+  const s = gear.gearSize(id, view), p = fp(x, y), h = Math.round(s.h * fh), w = Math.round(len || s.w * f);
+  return { id: uid(), kind: 'gear', gear: id, view, x: Math.round(p[0] - w * ax), y: Math.round(p[1] - h * ay), w, h, rot: 0 };
+}
+const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
+const zonesAcross = n => Array.from({ length: n }, (_, k) => { const w = (HALL.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, 14.2, ZC[k % 4], (n === 4 ? 'Feld ' : 'Gruppe ') + (k + 1)); });
+// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (linke Seite gespiegelt)
+const goals = () => [gearAt('tor', 'gespiegelt', 1, HALL.dep / 2, { f: 0.5, ax: 0.82, ay: 0.76 }), gearAt('tor', 'seitlich', 26, HALL.dep / 2, { f: 0.5, ax: 0.18, ay: 0.76 })];
+const baskets = () => [gearAt('basketballkorb', 'gespiegelt', 1.7, HALL.dep / 2, { f: 0.6, ax: 0.25, ay: 1.12 }), gearAt('basketballkorb', 'seitlich', 25.3, HALL.dep / 2, { f: 0.6, ax: 0.75, ay: 1.12 })];
+const TEMPLATES = [
+  { id: 'leer', label: 'Leere Halle', make: () => ({}) },
+  { id: 'z2', label: 'Zwei Bereiche', make: () => ({ items: zonesAcross(2) }) },
+  { id: 'z3', label: 'Drei Bereiche', make: () => ({ items: zonesAcross(3) }) },
+  { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: () => { const z = zonesAcross(4), w = (HALL.len - 1 - 3 * 0.6) / 4;
+    return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, 14.2, { f: 0.7, ay: 0.97 }), gearAt('kleintor', 'frontal', cx, 0.8, { f: 0.7, ay: 0.97 })]; })] }; } },
+  { id: 'badminton', label: 'Badminton (vier Felder mit Netz)', make: () => ({ lines: ['badminton'], items: badmintonCourts().map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, HALL.dep / 2, { f: 0.5, ay: 0.97, len: 6.5 / HALL.len * FLOOR.width })) }) },
+  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', HALL.len / 2, HALL.dep / 2, { f: 1.1, fh: 0.85, ax: 0.5, ay: 0.68 })] }) },
+  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball'], items: baskets() }) },
+  { id: 'handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball'], items: goals() }) },
+  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball'], items: goals() }) },
+];
 function newPlanDialog() {
   dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen – Klasse 6" required></label>
-    <label class="field">Vorlage<select name="tpl" class="select"><option value="3">Drei Bereiche hintereinander</option><option value="2">Zwei Bereiche</option><option value="0">Leere Halle</option></select></label>
-    <p class="muted small-text">Schematische Zeichnung ohne Maße: Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
+    <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
+    <p class="muted small-text">Halle 27 m × 15 m, schematisch: Geräte sind größer gezeichnet als maßstäblich. Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
-      const n = Number(fd.get('tpl')), items = [], zw = n ? Math.floor(1230 / n) - 30 : 0;
-      for (let k = 0; k < n; k++) items.push({ id: uid(), kind: 'zone', x: 90 + k * (zw + 30) + 40, y: 170, w: zw, h: 640, rot: 0, color: COLORS[[0, 1, 2][k]][0], text: 'Gruppe ' + (k + 1) });
-      const p = { id: uid(), title: t, floor: 'halle', items };
+      const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
+      const p = { id: uid(), title: t, floor: 'halle', v: 2, lines: tpl.lines || [], items: tpl.items || [] };
       selected = null; store.update(s => { s.sport.halls.push(p); s.sport.activeHall = p.id; });
     } });
 }

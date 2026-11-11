@@ -2,7 +2,8 @@
 // Jedes Gerät wird aus einfachen Körpern (Quader, Stangen, Scheiben, Kugeln) in Metern beschrieben und
 // in derselben Schrägansicht wie die Hallenfläche gezeichnet: Tiefe nach hinten = nach oben mit dem
 // waagerechten Versatz K, Höhe senkrecht nach oben. Vorderseite, rechte Seite und Oberseite sind sichtbar.
-export const K = 0.31;
+import { K } from './hallfloor.js';
+export { K };
 const U = 110;            // Einheiten je Meter (Bank lang 3 m ≈ 340)
 const F = 0.62;           // Verkürzung der Tiefe
 const SW = 3.5, INK = '#1f2a3c';
@@ -18,12 +19,13 @@ const C = { wood: '#dcb27a', woodD: '#b8874f', mat: '#3f78b8', soft: '#8bb6e2', 
 
 // ---------- Zeichenwerkzeug ----------
 // swap: Gerät um 90° auf dem Boden gedreht (Länge nach hinten), die Reihenfolge der Teile ergibt sich aus der Tiefe.
-function builder(swap) {
+function builder(swap, mir = false) {
   const items = []; let grp = null, seq = 0;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const ext = (x, y, pad = SW / 2) => { x0 = Math.min(x0, x - pad); y0 = Math.min(y0, y - pad); x1 = Math.max(x1, x + pad); y1 = Math.max(y1, y + pad); };
   const W = (x, y, z) => { const p = [(x + y * F * K) * U, -(y * F + z) * U]; ext(p[0], p[1]); return p; };
-  const sw = (x, y) => (swap ? [y, x] : [x, y]);
+  // mir: zusätzlich gespiegelt (Gerät zeigt zur anderen Seite)
+  const sw = (x, y) => { const a = swap ? y : x; return [mir ? -a : a, swap ? x : y]; };
   const P = (x, y, z) => { const [a, c] = sw(x, y); return W(a, c, z); };
   const pts = ps => ps.map(p => `${n1(p[0])},${n1(p[1])}`).join(' ');
   const keyOf = ps3 => { let a = Infinity, c = Infinity, z = Infinity; ps3.forEach(([x, y, zz]) => { const [wx, wy] = sw(x, y); a = Math.min(a, wx); c = Math.min(c, wy); z = Math.min(z, zz); }); return [a, c, z]; };
@@ -35,8 +37,9 @@ function builder(swap) {
     group(at, fn, layer = 0) { const g = [], prev = grp; grp = g; fn(); grp = prev; put(g.join(''), keyOf([at]), layer); },
     poly(ps3, fill, o = {}) { put(`<polygon points="${pts(ps3.map(p => P(...p)))}" fill="${fill}"${o.sw ? ` stroke-width="${o.sw}"` : ''}${o.stroke ? ` stroke="${o.stroke}"` : ''}/>`, keyOf(ps3), o.layer); },
     box(x, y, z, lx, ly, lz, c, o = {}) {
-      const at = keyOf([[x, y, z]]);
+      const at = keyOf([[x, y, z], [x + lx, y + ly, z]]);
       if (swap) { [x, y] = [y, x]; [lx, ly] = [ly, lx]; }
+      if (mir) x = -(x + lx);
       const X = x + lx, Y = y + ly, Z = z + lz;
       const fr = [W(x, y, z), W(X, y, z), W(X, y, Z), W(x, y, Z)], sd = [W(X, y, z), W(X, Y, z), W(X, Y, Z), W(X, y, Z)], tp = [W(x, y, Z), W(X, y, Z), W(X, Y, Z), W(x, Y, Z)];
       let s = `<polygon points="${pts(fr)}" fill="${o.front || c}"/><polygon points="${pts(sd)}" fill="${o.side || dark(c)}"/><polygon points="${pts(tp)}" fill="${o.top || light(c)}"/>`;
@@ -163,12 +166,12 @@ const roll = (b, L, r, c) => {
 
 // ---------- Katalog ----------
 export const GROUPS = ['Matten, Kästen, Bänke', 'Sprossenwand, Barren, Reck', 'Hängen, Springen', 'Balken, Netze, Tore', 'Kleingeräte', 'Raum'];
-export const VIEW_LABEL = { quer: 'quer', laengs: 'längs', frontal: 'frontal', seitlich: 'seitlich', stehend: 'stehend', liegend: 'liegend' };
-const SWAP = new Set(['laengs', 'seitlich']);
+export const VIEW_LABEL = { quer: 'quer', laengs: 'längs', frontal: 'frontal', seitlich: 'seitlich', gespiegelt: 'seitlich gespiegelt', stehend: 'stehend', liegend: 'liegend' };
+const SWAP = new Set(['laengs', 'seitlich', 'gespiegelt']);
 const list = [];
 // def: views = Ansichten (laengs/seitlich = um 90° gedreht), build(b, L, view), len = Länge in m, stretch = in der Länge dehnbar
 const def = (id, name, group, o) => list.push({ id, name, group, views: o.views || ['quer'], build: o.build, len: o.len || 1, stretch: !!o.stretch, color: o.color || null, short: o.short || name });
-const QL = ['quer', 'laengs'], FS = ['frontal', 'seitlich'];
+const QL = ['quer', 'laengs'], FS = ['frontal', 'seitlich'], FSG = ['frontal', 'seitlich', 'gespiegelt'];
 const G0 = GROUPS[0], G1 = GROUPS[1], G2 = GROUPS[2], G3 = GROUPS[3], G4 = GROUPS[4], G5 = GROUPS[5];
 
 // Matten, Kästen, Bänke
@@ -207,7 +210,7 @@ def('reck', 'Reck', G1, { views: FS, build: b => {
 def('reckpfosten', 'Reckpfosten', G1, { views: ['stehend'], build: b => { b.box(-0.14, -0.14, 0, 0.28, 0.28, 0.05, C.metalD); b.rod([0, 0, 0.05], [0, 0, 2.3], 10, C.metal, { layer: 1 }); } });
 
 // Hängen, Springen
-def('basketballkorb', 'Basketballkorb', G2, { views: FS, short: 'Basketballkorb', build: b => {
+def('basketballkorb', 'Basketballkorb', G2, { views: FSG, short: 'Basketballkorb', build: b => {
   b.group([0, 0, 1], () => {
     b.box(0, 0, 1.0, 1.8, 0.05, 1.05, C.white);
     if (!b.swap) b.poly([[0.62, 0, 1.18], [1.18, 0, 1.18], [1.18, 0, 1.58], [0.62, 0, 1.58]], 'none', { stroke: C.orange, sw: 5 });
@@ -274,8 +277,8 @@ def('netz', 'Netz mit Pfosten', G3, { views: QL, len: 4, stretch: true, short: '
   [0, L].forEach(x => { b.disc(x, 0, 0, 0.18, C.metalD, { layer: -1 }); b.rod([x, 0, 0], [x, 0, 2.43], 8, C.metal); });
   net(b, 0.05, L - 0.05, 0, 1.55, 2.35);
 } });
-def('tor', 'Tor', G3, { views: FS, build: b => goal(b, 3, 2, 1) });
-def('kleintor', 'Kleintor', G3, { views: FS, build: b => goal(b, 1.2, 0.8, 0.6) });
+def('tor', 'Tor', G3, { views: FSG, build: b => goal(b, 3, 2, 1) });
+def('kleintor', 'Kleintor', G3, { views: FSG, build: b => goal(b, 1.2, 0.8, 0.6) });
 
 // Kleingeräte
 const ball = (r, fill, deco) => b => b.sphere(r, r, r, fill, deco);
@@ -385,7 +388,7 @@ const cache = new Map();
 function render(g, view, L, color) {
   const key = `${g.id}|${view}|${n1(L)}|${color || ''}`;
   if (cache.has(key)) return cache.get(key);
-  const b = builder(SWAP.has(view));
+  const b = builder(SWAP.has(view), view === 'gespiegelt');
   g.build(b, L, view, color || g.color);
   const out = b.finish();
   if (cache.size > 600) cache.clear();

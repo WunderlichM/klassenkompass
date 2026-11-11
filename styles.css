@@ -900,6 +900,12 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
 .hall-svg .hf-bg { fill: #fff; }
 .hall-svg .hf-floor { fill: #eceef1; stroke: #1f2a3c; stroke-width: 5; stroke-linejoin: round; }
 .hall-svg .hf-line { stroke: #9aa3b2; stroke-width: 3; fill: none; }
+.hall-svg .hf-mark { fill: none; stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; }
+
+.h-mark { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.h-mark i { width: 16px; height: 4px; border-radius: 2px; background: var(--c); opacity: .45; }
+.h-mark.on { --b: color-mix(in srgb, var(--c) 65%, var(--ink)); border-color: var(--b); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--b); } .h-mark.on i { opacity: 1; height: 5px; }
+.h-mark:disabled { opacity: .45; cursor: default; }
 .hall-svg text { font-family: var(--font); font-weight: 700; }
 .hall-svg .h-label { fill: #1f2a3c; }
 .hall-svg .h-on-color { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.25); stroke-width: 2px; }
@@ -915,7 +921,7 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
 .hall-mini svg { width: 100%; height: 100%; display: block; }
 .widget.hall .w-body { padding: 6px; background: #fff; }
 .hall-pick { display: grid; gap: 8px; justify-items: center; text-align: center; }
-.stage-wrap.stack .widget.hall .hall-mini svg { height: auto; aspect-ratio: 1.6; }
+.stage-wrap.stack .widget.hall .hall-mini svg { height: auto; aspect-ratio: 2; }
 body.presenting .stage-wrap.stack .widget.hall .hall-mini svg { height: 100%; }
 @media (max-width: 900px) {
   .hall-work { grid-template-columns: minmax(0, 1fr); }

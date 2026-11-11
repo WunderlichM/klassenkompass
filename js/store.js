@@ -1,6 +1,7 @@
 // Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage).
 import { uid } from './engine.js';
 import { GEAR, gearSize } from './hallgear.js';
+import { MARKS, fromOldFloor } from './hallfloor.js';
 
 const KEY = 'klassenkompass.v1';
 export const SCHEMA = 1;
@@ -34,7 +35,7 @@ export function demoHall() {
   items.push(it('path', 90, 820, 1100, 34, { color: '#b0602a' }));
   items.push(it('tag', 1180, 880, 90, 64, { text: 'S' }));
   items.push(it('tag', 1300, 880, 110, 64, { text: 'LK' }));
-  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', items };
+  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', v: 2, lines: [], items: items.map(fromOldFloor) };
 }
 export function defaultScreen() {
   return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
@@ -157,7 +158,9 @@ function oldGear(i) {
 function normHalls(list) {
   return (Array.isArray(list) ? list : []).slice(0, 60).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
-    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
+    // v 2 = Halle 27 m × 15 m (seit 1.15); ältere Pläne werden einmal auf die neue Fläche umgerechnet
+    v: 2, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
+    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && p.v !== 2 ? fromOldFloor(i) : i)).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
       id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
       rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
       ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) })) }));
