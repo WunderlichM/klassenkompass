@@ -266,7 +266,7 @@ function newItem(kind, at, imgEntry, gearId) {
   const k = KINDS[kind];
   let w = k.w, h = k.h;
   const g = kind === 'gear' ? gear.GEAR[gearId] : null;
-  if (kind === 'gear') { if (!g) return; ({ w, h } = gear.gearSize(g.id, g.views[0])); }
+  if (kind === 'gear') { if (!g) return; const s = gear.gearSize(g.id, g.views[0]), f = gear.scaleOf(g.id); w = Math.max(12, Math.round(s.w * f)); h = Math.max(12, Math.round(s.h * f)); }
   if (kind === 'img') {
     // Bilder mit Kennung V… (Hallenplanbrett) haben einen gemeinsamen Maßstab (≈ 0,3), W… sind kleiner gezeichnet; sonst höchstens 240
     const k0 = /^V/.test(imgEntry.code) ? 0.3 : /^W/.test(imgEntry.code) ? 1 : 240 / Math.max(imgEntry.w, imgEntry.h);
@@ -326,7 +326,7 @@ async function onClick(e) {
       if (i.kind === 'gear') {
         const g = gear.GEAR[i.gear]; if (!g || g.views.length < 2) return;
         const nv = g.views[(Math.max(0, g.views.indexOf(i.view)) + 1) % g.views.length];
-        return commit(x => { const t = itemOf(x, i.id), a = gear.gearSize(g.id, t.view), b2 = gear.gearSize(g.id, nv), f = Math.sqrt((t.w * t.h) / (a.w * a.h)), cx = t.x + t.w / 2, cy = t.y + t.h / 2;
+        return commit(x => { const t = itemOf(x, i.id), { L, s: f } = gear.fit(t), b2 = gear.gearSize(g.id, nv, L), cx = t.x + t.w / 2, cy = t.y + t.h / 2;
           t.view = nv; t.w = Math.round(b2.w * f); t.h = Math.round(b2.h * f); t.x = Math.round(cx - t.w / 2); t.y = Math.round(cy - t.h / 2); });
       }
       const cur = libEntry(i.img), vs = sp().hallLib.filter(e => e.key === cur?.key); if (vs.length < 2) return;
@@ -433,24 +433,24 @@ function startTileDrag(e, tileEl) {
 // ---------- Pläne und Bilder ----------
 // Vorlagen: Maße in Metern auf dem Hallenboden (x von links, y von vorn nach hinten)
 const zoneAt = (x0, x1, y0, y1, color, text) => { const a = fp(x0, y0), b = fp(x0, y1), h = a[1] - b[1]; return { id: uid(), kind: 'zone', x: Math.round(a[0]), y: Math.round(b[1]), w: Math.round((x1 - x0) / HALL.len * FLOOR.width + h * K), h: Math.round(h), rot: 0, color, text }; };
-// Gerät so setzen, dass der Punkt (ax, ay) seines Rahmens (Anteile 0…1) auf dem Bodenpunkt liegt; f = Größe, len = Breite in Einheiten bei verlängerbaren Geräten
-function gearAt(id, view, x, y, { f = 0.6, fh = f, ax = 0.5, ay = 0.9, len = 0 } = {}) {
-  const s = gear.gearSize(id, view), p = fp(x, y), h = Math.round(s.h * fh), w = Math.round(len || s.w * f);
+// Gerät maßstäblich so setzen, dass der Punkt (ax, ay) seines Rahmens (Anteile 0…1) auf dem Bodenpunkt liegt; L = Länge in m bei dehnbaren Geräten
+function gearAt(id, view, x, y, { ax = 0.5, ay = 0.9, L } = {}) {
+  const s = gear.gearSize(id, view, L), f = gear.scaleOf(id), p = fp(x, y), h = Math.round(s.h * f), w = Math.round(s.w * f);
   return { id: uid(), kind: 'gear', gear: id, view, x: Math.round(p[0] - w * ax), y: Math.round(p[1] - h * ay), w, h, rot: 0 };
 }
 const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
 const zonesAcross = n => Array.from({ length: n }, (_, k) => { const w = (HALL.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, 14.2, ZC[k % 4], (n === 4 ? 'Feld ' : 'Gruppe ') + (k + 1)); });
-// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (linke Seite gespiegelt)
-const goals = () => [gearAt('tor', 'gespiegelt', 1, HALL.dep / 2, { f: 0.5, ax: 0.82, ay: 0.76 }), gearAt('tor', 'seitlich', 26, HALL.dep / 2, { f: 0.5, ax: 0.18, ay: 0.76 })];
-const baskets = () => [gearAt('basketballkorb', 'gespiegelt', 1.7, HALL.dep / 2, { f: 0.6, ax: 0.25, ay: 1.12 }), gearAt('basketballkorb', 'seitlich', 25.3, HALL.dep / 2, { f: 0.6, ax: 0.75, ay: 1.12 })];
+// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien
+const goals = () => [gearAt('tor', 'gespiegelt', 1, HALL.dep / 2, { ax: 0.82, ay: 0.76 }), gearAt('tor', 'seitlich', 26, HALL.dep / 2, { ax: 0.18, ay: 0.76 })];
+const baskets = () => [gearAt('basketballkorb', 'gespiegelt', 1.7, HALL.dep / 2, { ax: 0.25, ay: 1.12 }), gearAt('basketballkorb', 'seitlich', 25.3, HALL.dep / 2, { ax: 0.75, ay: 1.12 })];
 const TEMPLATES = [
   { id: 'leer', label: 'Leere Halle', make: () => ({}) },
   { id: 'z2', label: 'Zwei Bereiche', make: () => ({ items: zonesAcross(2) }) },
   { id: 'z3', label: 'Drei Bereiche', make: () => ({ items: zonesAcross(3) }) },
   { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: () => { const z = zonesAcross(4), w = (HALL.len - 1 - 3 * 0.6) / 4;
-    return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, 14.2, { f: 0.7, ay: 0.97 }), gearAt('kleintor', 'frontal', cx, 0.8, { f: 0.7, ay: 0.97 })]; })] }; } },
-  { id: 'badminton', label: 'Badminton (vier Felder mit Netz)', make: () => ({ lines: ['badminton'], items: badmintonCourts().map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, HALL.dep / 2, { f: 0.5, ay: 0.97, len: 6.5 / HALL.len * FLOOR.width })) }) },
-  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', HALL.len / 2, HALL.dep / 2, { f: 1.1, fh: 0.85, ax: 0.5, ay: 0.68 })] }) },
+    return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, 14.2, { ay: 0.8 }), gearAt('kleintor', 'hinten', cx, 0.8, { ay: 0.97 })]; })] }; } },
+  { id: 'badminton', label: 'Badminton (vier Felder mit Netz)', make: () => ({ lines: ['badminton'], items: badmintonCourts().map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, HALL.dep / 2, { ay: 0.97, L: 6.3 })) }) },
+  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', HALL.len / 2, HALL.dep / 2, { L: 9.6, ax: 0.5, ay: 0.65 })] }) },
   { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball'], items: baskets() }) },
   { id: 'handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball'], items: goals() }) },
   { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball'], items: goals() }) },
@@ -459,11 +459,11 @@ function newPlanDialog() {
   dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen – Klasse 6" required></label>
     <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
-    <p class="muted small-text">Halle 27 m × 15 m, schematisch: Geräte sind größer gezeichnet als maßstäblich. Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
+    <p class="muted small-text">Halle 27 m × 15 m, Geräte maßstäblich (Kleingeräte etwas größer). Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
-      const p = { id: uid(), title: t, floor: 'halle', v: 2, lines: tpl.lines || [], items: tpl.items || [] };
+      const p = { id: uid(), title: t, floor: 'halle', v: 3, lines: tpl.lines || [], items: tpl.items || [] };
       selected = null; store.update(s => { s.sport.halls.push(p); s.sport.activeHall = p.id; });
     } });
 }

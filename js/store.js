@@ -1,6 +1,6 @@
 // Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage).
 import { uid } from './engine.js';
-import { GEAR, gearSize } from './hallgear.js';
+import { GEAR, gearSize, scaleOf } from './hallgear.js';
 import { MARKS, fromOldFloor } from './hallfloor.js';
 
 const KEY = 'klassenkompass.v1';
@@ -35,7 +35,7 @@ export function demoHall() {
   items.push(it('path', 90, 820, 1100, 34, { color: '#b0602a' }));
   items.push(it('tag', 1180, 880, 90, 64, { text: 'S' }));
   items.push(it('tag', 1300, 880, 110, 64, { text: 'LK' }));
-  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', v: 2, lines: [], items: items.map(fromOldFloor) };
+  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', v: 3, lines: [], items: items.map(fromOldFloor) };
 }
 export function defaultScreen() {
   return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
@@ -155,12 +155,20 @@ function oldGear(i) {
   const cx = (Number(i.x) || 0) + (Number(i.w) || w0) / 2, cy = (Number(i.y) || 0) + (Number(i.h) || 0) / 2;
   return { id: i.id, kind: 'gear', gear, view, x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), w, h, rot: i.rot };
 }
+// Geräte in Standardgröße (bis 1.15 etwa doppelt so groß wie maßstäblich) auf den Maßstab der Halle verkleinern; bereits verkleinerte bleiben
+function toScale(i) {
+  if (i.kind !== 'gear' || !GEAR[i.gear]) return i;
+  const d = gearSize(i.gear, GEAR[i.gear].views.includes(i.view) ? i.view : GEAR[i.gear].views[0]), w = Number(i.w) || d.w, h = Number(i.h) || d.h;
+  if (h / d.h < 0.85) return i;
+  const f = scaleOf(i.gear), nw = Math.round(w * f), nh = Math.round(h * f);
+  return { ...i, x: Math.round((Number(i.x) || 0) + (w - nw) / 2), y: Math.round((Number(i.y) || 0) + (h - nh) * 0.8), w: nw, h: nh };
+}
 function normHalls(list) {
   return (Array.isArray(list) ? list : []).slice(0, 60).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
-    // v 2 = Halle 27 m × 15 m (seit 1.15); ältere Pläne werden einmal auf die neue Fläche umgerechnet
-    v: 2, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
-    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && p.v !== 2 ? fromOldFloor(i) : i)).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
+    // v 2 = Halle 27 m × 15 m (seit 1.15), v 3 = Geräte maßstäblich (seit 1.16); ältere Pläne werden einmal umgerechnet
+    v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
+    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && !(p.v >= 2) ? fromOldFloor(i) : i)).map(i => (i && !(p.v >= 3) ? toScale(i) : i)).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
       id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
       rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
       ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) })) }));

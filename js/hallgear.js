@@ -2,9 +2,9 @@
 // Jedes Gerät wird aus einfachen Körpern (Quader, Stangen, Scheiben, Kugeln) in Metern beschrieben und
 // in derselben Schrägansicht wie die Hallenfläche gezeichnet: Tiefe nach hinten = nach oben mit dem
 // waagerechten Versatz K, Höhe senkrecht nach oben. Vorderseite, rechte Seite und Oberseite sind sichtbar.
-import { K } from './hallfloor.js';
+import { K, FLOOR, HALL } from './hallfloor.js';
 export { K };
-const U = 110;            // Einheiten je Meter (Bank lang 3 m ≈ 340)
+const U = 110;            // Zeichen-Einheiten je Meter (im Plan auf den Maßstab der Halle verkleinert, siehe scaleOf)
 const F = 0.62;           // Verkürzung der Tiefe
 const SW = 3.5, INK = '#1f2a3c';
 const n1 = v => Math.round(v * 10) / 10;
@@ -19,30 +19,46 @@ const C = { wood: '#dcb27a', woodD: '#b8874f', mat: '#3f78b8', soft: '#8bb6e2', 
 
 // ---------- Zeichenwerkzeug ----------
 // swap: Gerät um 90° auf dem Boden gedreht (Länge nach hinten), die Reihenfolge der Teile ergibt sich aus der Tiefe.
-function builder(swap, mir = false) {
+// mx / my: zusätzlich in der Breite bzw. Tiefe gespiegelt (Gerät von der anderen Seite bzw. von hinten gesehen).
+function builder(swap, mx = false, my = false) {
   const items = []; let grp = null, seq = 0;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const ext = (x, y, pad = SW / 2) => { x0 = Math.min(x0, x - pad); y0 = Math.min(y0, y - pad); x1 = Math.max(x1, x + pad); y1 = Math.max(y1, y + pad); };
   const W = (x, y, z) => { const p = [(x + y * F * K) * U, -(y * F + z) * U]; ext(p[0], p[1]); return p; };
-  // mir: zusätzlich gespiegelt (Gerät zeigt zur anderen Seite)
-  const sw = (x, y) => { const a = swap ? y : x; return [mir ? -a : a, swap ? x : y]; };
+  const sw = (x, y) => { const a = swap ? y : x, c = swap ? x : y; return [mx ? -a : a, my ? -c : c]; };
   const P = (x, y, z) => { const [a, c] = sw(x, y); return W(a, c, z); };
   const pts = ps => ps.map(p => `${n1(p[0])},${n1(p[1])}`).join(' ');
   const keyOf = ps3 => { let a = Infinity, c = Infinity, z = Infinity; ps3.forEach(([x, y, zz]) => { const [wx, wy] = sw(x, y); a = Math.min(a, wx); c = Math.min(c, wy); z = Math.min(z, zz); }); return [a, c, z]; };
   const put = (svg, [wx, wy, z], layer = 0) => { if (grp) grp.push(svg); else items.push({ k: [layer, -wy, z, wx], s: seq++, svg }); };
   const hc = (cx, cy, z, r, n = 36) => Array.from({ length: n }, (_, i) => { const t = i / n * 2 * Math.PI; return [cx + r * Math.cos(t), cy + r * Math.sin(t), z]; });
   const b = {
-    swap, P, pts,
+    swap, P, pts, back: my && !swap,
+    // Vorderseite des Geräts (y = 0) ist zu sehen
+    front: swap ? mx : !my,
+    // gewölbter Körper aus ebenen Flächen ([Punkte, Farbe]): gezeichnet werden nur die Flächen zum Betrachter hin
+    solid(faces, at = [0, 0, 0], layer = 0) {
+      const T = p => { const [a, c] = sw(p[0], p[1]); return [a, c, p[2]]; }, all = faces.flatMap(f => f[0]).map(T);
+      const mid = [0, 1, 2].map(k => all.reduce((v, p) => v + p[k], 0) / all.length), view = [F * K, -1, F];
+      const vis = faces.filter(([ps]) => { const q = ps.map(T), u = [0, 1, 2].map(k => q[1][k] - q[0][k]), w = [0, 1, 2].map(k => q[2][k] - q[0][k]);
+        let n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+        const c = [0, 1, 2].map(k => q.reduce((v, p) => v + p[k], 0) / q.length);
+        if (n.reduce((v, x, k) => v + x * (c[k] - mid[k]), 0) < 0) n = n.map(x => -x);
+        return n.reduce((v, x, k) => v + x * view[k], 0) > 1e-6; });
+      put(vis.map(([ps, fill]) => `<polygon points="${pts(ps.map(p => P(...p)))}" fill="${fill}"/>`).join(''), keyOf(faces.flatMap(f => f[0])), layer);
+    },
     // Teile, die immer in dieser Reihenfolge zusammen gezeichnet werden
     group(at, fn, layer = 0) { const g = [], prev = grp; grp = g; fn(); grp = prev; put(g.join(''), keyOf([at]), layer); },
     poly(ps3, fill, o = {}) { put(`<polygon points="${pts(ps3.map(p => P(...p)))}" fill="${fill}"${o.sw ? ` stroke-width="${o.sw}"` : ''}${o.stroke ? ` stroke="${o.stroke}"` : ''}/>`, keyOf(ps3), o.layer); },
     box(x, y, z, lx, ly, lz, c, o = {}) {
       const at = keyOf([[x, y, z], [x + lx, y + ly, z]]);
       if (swap) { [x, y] = [y, x]; [lx, ly] = [ly, lx]; }
-      if (mir) x = -(x + lx);
+      if (mx) x = -(x + lx);
+      if (my) y = -(y + ly);
+      // Farben gelten für die Seiten des Geräts (front = Vorderseite, back = Rückseite), nicht für die Lage im Bild
+      const fFace = swap ? o.side : (my ? o.back : o.front), sFace = swap ? (mx ? o.front : o.back) : o.side;
       const X = x + lx, Y = y + ly, Z = z + lz;
       const fr = [W(x, y, z), W(X, y, z), W(X, y, Z), W(x, y, Z)], sd = [W(X, y, z), W(X, Y, z), W(X, Y, Z), W(X, y, Z)], tp = [W(x, y, Z), W(X, y, Z), W(X, Y, Z), W(x, Y, Z)];
-      let s = `<polygon points="${pts(fr)}" fill="${o.front || c}"/><polygon points="${pts(sd)}" fill="${o.side || dark(c)}"/><polygon points="${pts(tp)}" fill="${o.top || light(c)}"/>`;
+      let s = `<polygon points="${pts(fr)}" fill="${fFace || c}"/><polygon points="${pts(sd)}" fill="${sFace || dark(c)}"/><polygon points="${pts(tp)}" fill="${o.top || light(c)}"/>`;
       (o.seams || []).forEach(h => { s += `<polyline points="${pts([W(x, y, z + h), W(X, y, z + h), W(X, Y, z + h)])}" fill="none" stroke-width="2.5"/>`; });
       if (o.inset) { const d = o.inset; s += `<polygon points="${pts([W(x + d, y + d * 1.3, Z), W(X - d, y + d * 1.3, Z), W(X - d, Y - d * 1.3, Z), W(x + d, Y - d * 1.3, Z)])}" fill="none" stroke="${dark(o.top || light(c), 0.3)}" stroke-width="2"/>`; }
       if (o.hole) { const d = o.hole; s += `<polygon points="${pts([W(x + d, y + d, Z), W(X - d, y + d, Z), W(X - d, Y - d, Z), W(x + d, Y - d, Z)])}" fill="${C.hole}" stroke-width="2.5"/>`; }
@@ -147,7 +163,7 @@ const goal = (b, W, H, D) => {
     b.poly([[0, 0, H], [W, 0, H], [W, D, zt], [0, D, zt]], nt, { sw: 2 });
     b.line([0, D, 0], [W, D, 0], 3, C.metalD);
   });
-  const st = { stripe: ['#ffffff', 10], layer: 1 }, wd = W > 2 ? 10 : 8;
+  const st = { stripe: ['#ffffff', 10], layer: b.back ? 0 : 1 }, wd = W > 2 ? 10 : 8;
   b.rod([0, 0, 0], [0, 0, H], wd, C.red, st); b.rod([W, 0, 0], [W, 0, H], wd, C.red, st); b.rod([0, 0, H], [W, 0, H], wd, C.red, { ...st, stripe: ['#ffffff', W > 2 ? 15 : 7] });
 };
 const roll = (b, L, r, c) => {
@@ -166,19 +182,22 @@ const roll = (b, L, r, c) => {
 
 // ---------- Katalog ----------
 export const GROUPS = ['Matten, Kästen, Bänke', 'Sprossenwand, Barren, Reck', 'Hängen, Springen', 'Balken, Netze, Tore', 'Kleingeräte', 'Raum'];
-export const VIEW_LABEL = { quer: 'quer', laengs: 'längs', frontal: 'frontal', seitlich: 'seitlich', gespiegelt: 'seitlich gespiegelt', stehend: 'stehend', liegend: 'liegend' };
-const SWAP = new Set(['laengs', 'seitlich', 'gespiegelt']);
+export const VIEW_LABEL = { quer: 'quer', laengs: 'längs', quergespiegelt: 'quer, andere Richtung', laengsgespiegelt: 'längs, andere Richtung',
+  frontal: 'von vorn', seitlich: 'von der Seite', hinten: 'von hinten', gespiegelt: 'von der anderen Seite', stehend: 'stehend', liegend: 'liegend' };
+// Blickrichtungen: swap = um 90° gedreht, mx/my = gespiegelt in Breite/Tiefe
+const FLAGS = { laengs: [1, 0, 0], seitlich: [1, 0, 0], gespiegelt: [1, 1, 0], hinten: [0, 0, 1], quergespiegelt: [0, 1, 0], laengsgespiegelt: [1, 0, 1] };
+const SWAP = { has: v => !!FLAGS[v]?.[0] };
 const list = [];
 // def: views = Ansichten (laengs/seitlich = um 90° gedreht), build(b, L, view), len = Länge in m, stretch = in der Länge dehnbar
 const def = (id, name, group, o) => list.push({ id, name, group, views: o.views || ['quer'], build: o.build, len: o.len || 1, stretch: !!o.stretch, color: o.color || null, short: o.short || name });
-const QL = ['quer', 'laengs'], FS = ['frontal', 'seitlich'], FSG = ['frontal', 'seitlich', 'gespiegelt'];
+const QL = ['quer', 'laengs'], FS = ['frontal', 'seitlich'], FRONT4 = ['frontal', 'seitlich', 'hinten', 'gespiegelt'], SIDE4 = ['quer', 'laengs', 'quergespiegelt', 'laengsgespiegelt'];
 const G0 = GROUPS[0], G1 = GROUPS[1], G2 = GROUPS[2], G3 = GROUPS[3], G4 = GROUPS[4], G5 = GROUPS[5];
 
 // Matten, Kästen, Bänke
 def('turnmatte', 'Turnmatte', G0, { views: QL, len: 2, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 1, 0.08, C.mat, { inset: 0.07 }) });
 def('matte_stehend', 'Matte stehend', G0, { views: QL, len: 2, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 0.08, 1, C.mat, { seams: [0.5] }) });
 def('weichboden', 'Weichboden', G0, { views: QL, len: 2.5, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 1.6, 0.35, C.soft, { seams: [0.17], inset: 0.1 }) });
-def('mattenwagen', 'Mattenwagen', G0, { views: QL, build: b => {
+def('mattenwagen', 'Mattenwagen', G0, { views: SIDE4, build: b => {
   [[0.15, 0.95], [1.95, 0.95], [0.15, 0.05], [1.95, 0.05]].forEach(([x, y]) => b.sphere(x, y, 0.06, C.black, null, { shadow: false, layer: -1 }));
   b.box(0, 0, 0.1, 2.1, 1.0, 0.05, C.metalD, { layer: -1 });
   for (let i = 0; i < 4; i++) b.box(0.05, 0.03, 0.15 + i * 0.08, 2.0, 0.94, 0.08, i % 2 ? '#4a86c8' : C.mat);
@@ -210,10 +229,10 @@ def('reck', 'Reck', G1, { views: FS, build: b => {
 def('reckpfosten', 'Reckpfosten', G1, { views: ['stehend'], build: b => { b.box(-0.14, -0.14, 0, 0.28, 0.28, 0.05, C.metalD); b.rod([0, 0, 0.05], [0, 0, 2.3], 10, C.metal, { layer: 1 }); } });
 
 // Hängen, Springen
-def('basketballkorb', 'Basketballkorb', G2, { views: FSG, short: 'Basketballkorb', build: b => {
+def('basketballkorb', 'Basketballkorb', G2, { views: FRONT4, short: 'Basketballkorb', build: b => {
   b.group([0, 0, 1], () => {
     b.box(0, 0, 1.0, 1.8, 0.05, 1.05, C.white);
-    if (!b.swap) b.poly([[0.62, 0, 1.18], [1.18, 0, 1.18], [1.18, 0, 1.58], [0.62, 0, 1.58]], 'none', { stroke: C.orange, sw: 5 });
+    if (b.front) b.poly([[0.62, 0, 1.18], [1.18, 0, 1.18], [1.18, 0, 1.58], [0.62, 0, 1.58]], 'none', { stroke: C.orange, sw: 5 });
   });
   b.group([0.9, -0.55, 0.75], () => {
     const top = b.hcircle(0.9, -0.3, 1.16, 0.24, 24), bot = b.hcircle(0.9, -0.3, 0.84, 0.16, 24);
@@ -229,19 +248,11 @@ def('kletterseile', 'Kletterseile', G2, { views: FS, build: b => {
 def('turnringe', 'Turnringe', G2, { views: FS, build: b => {
   [0.25, 0.75].forEach(x => { b.rod([x, 0, 2.5], [x, 0, 1.22], 4, C.black); b.curve(b.vcircle(x, 0, 1.08, 0.14), 7, C.wood, { closed: true }); });
 } });
-def('sprungbrett', 'Sprungbrett', G2, { views: QL, build: (b, L, v) => {
-  b.group([0, 0, 0], () => {
-    if (v === 'quer') {
-      b.poly([[0, 0, 0], [1.2, 0, 0], [1.2, 0, 0.22], [0, 0, 0.06]], C.wood);
-      b.poly([[1.2, 0, 0], [1.2, 0.6, 0], [1.2, 0.6, 0.22], [1.2, 0, 0.22]], C.woodD);
-      b.poly([[0, 0, 0.06], [1.2, 0, 0.22], [1.2, 0.6, 0.22], [0, 0.6, 0.06]], C.green);
-    } else {
-      // um 90° gedreht: hohe Seite hinten (b ist hier mit swap angelegt, deshalb Koordinaten vertauscht angeben)
-      b.poly([[0, 0, 0], [0, 0.6, 0], [0, 0.6, 0.06], [0, 0, 0.06]], C.wood);
-      b.poly([[0, 0.6, 0], [1.2, 0.6, 0], [1.2, 0.6, 0.22], [0, 0.6, 0.06]], C.woodD);
-      b.poly([[0, 0, 0.06], [0, 0.6, 0.06], [1.2, 0.6, 0.22], [1.2, 0, 0.22]], C.green);
-    }
-  });
+def('sprungbrett', 'Sprungbrett', G2, { views: SIDE4, build: b => {
+  const lo = 0.06, hi = 0.22, X = 1.2, Y = 0.6;
+  b.solid([[[[0, 0, 0], [X, 0, 0], [X, 0, hi], [0, 0, lo]], C.wood], [[[0, Y, 0], [X, Y, 0], [X, Y, hi], [0, Y, lo]], C.wood],
+    [[[X, 0, 0], [X, Y, 0], [X, Y, hi], [X, 0, hi]], C.woodD], [[[0, 0, 0], [0, Y, 0], [0, Y, lo], [0, 0, lo]], C.woodD],
+    [[[0, 0, lo], [X, 0, hi], [X, Y, hi], [0, Y, lo]], C.green]]);
 } });
 def('minitrampolin', 'Minitrampolin', G2, { views: ['quer'], build: b => {
   const cx = 0.6, cy = 0.6;
@@ -277,8 +288,8 @@ def('netz', 'Netz mit Pfosten', G3, { views: QL, len: 4, stretch: true, short: '
   [0, L].forEach(x => { b.disc(x, 0, 0, 0.18, C.metalD, { layer: -1 }); b.rod([x, 0, 0], [x, 0, 2.43], 8, C.metal); });
   net(b, 0.05, L - 0.05, 0, 1.55, 2.35);
 } });
-def('tor', 'Tor', G3, { views: FSG, build: b => goal(b, 3, 2, 1) });
-def('kleintor', 'Kleintor', G3, { views: FSG, build: b => goal(b, 1.2, 0.8, 0.6) });
+def('tor', 'Tor', G3, { views: FRONT4, build: b => goal(b, 3, 2, 1) });
+def('kleintor', 'Kleintor', G3, { views: FRONT4, build: b => goal(b, 1.2, 0.8, 0.6) });
 
 // Kleingeräte
 const ball = (r, fill, deco) => b => b.sphere(r, r, r, fill, deco);
@@ -295,12 +306,12 @@ def('stange', 'Slalomstange', G4, { views: ['stehend', 'liegend'], color: C.red,
   if (v === 'liegend') return b.rod([0, 0, 0.04], [1.6, 0, 0.04], 8, c, { stripe: ['#ffffff', 8] });
   b.disc(0, 0, 0, 0.16, C.black); b.disc(0, 0, 0.05, 0.16, '#454b55'); b.rod([0, 0, 0.05], [0, 0, 1.6], 8, c, { stripe: ['#ffffff', 8], layer: 1 });
 } });
-def('springseil', 'Springseil', G4, { views: ['quer'], build: b => {
+def('springseil', 'Springseil', G4, { views: SIDE4, build: b => {
   const ps = []; for (let i = 0; i <= 24; i++) { const t = -Math.PI / 2 + Math.PI * i / 24; ps.push([0.15 + 1.25 * Math.cos(t) + 0.08 * Math.sin(3 * t), 0.3 + 0.3 * Math.sin(t), 0.02]); }
   b.curve(ps, 4, C.yellow);
   b.rod([0.15, 0, 0.03], [-0.12, -0.02, 0.03], 10, C.red, { layer: 1 }); b.rod([0.15, 0.6, 0.03], [-0.12, 0.62, 0.03], 10, C.red, { layer: 1 });
 } });
-def('schlaeger', 'Schläger', G4, { views: ['quer'], build: b => {
+def('schlaeger', 'Schläger', G4, { views: SIDE4, build: b => {
   b.rod([0, 0.2, 0.03], [0.32, 0.2, 0.03], 10, C.black); b.rod([0.32, 0.2, 0.03], [0.48, 0.2, 0.03], 5, '#3d6fb5');
   const head = Array.from({ length: 28 }, (_, i) => { const t = i / 28 * 2 * Math.PI; return [0.72 + 0.25 * Math.cos(t), 0.2 + 0.19 * Math.sin(t), 0.03]; });
   b.group([0.47, 0, 0.03], () => {
@@ -309,7 +320,7 @@ def('schlaeger', 'Schläger', G4, { views: ['quer'], build: b => {
     b.curve(head, 5, '#3d6fb5', { closed: true });
   });
 } });
-def('ballwagen', 'Ballwagen', G4, { views: ['quer'], build: b => {
+def('ballwagen', 'Ballwagen', G4, { views: SIDE4, build: b => {
   [[0.1, 0.55], [0.9, 0.55], [0.1, 0.05], [0.9, 0.05]].forEach(([x, y]) => b.sphere(x, y, 0.06, C.black, null, { shadow: false, layer: -1 }));
   b.group([0, 0, 0.12], () => {
     [[0.25, 0.4, C.orange], [0.55, 0.42, C.white], [0.8, 0.38, C.yellow], [0.2, 0.15, C.red], [0.5, 0.18, C.orange], [0.78, 0.16, '#3d6fb5']].forEach(([x, y, c]) => { const p = b.P(x, y, 0.62), R = 0.13 * U; b.raw(`<circle cx="${n1(p[0])}" cy="${n1(p[1])}" r="${n1(R)}" fill="${c}"/>`, p, R); });
@@ -357,25 +368,28 @@ def('trennwand', 'Trennwand', G5, { views: QL, len: 3, stretch: true, build: (b,
     const y = b.swap ? 0.06 : 0; for (let x = 0.4; x < L - 0.1; x += 0.4) b.line([x, y, 0.32], [x, y, 2.35], 2, dark(C.curtain, 0.3));
   });
 } });
-def('tuer', 'Tür', G5, { views: FS, build: b => {
+def('tuer', 'Tür', G5, { views: FRONT4, build: b => {
   b.group([-0.08, 0, 0], () => {
     b.box(-0.08, -0.01, 0, 1.16, 0.08, 2.22, '#9aa3ad');
     b.box(0, -0.02, 0, 1.0, 0.06, 2.12, '#c49564');
-    if (!b.swap) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 5, C.metalD);
+    if (b.front) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 5, C.metalD);
   });
 } });
-def('lautsprecher', 'Lautsprecher', G5, { views: ['quer'], build: b => {
+def('lautsprecher', 'Lautsprecher', G5, { views: FRONT4, build: b => {
   b.group([0, 0, 0], () => {
     b.box(0, 0, 0, 0.46, 0.36, 0.72, '#30353d');
+    if (!b.front) return;
     b.poly(b.vcircle(0.23, 0, 0.24, 0.15), '#5a6270', { sw: 2.5 }); b.poly(b.vcircle(0.23, 0, 0.24, 0.06), '#30353d', { sw: 2 });
     b.poly(b.vcircle(0.23, 0, 0.55, 0.07), '#5a6270', { sw: 2.5 });
   });
 } });
-def('tafel', 'Tafel', G5, { views: FS, build: b => {
-  [0.12, 1.68].forEach(x => { b.rod([x, 0.12, 0.8], [x, 0.55, 0], 6, C.woodD); });
-  b.box(0, 0.1, 0.8, 1.8, 0.05, 1.1, C.wood, { front: C.board, top: C.wood, side: C.woodD });
-  [0.12, 1.68].forEach(x => { b.rod([x, 0.1, 0.8], [x, -0.3, 0], 6, C.woodD, { layer: 1 }); });
-  b.box(0.1, 0.02, 0.76, 1.6, 0.08, 0.04, C.woodD, { layer: 1 });
+def('tafel', 'Tafel', G5, { views: FRONT4, build: b => {
+  // von hinten liegen die hinteren Stützen vorn
+  const fl = b.back ? -1 : 1;
+  [0.12, 1.68].forEach(x => { b.rod([x, 0.12, 0.8], [x, 0.55, 0], 6, C.woodD, { layer: -fl }); });
+  b.box(0, 0.1, 0.8, 1.8, 0.05, 1.1, C.wood, { front: C.board, back: C.wood, top: C.wood, side: C.woodD });
+  [0.12, 1.68].forEach(x => { b.rod([x, 0.1, 0.8], [x, -0.3, 0], 6, C.woodD, { layer: fl }); });
+  b.box(0.1, 0.02, 0.76, 1.6, 0.08, 0.04, C.woodD, { layer: fl });
 } });
 
 export const GEAR = Object.fromEntries(list.map(g => [g.id, g]));
@@ -388,7 +402,7 @@ const cache = new Map();
 function render(g, view, L, color) {
   const key = `${g.id}|${view}|${n1(L)}|${color || ''}`;
   if (cache.has(key)) return cache.get(key);
-  const b = builder(SWAP.has(view), view === 'gespiegelt');
+  const b = builder(...(FLAGS[view] || [0, 0, 0]).map(Boolean));
   g.build(b, L, view, color || g.color);
   const out = b.finish();
   if (cache.size > 600) cache.clear();
@@ -400,16 +414,30 @@ export function gearSize(id, view, L) {
   return { w: Math.round(r.w), h: Math.round(r.h) };
 }
 export const isStretch = (id, view) => !!GEAR[id]?.stretch && !SWAP.has(view);
+// Maßstab im Plan: Geräte passen zur Halle (27 m = Breite der Hallenfläche); Kleingeräte bleiben zur Erkennbarkeit größer
+const TRUE = FLOOR.width / HALL.len / U;
+export const scaleOf = id => (GEAR[id]?.group === G4 ? 0.8 : TRUE);
+// Länge (m) und Größenfaktor eines Elements aus seinem Rahmen; dehnbare Geräte werden länger statt verzerrt
+export function fit(i) {
+  const g = GEAR[i.gear]; if (!g) return { L: 1, s: 1 };
+  const view = g.views.includes(i.view) ? i.view : g.views[0], d = render(g, view, g.len, null);
+  if (!g.stretch) return { L: g.len, s: Math.sqrt((i.w * i.h) / (d.w * d.h)), view };
+  let L, s;
+  if (!SWAP.has(view)) { s = i.h / d.h; L = g.len + (i.w / s - d.w) / U; }
+  else { // längs: Breite und Höhe hängen beide von der Länge ab
+    const A = F * K * U, B = F * U, cw = d.w - A * g.len, ch = d.h - B * g.len, den = i.h * A - i.w * B;
+    L = Math.abs(den) > 1e-6 ? (i.w * ch - i.h * cw) / den : g.len; if (!(L > 0)) L = g.len;
+    L = Math.min(14, Math.max(0.4, L)); s = i.h / (B * L + ch);
+  }
+  return { L: Math.min(14, Math.max(0.4, L)), s, view };
+}
 // SVG im Bereich 0…w × 0…h
 export function gearSvg(i) {
   const g = GEAR[i.gear], { w, h } = i;
   if (!g) return `<rect x="2" y="2" width="${w - 4}" height="${h - 4}" fill="#f3f4f6" stroke="#b6bcc7" stroke-dasharray="8 6" stroke-width="2"/><text x="${w / 2}" y="${h / 2}" dy=".35em" text-anchor="middle" font-size="${n1(Math.max(12, Math.min(w, h) * 0.16))}" fill="#8b909b">Gerät?</text>`;
-  const view = g.views.includes(i.view) ? i.view : g.views[0];
-  let L = g.len;
-  if (isStretch(g.id, view)) {
-    const d = render(g, view, g.len, null), s = h / d.h;
-    L = Math.min(14, Math.max(0.4, g.len + (w / s - d.w) / U));
-  }
-  const r = render(g, view, L, g.color ? (i.color || g.color) : null);
-  return `<g transform="scale(${n1(w / r.w * 1000) / 1000} ${n1(h / r.h * 1000) / 1000}) translate(${n1(-r.x)} ${n1(-r.y)})" stroke="${INK}" stroke-width="${SW}" stroke-linejoin="round" stroke-linecap="round">${r.svg}</g>`;
+  const { L, view } = fit(i);
+  const r = render(g, view, L, g.color ? (i.color || g.color) : null), sx = w / r.w, sy = h / r.h;
+  // Kontur bleibt auch bei kleinen Geräten sichtbar
+  const sw = Math.min(6.5, Math.max(SW, 2.3 / Math.sqrt(sx * sy)));
+  return `<g transform="scale(${n1(sx * 1000) / 1000} ${n1(sy * 1000) / 1000}) translate(${n1(-r.x)} ${n1(-r.y)})" stroke="${INK}" stroke-width="${n1(sw)}" stroke-linejoin="round" stroke-linecap="round">${r.svg}</g>`;
 }
