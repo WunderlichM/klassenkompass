@@ -6,26 +6,14 @@ import * as store from './store.js';
 import * as images from './images.js';
 import { uid } from './engine.js';
 import * as gear from './hallgear.js';
-import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
 
-import { BW, BH, K, FLOOR, HALL, MARKS, fp, floorPoints, marksSvg, badmintonCourts } from './hallfloor.js';
+import { BW, BH, HALL, MARKS, badmintonCourts } from './hallfloor.js';
+import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, parsePlans, exportPlans } from './hallplan.js';
+export { boardSvg };
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
-// Elementarten: Standardgröße, Farbe, Text; keep = Seitenverhältnis beim Vergrößern beibehalten
-const KINDS = {
-  zone: { label: 'Bereich', w: 420, h: 560, color: '#3d6fb5', text: 'Gruppe', rotate: false },
-  cone: { label: 'Hütchen', w: 70, h: 70, color: '#2e7d4f', text: 'H1', keep: true },
-  kid: { label: 'Kind', w: 56, h: 96, color: '#3d6fb5', text: '1', keep: true },
-  ball: { label: 'Ball', w: 40, h: 40, color: '#6c6cf0', keep: true },
-  arrow: { label: 'Laufweg', w: 220, h: 44, color: '#2f5e8e' },
-  path: { label: 'Weg (Freigabe)', w: 320, h: 34, color: '#b0602a' },
-  cross: { label: 'Sperrfläche', w: 64, h: 64, color: '#25272e', keep: true },
-  tag: { label: 'Schild S/LK', w: 90, h: 64, text: 'S' },
-  text: { label: 'Text', w: 260, h: 54, text: 'Text', color: '#25272e' },
-  gear: { label: 'Gerät', keep: true },
-  img: { label: 'Bild', keep: true },
-};
 const PLAN_TOOLS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text'];
 const hasText = k => ['zone', 'cone', 'kid', 'tag', 'text'].includes(k);
 const hasColor = i => (i.kind === 'gear' ? !!gear.GEAR[i.gear]?.color : ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(i.kind));
@@ -50,7 +38,6 @@ const sp = () => store.get().sport;
 const plan = () => sp().halls.find(h => h.id === sp().activeHall) || sp().halls[0] || null;
 const itemOf = (p, id) => p?.items.find(i => i.id === id);
 const libEntry = id => sp().hallLib.find(e => e.id === id);
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 function hist(id) { if (!history.has(id)) history.set(id, { undo: [], redo: [] }); return history.get(id); }
 // Änderung am aktuellen Plan mit Rückgängig-Schritt
@@ -69,78 +56,6 @@ function undo(redo = false) {
   if (selected && !itemOf(prev, selected)) selected = null;
 }
 
-// ---------- Zeichnen (auch für den Bildschirm, dort nur ansehen) ----------
-const num = v => Math.round(v * 10) / 10;
-function floorSvg(p) {
-  if (p.floor === 'leer') return '';
-  let lines = '';
-  if (p.floor === 'linien') {
-    const a = fp(HALL.len / 2, 0), b = fp(HALL.len / 2, HALL.dep), c = Array.from({ length: 40 }, (_, i) => { const t = i / 40 * 2 * Math.PI; return fp(HALL.len / 2 + 2.2 * Math.cos(t), HALL.dep / 2 + 2.2 * Math.sin(t)).map(num).join(','); }).join(' ');
-    lines = `<line x1="${num(a[0])}" y1="${num(a[1])}" x2="${num(b[0])}" y2="${num(b[1])}" class="hf-line"/><polygon points="${c}" class="hf-line"/>`;
-  }
-  return `<polygon points="${floorPoints()}" class="hf-floor"/>${lines}${marksSvg(p.lines)}`;
-}
-function para(w, h, k = K) { const d = h * k; return `${num(d)},0 ${num(w)},0 ${num(w - d)},${num(h)} 0,${num(h)}`; }
-function textLines(t, x, y, size, cls = '') {
-  const lines = String(t || '').split('\n');
-  return `<text x="${num(x)}" y="${num(y)}" font-size="${num(size)}" class="${cls}" text-anchor="middle">${lines.map((l, i) => `<tspan x="${num(x)}" dy="${i ? '1.15em' : 0}">${esc(l)}</tspan>`).join('')}</text>`;
-}
-function shape(i) {
-  const { w, h } = i, c = i.color || KINDS[i.kind]?.color || '#333';
-  switch (i.kind) {
-    case 'zone': {
-      const fs = clamp(Math.min(w, h) * 0.11, 18, 48);
-      return `<polygon points="${para(w, h)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="4"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
-    }
-    case 'cone': {
-      const r = Math.min(w, h) / 2, fs = r * (String(i.text || '').length > 2 ? 0.62 : 0.78);
-      return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 3)}" fill="${c}" stroke="#1f2a3c" stroke-width="4"/>${i.text ? `<text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(fs)}" text-anchor="middle" class="h-on-color">${esc(i.text)}</text>` : ''}`;
-    }
-    case 'kid': {
-      const s = w / 56, hy = 14 * s;
-      return `<g fill="${c}" stroke="#1f2a3c" stroke-width="${num(2.5 * s)}" stroke-linejoin="round"><circle cx="${w / 2}" cy="${num(hy)}" r="${num(11 * s)}"/><path d="M${num(w / 2 - 14 * s)} ${num(66 * s)}v${num(-26 * s)}a${num(14 * s)} ${num(12 * s)} 0 0 1 ${num(28 * s)} 0v${num(26 * s)}z"/></g>${i.text ? `<text x="${w / 2}" y="${num(h - 4 * s)}" font-size="${num(22 * s)}" text-anchor="middle" class="h-label">${esc(i.text)}</text>` : ''}`;
-    }
-    case 'ball': {
-      const r = Math.min(w, h) / 2;
-      return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 2)}" fill="${c}" stroke="#2c2f6e" stroke-width="3"/><circle cx="${num(w / 2 - r * .3)}" cy="${num(h / 2 - r * .3)}" r="${num(r * .22)}" fill="#fff" opacity=".6"/>`;
-    }
-    case 'arrow': {
-      const t = h * 0.42, head = Math.min(h * 1.1, w * 0.45);
-      return `<polygon points="0,${num(h / 2 - t / 2)} ${num(w - head)},${num(h / 2 - t / 2)} ${num(w - head)},0 ${w},${num(h / 2)} ${num(w - head)},${h} ${num(w - head)},${num(h / 2 + t / 2)} 0,${num(h / 2 + t / 2)}" fill="${c}"/>`;
-    }
-    case 'path': {
-      const head = Math.min(h * 1.1, w * 0.4), t = Math.max(4, h * 0.22);
-      return `<line x1="0" y1="${h / 2}" x2="${num(w - head * .8)}" y2="${h / 2}" stroke="${c}" stroke-width="${num(t)}" stroke-dasharray="${num(t * 3)} ${num(t * 2.2)}"/><polygon points="${num(w - head)},0 ${w},${h / 2} ${num(w - head)},${h}" fill="${c}"/>`;
-    }
-    case 'cross':
-      return `<path d="M6 6L${w - 6} ${h - 6}M${w - 6} 6L6 ${h - 6}" stroke="${c}" stroke-width="${num(Math.min(w, h) * .14)}" stroke-linecap="round"/>`;
-    case 'tag':
-      return `<rect x="3" y="3" width="${w - 6}" height="${h - 6}" fill="#fff" stroke="#1f2a3c" stroke-width="5"/><text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(h * .52)}" text-anchor="middle" class="h-label">${esc(i.text || '')}</text>`;
-    case 'text':
-      return `<text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(h * .72)}" text-anchor="middle" class="h-label" fill="${c}">${esc(i.text || '')}</text>`;
-    case 'gear':
-      return gear.gearSvg(i);
-    case 'img':
-      return `<rect class="h-ph" width="${w}" height="${h}" rx="6"/><text class="h-ph-t" x="${w / 2}" y="${h / 2}" dy=".35em" text-anchor="middle" font-size="${num(clamp(Math.min(w, h) * .16, 12, 28))}">Bild fehlt</text><image data-img="${esc(i.img)}" width="${w}" height="${h}" preserveAspectRatio="none"/>`;
-  }
-  return '';
-}
-const itemSvg = i => `<g class="hi" data-hid="${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
-const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0L16 16M16 0L0 16" stroke="#9aa3b2" stroke-width="1.5"/></pattern></defs>';
-// Ausschnitt um Hallenfläche und Elemente (für das Bildschirm-Objekt, damit wenig Rand bleibt)
-function contentBox(p) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
-  if (p.floor !== 'leer') add(FLOOR.left, FLOOR.top, FLOOR.left + FLOOR.width + FLOOR.height * K, FLOOR.bottom);
-  p.items.forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
-  if (!Number.isFinite(x0)) return `0 0 ${BW} ${BH}`;
-  const pad = 24; return `${num(x0 - pad)} ${num(y0 - pad)} ${num(x1 - x0 + 2 * pad)} ${num(y1 - y0 + 2 * pad)}`;
-}
-export function boardSvg(p, { edit = false, cls = '', crop = false } = {}) {
-  if (!p) return '';
-  return `<svg class="hall-svg ${cls}" viewBox="${crop ? contentBox(p) : `0 0 ${BW} ${BH}`}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hallenplan ${esc(p.title)}">${defs}
-    <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p)}${p.items.map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
-}
 // Bilder in einer Zeichnung nachladen
 export function hydrateSvg(el) {
   el?.querySelectorAll('image[data-img]').forEach(async im => {
@@ -156,7 +71,7 @@ export function attach(el) {
   host = el;
   const p = plan();
   if (selected && !itemOf(p, selected)) selected = null;
-  el.innerHTML = p ? editorHtml(p) : `<div class="card empty"><p>Noch kein Hallenplan.</p><button class="btn primary" data-h="new">${icon('plus')} Neuer Hallenplan</button></div>`;
+  el.innerHTML = p ? editorHtml(p) : `<div class="card empty"><p>Noch kein Hallenplan.</p><button class="btn primary" data-h="new">${icon('plus')} Neuer Hallenplan</button> <button class="btn ghost" data-h="import-plan">${icon('upload')} Importieren</button></div>`;
   el.onclick = onClick; el.onchange = onChange; el.oninput = onInput; el.onkeydown = onKey;
   el.onpointerdown = onPointerDown;
   if (p) { hydrateSvg(el.querySelector('.hall-board')); images.hydrate(el.querySelector('.hall-palette')); drawSel(); }
@@ -171,6 +86,8 @@ function editorHtml(p) {
       <button class="btn ghost sm" data-h="rename">${icon('edit', 15)} Umbenennen</button>
       <button class="btn ghost sm" data-h="copy">Kopie</button>
       <button class="btn ghost sm" data-h="del-plan" title="Hallenplan löschen">${icon('trash', 15)}</button>
+      <button class="btn ghost sm" data-h="import-plan" title="Hallenpläne aus einer Datei oder eingefügtem Text übernehmen">${icon('upload', 15)} Importieren</button>
+      <button class="btn ghost sm" data-h="export-plan" title="Diesen Hallenplan als Datei speichern">${icon('download', 15)} Exportieren</button>
       <span class="hall-sep"></span>
       <label class="small-text">Halle <select class="select sm" data-hc="floor">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
@@ -296,6 +213,8 @@ async function onClick(e) {
   const i = itemOf(p, selected);
   switch (act) {
     case 'new': return newPlanDialog();
+    case 'import-plan': return importPlansDialog();
+    case 'export-plan': return downloadFile(`Hallenplan - ${fileName(p.title)}.json`, exportPlans([p]));
     case 'rename': return dialog({ title: 'Hallenplan umbenennen', body: `<label class="field">Name<input name="t" class="input" maxlength="80" value="${esc(p.title)}" required></label>`,
       onSubmit: fd => { const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.'); commit(x => { x.title = t; }); } });
     case 'copy': {
@@ -431,13 +350,6 @@ function startTileDrag(e, tileEl) {
 }
 
 // ---------- Pläne und Bilder ----------
-// Vorlagen: Maße in Metern auf dem Hallenboden (x von links, y von vorn nach hinten)
-const zoneAt = (x0, x1, y0, y1, color, text) => { const a = fp(x0, y0), b = fp(x0, y1), h = a[1] - b[1]; return { id: uid(), kind: 'zone', x: Math.round(a[0]), y: Math.round(b[1]), w: Math.round((x1 - x0) / HALL.len * FLOOR.width + h * K), h: Math.round(h), rot: 0, color, text }; };
-// Gerät maßstäblich so setzen, dass der Punkt (ax, ay) seines Rahmens (Anteile 0…1) auf dem Bodenpunkt liegt; L = Länge in m bei dehnbaren Geräten
-function gearAt(id, view, x, y, { ax = 0.5, ay = 0.9, L } = {}) {
-  const s = gear.gearSize(id, view, L), f = gear.scaleOf(id), p = fp(x, y), h = Math.round(s.h * f), w = Math.round(s.w * f);
-  return { id: uid(), kind: 'gear', gear: id, view, x: Math.round(p[0] - w * ax), y: Math.round(p[1] - h * ay), w, h, rot: 0 };
-}
 const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
 const zonesAcross = n => Array.from({ length: n }, (_, k) => { const w = (HALL.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, 14.2, ZC[k % 4], (n === 4 ? 'Feld ' : 'Gruppe ') + (k + 1)); });
 // Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien
@@ -465,6 +377,36 @@ function newPlanDialog() {
       const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
       const p = { id: uid(), title: t, floor: 'halle', v: 3, lines: tpl.lines || [], items: tpl.items || [] };
       selected = null; store.update(s => { s.sport.halls.push(p); s.sport.activeHall = p.id; });
+    } });
+}
+
+// Dateiname aus dem Plantitel (ohne Zeichen, die Windows nicht erlaubt)
+const fileName = t => String(t).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70) || 'Hallenplan';
+// Hallenpläne aus Datei oder eingefügtem Text übernehmen (Format: hallplan.js). Nichts wird überschrieben, außer es ist angekreuzt.
+function importPlansDialog() {
+  dialog({ title: 'Hallenpläne importieren', submit: 'Importieren', body: `
+    <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
+    <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "plans": [ { "title": "…", "items": [ … ] } ] }'></textarea></label>
+    <label class="check"><input type="checkbox" name="replace"> Vorhandene Pläne mit gleichem Namen ersetzen</label>
+    <p class="muted small-text">Ohne Haken kommen die Pläne zu den vorhandenen dazu. Eigene Bilder sind in der Datei nicht enthalten.</p>`,
+    onOpen: el => { el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
+    onSubmit: fd => {
+      const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
+      const plans = parsePlans(text), replace = fd.get('replace') === 'on';
+      if (sp().halls.filter(h => !h.demo).length + plans.length > 60 && !replace) throw new Error('Es sind höchstens 60 Hallenpläne möglich. Bitte zuerst alte Pläne löschen.');
+      let replaced = 0;
+      selected = null;
+      store.update(s => {
+        const titles = new Set(s.sport.halls.map(x => x.title));
+        for (const p of plans) {
+          const k = replace ? s.sport.halls.findIndex(x => x.title === p.title) : -1;
+          if (k >= 0) { p.id = s.sport.halls[k].id; history.delete(p.id); s.sport.halls[k] = p; replaced++; continue; }
+          const base = p.title; let n = 2; while (titles.has(p.title)) p.title = `${base.slice(0, 74)} (${n++})`;
+          titles.add(p.title); s.sport.halls.push(p);
+        }
+        s.sport.activeHall = plans[0].id;
+      });
+      toast(`${plans.length === 1 ? '1 Hallenplan' : plans.length + ' Hallenpläne'} importiert${replaced ? `, davon ${replaced} ersetzt` : ''}.`);
     } });
 }
 
