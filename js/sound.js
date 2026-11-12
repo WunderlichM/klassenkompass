@@ -107,3 +107,92 @@ function beepPattern(c, t0, seconds) {
 export function timerEnd() { return scheduleAlarm(0); }
 // Test unter Zahnrad → „Musik bei Signalen“: gewählte Variante einstellen und ein kurzes Signal spielen
 export function testMusic(m, delaySec = 0) { setMusicMode(m); return scheduleAlarm(delaySec, 2); }
+
+// ======================================================================
+// Kartenquiz: Spieltöne und Denkmusik (alles im Browser erzeugt, keine Audiodateien)
+// Einstellungen gelten je Gerät: Töne an/aus, Denkmusik an/aus, Lautstärke.
+// ======================================================================
+const QUIZ_KEY = 'klassenkompass.quizSound';
+const quizPrefs = (() => { const d = { on: true, music: true, vol: 0.7 };
+  try { const p = JSON.parse(localStorage.getItem(QUIZ_KEY) || '{}'); return { on: p.on !== false, music: p.music !== false, vol: typeof p.vol === 'number' && p.vol >= 0 && p.vol <= 1 ? p.vol : d.vol }; } catch { return d; } })();
+export const quizSound = () => ({ ...quizPrefs });
+export function setQuizSound(p) {
+  Object.assign(quizPrefs, p);
+  try { localStorage.setItem(QUIZ_KEY, JSON.stringify(quizPrefs)); } catch (e) {}
+  if (!quizPrefs.on || !quizPrefs.music) quizMusic(false);
+}
+const qv = (v = 1) => (quizPrefs.on ? quizPrefs.vol * 0.5 * v : 0);
+// Gleitender Ton (für „Wusch“ und Plopp)
+function sweep(f0, f1, start, dur, vol, type = 'sine') {
+  const c = ac(); if (!c || vol <= 0) return;
+  const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + start;
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + Math.min(0.02, dur / 3)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+  hold(start + dur + TAIL);
+}
+// Rauschen (für Trommel und Becken)
+let noiseBuf = null;
+function noise(start, dur, vol, freq = 1800, q = 0.8, type = 'bandpass') {
+  const c = ac(); if (!c || vol <= 0) return;
+  if (!noiseBuf) { noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + start;
+  s.buffer = noiseBuf; s.loop = true; f.type = type; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f).connect(g).connect(c.destination); s.start(t); s.stop(t + dur + 0.05);
+  hold(start + dur + TAIL);
+}
+const drum = (start, vol) => { sweep(160, 50, start, 0.22, vol, 'sine'); noise(start, 0.09, vol * 0.5, 900, 0.6); };
+const QUIZ_FX = {
+  // „Los geht's“: kurzer Auftakt
+  go: v => { [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.09, 0.22, v, 'triangle')); tone(1047, 0.38, 0.5, v, 'triangle'); tone(523, 0.38, 0.5, v * 0.6); noise(0.38, 0.5, v * 0.25, 6000, 0.5, 'highpass'); },
+  // neue Frage erscheint
+  question: v => { sweep(300, 900, 0, 0.28, v * 0.5, 'triangle'); tone(784, 0.26, 0.16, v * 0.8, 'triangle'); tone(1175, 0.38, 0.3, v * 0.8, 'triangle'); },
+  // eine Karte wurde erkannt; n = wievielte Antwort (der Ton steigt mit)
+  plop: (v, n = 0) => { const f = 420 * 2 ** (Math.min(n, 24) / 24); sweep(f, f * 1.9, 0, 0.09, v * 0.7, 'sine'); },
+  // alle haben geantwortet
+  allin: v => { tone(988, 0, 0.14, v, 'triangle'); tone(1319, 0.13, 0.14, v, 'triangle'); tone(1976, 0.26, 0.45, v * 0.8, 'triangle'); },
+  // Auflösung: Schlag und Akkord
+  reveal: v => { drum(0, v * 1.4); noise(0, 0.6, v * 0.3, 5000, 0.5, 'highpass'); [523, 659, 784, 1047].forEach(f => tone(f, 0.04, 0.9, v * 0.5, 'triangle')); },
+  // Auflösung ohne richtige Antwort (Meinungsbild)
+  show: v => { drum(0, v); tone(440, 0.04, 0.5, v * 0.5, 'triangle'); tone(659, 0.04, 0.5, v * 0.5, 'triangle'); },
+  // Zwischenstand
+  board: v => { sweep(250, 1100, 0, 0.3, v * 0.4, 'triangle'); [659, 784, 988].forEach((f, i) => tone(f, 0.25 + i * 0.1, 0.25, v * 0.7, 'triangle')); },
+  // Podium: Trommelwirbel, drei Stufen, Fanfare
+  podium: v => {
+    for (let i = 0; i < 26; i++) noise(i * 0.045, 0.05, v * (0.25 + i / 60), 1400, 1.2);
+    [[1.2, 392], [1.6, 494], [2.0, 587]].forEach(([t, f]) => { drum(t, v * 1.3); tone(f, t, 0.3, v * 0.8, 'triangle'); });
+    [[2.6, 523, 0.16], [2.78, 523, 0.16], [2.96, 523, 0.16], [3.14, 659, 0.3], [3.46, 587, 0.16], [3.64, 659, 0.9]].forEach(([t, f, d]) => { tone(f, t, d + 0.1, v, 'triangle'); tone(f * 1.5, t, d + 0.1, v * 0.5, 'triangle'); tone(f / 2, t, d + 0.1, v * 0.6, 'square'); });
+    noise(3.64, 1.2, v * 0.35, 6000, 0.5, 'highpass');
+  },
+};
+export const QUIZ_FX_NAMES = { go: 'Start', question: 'Neue Frage', plop: 'Karte erkannt', allin: 'Alle haben geantwortet', reveal: 'Auflösung', board: 'Zwischenstand', podium: 'Podium' };
+export function quizFx(name, arg) { const v = qv(); if (v > 0) QUIZ_FX[name]?.(v, arg); }
+
+// Denkmusik: ruhige Schleife aus Bass, Begleitung und Melodie (vier Takte, a-Moll – F – C – G), läuft bis zur Auflösung
+const BPM = 104, STEP = 60 / BPM / 2;                       // Achtelnoten
+const BARS = [[110, [220, 261.6, 329.6]], [87.3, [174.6, 220, 261.6]], [130.8, [196, 261.6, 329.6]], [98, [196, 246.9, 293.7]]];
+const LEAD = [0, 2, 1, 2, 0, 2, 1, 3];                      // Töne des Akkords, 3 = Oktave des Grundtons
+let musicTimer = 0, musicNext = 0, musicStep = 0;
+function musicTick() {
+  const c = ac(); if (!c) return;
+  const v = qv(0.22);
+  while (musicNext < c.currentTime + 0.35) {
+    const rel = Math.max(0, musicNext - c.currentTime), bar = BARS[Math.floor(musicStep / 8) % 4], k = musicStep % 8;
+    if (v > 0) {
+      if (k === 0 || k === 4) tone(bar[0], rel, 0.34, v * 1.5, 'triangle');
+      if (k === 3 || k === 6) tone(bar[0] * 2, rel, 0.14, v * 0.8, 'triangle');
+      if (k % 2 === 1) for (const f of bar[1]) tone(f, rel, 0.11, v * 0.32, 'square');
+      const l = LEAD[k], f = l === 3 ? bar[1][0] * 2 : bar[1][l];
+      tone(f * 2, rel, 0.2, v * 0.75, 'sine');
+      if (k === 2 || k === 6) noise(rel, 0.03, v * 0.5, 7000, 0.7, 'highpass');
+    }
+    musicNext += STEP; musicStep++;
+  }
+}
+export function quizMusic(want) {
+  const on = !!want && quizPrefs.on && quizPrefs.music;
+  if (on === !!musicTimer) return;
+  if (on) { const c = ac(); if (!c) return; musicNext = c.currentTime + 0.12; musicStep = 0; musicTimer = setInterval(musicTick, 110); musicTick(); }
+  else { clearInterval(musicTimer); musicTimer = 0; }
+}

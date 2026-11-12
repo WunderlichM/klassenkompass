@@ -7,6 +7,7 @@ import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
 import * as images from './images.js';
+import * as sound from './sound.js';
 
 // Jedes Gerät bekommt eine zufällige Kennung, damit klar ist, wo ein Quiz läuft
 const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localStorage.getItem(k); if (!d) { d = uid(); localStorage.setItem(k, d); } return d; } catch { return uid(); } })();
@@ -29,6 +30,14 @@ const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : L
 let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null, rankId = null;
 // Nur für die Optik: welche Antworten schon gezeigt wurden (Kachel „springt“ nur beim ersten Mal), welche Auflösung schon animiert wurde, welches Podium schon Konfetti hatte
 const seenAns = new Set(); let seenQ = '', revealAnim = '', confettiFor = '';
+// Bühne: Animationen laufen ab einem festen Startzeitpunkt. Weil bei jeder Änderung neu gezeichnet wird, setzt die
+// Zeichnung sie mit negativer Verzögerung (CSS-Variable) an der richtigen Stelle fort, statt sie neu zu starten.
+const animAt = new Map(), begun = new Set();
+const animT = key => { const now = performance.now(), first = !animAt.has(key); if (first) animAt.set(key, now); return { first, t: `-${Math.round(now - animAt.get(key))}ms` }; };
+let boardFor = '', allInFor = '';
+// Formen der Antworten (zusätzlich zur Farbe): A Dreieck, B Raute, C Kreis, D Quadrat
+const SHAPES = ['<path d="M50 10 92 86H8Z"/>', '<path d="M50 6 94 50 50 94 6 50Z"/>', '<circle cx="50" cy="50" r="43"/>', '<rect x="10" y="10" width="80" height="80" rx="9"/>'];
+const shape = i => `<span class="qs-shape"><svg viewBox="0 0 100 100" aria-hidden="true">${SHAPES[i]}</svg><b>${LETTERS[i]}</b></span>`;
 const live = { remote: null, scanTimer: null, keep: null, lastControl: '', lastCmd: null, applied: new Map(), phoneAt: 0, lastScanAt: 0, error: '' };
 
 export function mount(el) {
@@ -41,14 +50,14 @@ export function mount(el) {
   draw();
   homeTimer = setInterval(pollHome, 4000); pollHome();
   document.addEventListener('visibilitychange', onVisible);
-  return () => { off(); removeEventListener('kk-images', onImages); document.removeEventListener('visibilitychange', onVisible); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; keepAwake(false); root.onclick = root.onchange = null; root = null; };
+  return () => { off(); removeEventListener('kk-images', onImages); document.removeEventListener('visibilitychange', onVisible); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; keepAwake(false); sound.quizMusic(false); root.onclick = root.onchange = null; root = null; };
 }
 
 function draw() {
   if (!root) return;
   const s = running();
   if (s) { drawRun(s); startScanPoll(); syncControl(s); checkAuto(s); }
-  else { stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId), r = !p && rankId && Q().classes.find(x => x.id === rankId);
+  else { sound.quizMusic(false); stopScanPoll(); const p = podiumId && Q().sessions.find(x => x.id === podiumId), r = !p && rankId && Q().classes.find(x => x.id === rankId);
     if (p) drawPodium(p); else if (r) drawRanking(r); else { podiumId = rankId = null; drawHome(); } }
   images.hydrate(root);
   keepAwake(!!(s || podiumId));
@@ -87,7 +96,8 @@ function ranking(s) {
   return { graded: graded.length, places: levels.map((score, i) => ({ place: i + 1, score, names: scores.filter(x => x.score === score).sort((a, b) => a.name.localeCompare(b.name, 'de')) })) };
 }
 function drawPodium(s) {
-  const { graded, places } = ranking(s);
+  const { graded, places } = ranking(s), a = animT('podium|' + s.id);
+  if (a.first && places.length) sound.quizFx('podium');
   const step = n => { const p = places[n - 1]; if (!p) return `<div class="pod-col empty"></div>`;
     return `<div class="pod-col p${n}"><div class="pod-names ${p.names.length > 4 ? 'many' : ''}">${p.names.map(x => `<span>${sym(x.card, '1.2em')} ${esc(x.name)}</span>`).join('')}</div>
       <div class="pod-step"><span class="pod-place">${n}</span><span class="pod-score">${p.score} / ${graded} richtig</span></div></div>`; };
@@ -96,12 +106,13 @@ function drawPodium(s) {
     <div class="run-head">
       <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>Unsere Besten<span class="dot">.</span></h1></div>
       <div class="tools">
+        <button class="icon-btn" data-act="sound" title="Töne im Quiz" aria-label="Töne im Quiz">${icon(sound.quizSound().on ? 'volume' : 'mute')}</button>
         <button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>
         <button class="btn ghost sm no-present" data-act="result" data-id="${esc(s.id)}">${icon('chart', 16)} Alle Ergebnisse</button>
         <button class="btn primary sm" data-act="podium-close">${icon('check', 16)} Fertig</button>
       </div>
     </div>
-    <div class="card pod-card">${places.length ? confetti(s.id) : ''}${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="muted center">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
+    <div class="qs pod-card" style="--tp:${a.t}">${places.length ? confetti(s.id) : ''}${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="qs-empty">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
   </section>`;
 }
 
@@ -110,7 +121,7 @@ function confetti(id) {
   if (confettiFor === id) return '';
   confettiFor = id;
   const cols = ['#e0533d', '#2f6fd0', '#e3a312', '#7a4fc4', '#3f9a5c', '#f2c14e'];
-  return `<div class="confetti" aria-hidden="true">${Array.from({ length: 70 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};animation-delay:${(1.2 + Math.random() * 1.4).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 1.8).toFixed(2)}s;--dx:${(Math.random() * 160 - 80).toFixed(0)}px;--r:${(Math.random() * 720 - 360).toFixed(0)}deg;width:${6 + Math.round(Math.random() * 6)}px"></i>`).join('')}</div>`;
+  return `<div class="confetti" aria-hidden="true">${Array.from({ length: 70 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};animation-delay:${(3.5 + Math.random() * 1.4).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 1.8).toFixed(2)}s;--dx:${(Math.random() * 160 - 80).toFixed(0)}px;--r:${(Math.random() * 720 - 360).toFixed(0)}deg;width:${6 + Math.round(Math.random() * 6)}px"></i>`).join('')}</div>`;
 }
 
 // ======================================================================
@@ -218,13 +229,64 @@ function drawRun(s) {
   const byStudent = q.answers, pres = present(s), answered = pres.filter(x => byStudent[x.id] !== undefined).length;
   const counts = q.options.map((_, i) => Object.values(byStudent).filter(v => v === i).length);
   const votes = counts.reduce((a, b) => a + b, 0), pct = i => votes ? Math.round(counts[i] / votes * 100) : 0;
-  // Kachel-Animation nur für neu erfasste Antworten; beim Wechsel der Frage springt nichts
-  if (seenQ !== q.id) { seenQ = q.id; for (const [k, v] of Object.entries(byStudent)) seenAns.add(`${q.id}|${k}|${v}`); }
-  const fresh = id => { const k = `${q.id}|${id}|${byStudent[id]}`; if (seenAns.has(k)) return false; seenAns.add(k); return true; };
-  // Balken wachsen nur beim ersten Auflösen dieser Frage
-  const grow = s.reveal && revealAnim !== q.id; if (s.reveal) revealAnim = q.id; else if (revealAnim === q.id) revealAnim = '';
-  const ring = pres.length ? answered / pres.length * 100 : 0;
+  const full = pres.length > 0 && answered === pres.length;
+  const fs = `<button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>`;
+  const snd = `<button class="icon-btn" data-act="sound" title="Töne im Quiz" aria-label="Töne im Quiz">${icon(sound.quizSound().on ? 'volume' : 'mute')}</button>`;
   const phone = account.loggedIn() ? (Date.now() - live.phoneAt < 8000 ? `${icon('check', 14)} Handy verbunden` : `${icon('camera', 14)} Handy: auf dem Handy mit demselben Konto anmelden → Quiz → „Karten scannen“`) : `${icon('camera', 14)} Ohne Konto: auf diesem Gerät scannen oder das Quiz auf dem Handy starten`;
+
+  // Startbildschirm, bis „Los geht's“ gedrückt oder die erste Antwort erfasst ist
+  if (!begun.has(s.id) && (s.index > 0 || s.reveal || s.questions.some(x => Object.keys(x.answers).length))) begun.add(s.id);
+  if (!begun.has(s.id)) {
+    sound.quizMusic(false);
+    const a = animT('lobby|' + s.id);
+    root.innerHTML = `
+  <section class="page quiz quiz-run">
+    <div class="run-head">
+      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)}</p><h1>Gleich geht's los<span class="dot">.</span></h1></div>
+      <div class="tools">${snd}${fs}<button class="btn ghost sm" data-act="end">${icon('x', 16)} Beenden</button></div>
+    </div>
+    <div class="qs qs-lobby" style="--ti:${a.t}">
+      <p class="ql-kicker">Kartenquiz</p>
+      <h2 class="ql-title">${esc(s.title)}</h2>
+      <p class="ql-sub">${s.questions.length === 1 ? '1 Frage' : s.questions.length + ' Fragen'} · ${pres.length === 1 ? '1 Tier' : pres.length + ' Tiere'} am Start</p>
+      <div class="ql-animals" aria-hidden="true">${pres.slice().sort((x, y) => x.card - y.card).map((x, k) => `<span style="--d:${(k * 0.06).toFixed(2)}s">${sym(x.card, '1em')}</span>`).join('')}</div>
+      <p class="ql-ready">Karten bereithalten!</p>
+      <button class="btn primary big ql-go" data-act="begin">${icon('play', 20)} Los geht's</button>
+    </div>
+    <p class="hint no-present">${phone}${live.error ? ` · <span class="warn-text">${esc(live.error)}</span>` : ''}</p>
+  </section>`;
+    return;
+  }
+
+  // Töne und Animationen hängen an Zustandswechseln, nicht am Neuzeichnen
+  const intro = animT('intro|' + q.id);
+  if (intro.first) sound.quizFx('question');
+  if (seenQ !== q.id) { seenQ = q.id; boardFor = ''; for (const [k, v] of Object.entries(byStudent)) seenAns.add(`${q.id}|${k}|${v}`); if (full) allInFor = q.id; }
+  const fresh = id => { const k = `${q.id}|${id}|${byStudent[id]}`; if (seenAns.has(k)) return false; seenAns.add(k); return true; };
+  const popped = new Set(pres.filter(x => byStudent[x.id] !== undefined && fresh(x.id)).map(x => x.id));
+  if (full && allInFor !== q.id) { allInFor = q.id; sound.quizFx('allin'); } else if (popped.size) sound.quizFx('plop', answered);
+  if (!full && allInFor === q.id) allInFor = '';
+  let rev = null;
+  if (s.reveal) { rev = animT('reveal|' + q.id); if (rev.first) sound.quizFx(q.correct === null ? 'show' : 'reveal'); } else animAt.delete('reveal|' + q.id);
+  const board = s.reveal && boardFor === q.id;
+  let brd = null;
+  if (board) { brd = animT('board|' + q.id); if (brd.first) sound.quizFx('board'); } else animAt.delete('board|' + q.id);
+  sound.quizMusic(!s.reveal && !full);
+  const ring = pres.length ? answered / pres.length * 100 : 0;
+  const right = s.reveal && q.correct !== null && answered ? Math.round(pres.filter(x => byStudent[x.id] === q.correct).length / answered * 100) : null;
+
+  // Zwischenstand: die besten fünf nach den bisher aufgelösten Fragen
+  const boardHtml = () => {
+    const graded = s.questions.slice(0, s.index + 1).filter(x => x.correct !== null);
+    const rows = pres.map(x => ({ x, score: graded.filter(g => g.answers[x.id] === g.correct).length, plus: q.correct !== null && byStudent[x.id] === q.correct }))
+      .filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.x.name.localeCompare(b.x.name, 'de'));
+    const top = rows.slice(0, 5), more = rows.filter(r => r.score === top[top.length - 1]?.score).length - top.filter(r => r.score === top[top.length - 1]?.score).length;
+    let place = 0, last = -1;
+    return `<div class="qs-board"><h2>${icon('trophy', 26)} Zwischenstand</h2>${top.length ? `<ol>${top.map((r, k) => { if (r.score !== last) { place = k + 1; last = r.score; }
+      return `<li style="--d:${(0.15 + k * 0.14).toFixed(2)}s"><span class="qb-place">${place}</span>${sym(r.x.card, '1.5em')}<span class="qb-name">${esc(r.x.name)}</span>${r.plus ? '<i class="qb-plus">+1</i>' : ''}<b>${r.score}</b></li>`; }).join('')}</ol>
+      ${more > 0 ? `<p class="qb-note">… und ${more} weitere mit ${last} ${last === 1 ? 'Punkt' : 'Punkten'}</p>` : ''}` : '<p class="qs-empty">Noch keine Punkte – das kommt noch!</p>'}</div>`;
+  };
+
   root.innerHTML = `
   <section class="page quiz quiz-run">
     <div class="run-head">
@@ -233,31 +295,32 @@ function drawRun(s) {
       <div class="tools">
         <button class="btn ghost sm" data-act="scan-here">${icon('camera', 16)} Hier scannen</button>
         <button class="btn ghost sm no-present" data-act="add-q" title="Weitere Frage spontan anhängen">${icon('plus', 16)} Frage</button>
-        <button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>
+        ${snd}${fs}
         <button class="btn ghost sm" data-act="end">${icon('x', 16)} Beenden</button>
       </div>
     </div>
-    <div class="card run-card">
-      ${q.text || !q.img ? `<p class="run-q">${esc(q.text) || '<span class="muted">Frage mündlich oder an der Tafel</span>'}</p>` : ''}
-      ${q.img ? `<div class="run-img">${images.imgTag(q.img)}</div>` : ''}
-      <div class="run-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''} ${s.reveal ? 'revealed' : ''}">${q.options.map((o, i) => `
-        <div class="run-opt l${i} ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}">
-          ${s.reveal ? `<span class="run-fill ${grow ? 'grow' : ''}" style="width:${pct(i)}%"></span>` : ''}
-          <span class="run-letter">${LETTERS[i]}</span>${q.optImgs?.[i] ? `<span class="run-opt-img">${images.imgTag(q.optImgs[i])}</span>` : ''}<span class="run-text">${esc(o)}</span>
-          ${s.reveal ? `<span class="run-stat"><b>${counts[i]}</b><small>${pct(i)} %</small></span>` : ''}
-          ${s.reveal && q.correct === i ? `<span class="run-ok" title="Richtige Antwort">${icon('check', 20)}</span>` : ''}
-        </div>`).join('')}</div>
-      <div class="run-foot">
-        <div class="run-progress">
-          <span class="ring ${pres.length && answered === pres.length ? 'full' : ''}"><svg class="ring-svg" viewBox="0 0 40 40" aria-hidden="true"><circle class="r-bg" cx="20" cy="20" r="17"/><circle class="r-fg" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="${ring.toFixed(1)} 100"/></svg>${pres.length && answered === pres.length ? icon('check', 18) : ''}</span>
-          <span class="rp-text"><span><b>${answered}</b> / ${pres.length}</span><small>geantwortet</small></span>
-          ${s.reveal && q.correct !== null && answered ? `<span class="rp-right"><b>${Math.round(counts[q.correct] / answered * 100)} %</b><small>richtig</small></span>` : ''}
+    <div class="qs ${s.reveal ? 'revealed' : ''} ${board ? 'boarding' : ''}" style="--ti:${intro.t};--tr:${rev ? rev.t : '0ms'};--tb:${brd ? brd.t : '0ms'}">
+      <div class="qs-head">
+        <div class="qs-q">${q.text || !q.img ? `<p>${esc(q.text) || '<span class="qs-oral">Frage mündlich oder an der Tafel</span>'}</p>` : ''}${q.img && !board ? `<div class="qs-img">${images.imgTag(q.img)}</div>` : ''}</div>
+        <div class="qs-count ${full ? 'full' : ''}" title="${answered} von ${pres.length} haben geantwortet">
+          <svg viewBox="0 0 40 40" aria-hidden="true"><circle class="r-bg" cx="20" cy="20" r="17"/><circle class="r-fg" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="${ring.toFixed(1)} 100"/></svg>
+          <span><b>${answered}</b><small>von ${pres.length}</small></span>
         </div>
+      </div>
+      ${board ? boardHtml() : `<div class="qs-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''}">${q.options.map((o, i) => `
+        <div class="qs-opt l${i} ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}" style="--d:${(0.35 + i * 0.12).toFixed(2)}s">
+          ${shape(i)}${q.optImgs?.[i] ? `<span class="qs-opt-img">${images.imgTag(q.optImgs[i])}</span>` : ''}<span class="qs-text">${esc(o)}</span>
+          ${s.reveal ? `<span class="qs-stat"><b>${counts[i]}</b><small>${pct(i)} %</small></span><span class="qs-fill" style="--w:${pct(i)}%"></span>` : ''}
+          ${s.reveal && q.correct === i ? `<span class="qs-ok" title="Richtige Antwort">${icon('check', 22)}</span>` : ''}
+        </div>`).join('')}</div>`}
+      <div class="qs-foot">
+        <div class="qs-info">${right !== null ? `<span class="qs-right"><b>${right} %</b> richtig</span>` : s.reveal ? '' : full ? '<span class="qs-wait done">Alle haben geantwortet!</span>' : '<span class="qs-wait">Karten hochhalten …</span>'}</div>
         <div class="tools">
           ${q.correct === null ? `<label class="run-correct no-present">Richtig: <select class="select sm" data-act="set-correct"><option value="">–</option>${q.options.map((_, i) => `<option value="${i}">${LETTERS[i]}</option>`).join('')}</select></label>` : ''}
           <button class="btn ghost" data-act="prev" ${s.index ? '' : 'disabled'}>${icon('back', 16)} Zurück</button>
           <button class="btn ${s.reveal ? 'ghost' : 'primary'}" data-act="reveal">${icon('chart', 16)} ${s.reveal ? 'Verbergen' : 'Auflösen'}</button>
-          ${s.index < s.questions.length - 1 ? `<button class="btn primary" data-act="next">Weiter ${icon('forward', 16)}</button>` : `<button class="btn primary" data-act="end">${icon('check', 16)} Fertig</button>`}
+          ${s.reveal ? `<button class="btn ghost" data-act="board">${icon('trophy', 16)} ${board ? 'Antworten' : 'Zwischenstand'}</button>` : ''}
+          ${s.index < s.questions.length - 1 ? `<button class="btn ${s.reveal ? 'primary' : 'ghost'}" data-act="next">Weiter ${icon('forward', 16)}</button>` : `<button class="btn ${s.reveal ? 'primary' : 'ghost'}" data-act="end">${icon('check', 16)} Fertig</button>`}
         </div>
       </div>
     </div>
@@ -269,11 +332,31 @@ function drawRun(s) {
         if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
         const a = byStudent[x.id], has = a !== undefined, open = s.reveal && showNames && has;
         const cl = !has ? '' : open && q.correct !== null ? (a === q.correct ? 'right' : 'miss') : 'done';
-        return `<button class="tile ${cl} ${has && fresh(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
+        return `<button class="tile ${cl} ${popped.has(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
       }).join('')}</div>
       <p class="hint no-present">${phone}${live.error ? ` · <span class="warn-text">${esc(live.error)}</span>` : ''}</p>
     </div>
   </section>`;
+}
+
+// Töne im Quiz: an/aus, Denkmusik, Lautstärke (je Gerät) und Probehören
+function soundDialog() {
+  const p = sound.quizSound(); let demo = 0;
+  const d = dialog({ title: 'Töne im Quiz', submit: 'Fertig', cancel: null, body: `
+    <label class="check"><input type="checkbox" name="on" ${p.on ? 'checked' : ''}> Töne einschalten</label>
+    <label class="check"><input type="checkbox" name="music" ${p.music ? 'checked' : ''}> Denkmusik, bis aufgelöst wird</label>
+    <label class="field">Lautstärke<input type="range" name="vol" min="0" max="100" step="5" value="${Math.round(p.vol * 100)}" class="range"></label>
+    <p class="field-label">Probehören</p>
+    <div class="tools">${Object.entries(sound.QUIZ_FX_NAMES).map(([k, v]) => `<button type="button" class="btn ghost sm" data-fx="${k}">${esc(v)}</button>`).join('')}<button type="button" class="btn ghost sm" data-fx="music">Denkmusik (8 s)</button></div>
+    <p class="muted small-text">Gilt für dieses Gerät. Die Töne kommen aus dem Gerät, auf dem das Quiz läuft – am Beamer also aus dessen Lautsprechern.</p>`,
+    onOpen: el => {
+      const read = () => sound.setQuizSound({ on: el.querySelector('[name=on]').checked, music: el.querySelector('[name=music]').checked, vol: Number(el.querySelector('[name=vol]').value) / 100 });
+      el.addEventListener('input', read);
+      el.addEventListener('click', e => { const b = e.target.closest('[data-fx]'); if (!b) return; read();
+        if (b.dataset.fx === 'music') { clearTimeout(demo); sound.quizMusic(true); demo = setTimeout(() => { sound.quizMusic(false); draw(); }, 8000); } else sound.quizFx(b.dataset.fx, 8); });
+    },
+    onSubmit: () => {} });
+  d.el.addEventListener('close', () => { clearTimeout(demo); sound.quizMusic(false); draw(); });
 }
 
 // ======================================================================
@@ -317,7 +400,10 @@ function onClick(e) {
     // laufendes Quiz
     case 'prev': return go(-1);
     case 'next': return go(1);
-    case 'reveal': return updateRun(s => { s.reveal = !s.reveal; });
+    case 'reveal': boardFor = ''; return updateRun(s => { s.reveal = !s.reveal; });
+    case 'begin': { const s = running(); if (s) begun.add(s.id); sound.quizFx('go'); return draw(); }
+    case 'board': { const s = running(); if (!s) return; const id = s.questions[s.index].id; boardFor = boardFor === id ? '' : id; return draw(); }
+    case 'sound': return soundDialog();
     case 'end': return endRun();
     case 'add-q': return updateRun(s => { s.questions.push({ id: uid(), text: '', options: ['', '', '', ''], correct: null, answers: {} }); s.index = s.questions.length - 1; s.reveal = false; });
     case 'present': toggleFullscreen(); return draw();
