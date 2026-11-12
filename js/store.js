@@ -55,7 +55,7 @@ export function demoQuiz() {
   const id = uid();
   const cls = { id, name: 'Demoklasse', demo: true, count: 16, resetAt: 0, students: quizStudents(id, 16) };
   const q = (text, options, correct) => ({ id: uid(), text, options, correct });
-  const set = { id: uid(), title: 'Demo: Werkzeugkunde', demo: true, questions: [
+  const set = { id: uid(), title: 'Demo: Werkzeugkunde', demo: true, classId: id, questions: [
     q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
     q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
     q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
@@ -213,7 +213,10 @@ function normQuiz(q) {
     const img = imgId(x?.img), optImgs = options.map((_, i) => imgId(x?.optImgs?.[i]));
     return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct, ...(img ? { img } : {}), ...(optImgs.some(Boolean) ? { optImgs } : {}) };
   };
-  const sets = (Array.isArray(q.sets) ? q.sets : []).map(t => ({ id: String(t?.id || uid()), title: str(t?.title, 80) || 'Fragensatz', demo: !!t?.demo,
+  // Seit 1.20.0 gehört jeder Fragensatz zu einer Klasse (classId), bewusst zu allen ('*') oder – ältere Sätze und Sätze
+  // gelöschter Klassen – noch zu keiner (''). Sätze ohne Klasse lassen sich erst nach dem Zuordnen starten.
+  const setClass = v => (v === '*' ? '*' : classes.some(c => c.id === v) ? String(v) : '');
+  const sets = (Array.isArray(q.sets) ? q.sets : []).map(t => ({ id: String(t?.id || uid()), title: str(t?.title, 80) || 'Fragensatz', demo: !!t?.demo, classId: setClass(t?.classId),
     questions: (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map(normQ) }));
   const sessions = (Array.isArray(q.sessions) ? q.sessions : []).slice(-200).map(x => ({ id: String(x?.id || uid()), device: str(x?.device, 40), classId: String(x?.classId || ''), className: str(x?.className, 60),
     setId: String(x?.setId || ''), title: str(x?.title, 80), date: str(x?.date, 10), index: int(x?.index, 0, 99, 0), reveal: !!x?.reveal, done: !!x?.done,

@@ -18,7 +18,13 @@ const Q = () => store.get().quiz;
 // Wer welches Tier ist, steht nur auf dem Zuordnungsblatt der Lehrkraft (Papier), nie in der App.
 const cls = () => Q().classes.find(c => c.id === Q().activeClassId) || null;
 const sym = (card, size = '1.35em') => animalSvg(card, { size, title: false });
-const qset = () => Q().sets.find(t => t.id === Q().activeSetId) || null;
+// Fragensätze gehören zu einer Klasse (classId), bewusst zu allen Klassen (ALL) oder noch zu keiner ('').
+// Angezeigt werden nur die Sätze, die zur gewählten Klasse passen – so startet kein Quiz in der falschen Klasse.
+const ALL = '*';
+const fits = (t, classId) => !t.classId || t.classId === ALL || t.classId === classId;
+const setsFor = () => { const c = cls(); return c ? Q().sets.filter(t => fits(t, c.id)) : Q().sets; };
+const qset = () => { const v = setsFor(); return v.find(t => t.id === Q().activeSetId) || v[0] || null; };
+const setTag = t => (t.classId === ALL ? ' · alle Klassen' : t.classId ? '' : ' · ohne Klasse');
 const running = () => Q().sessions.find(s => !s.done && s.device === DEVICE) || null;
 const present = s => s.students.filter(x => !s.absent?.includes(x.id));
 const autoDone = new Set();
@@ -128,7 +134,7 @@ function confetti(id) {
 // Startseite
 // ======================================================================
 function drawHome() {
-  const q = Q(), c = cls(), t = qset();
+  const q = Q(), c = cls(), t = qset(), sets = setsFor();
   const done = q.sessions.filter(x => x.done).slice().reverse();
   const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId);
   root.innerHTML = `
@@ -153,12 +159,14 @@ function drawHome() {
         <div class="card">
           <div class="card-head">
             <div><p class="eyebrow">Fragensatz</p>
-              <div class="picker-row"><select id="quiz-set" class="select">${q.sets.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeSetId ? 'selected' : ''}>${esc(x.title)} (${x.questions.length})</option>`).join('')}${q.sets.length ? '' : '<option>Noch kein Fragensatz</option>'}</select>
+              <div class="picker-row"><select id="quiz-set" class="select">${sets.map(x => `<option value="${esc(x.id)}" ${x.id === t?.id ? 'selected' : ''}>${esc(x.title)} (${x.questions.length})${setTag(x)}</option>`).join('')}${sets.length ? '' : `<option>${c ? 'Noch kein Fragensatz für diese Klasse' : 'Noch kein Fragensatz'}</option>`}</select>
               <button class="icon-btn" data-act="set-new" title="Neuer Fragensatz" aria-label="Neuer Fragensatz">${icon('plus')}</button>
               <button class="icon-btn" data-act="set-import" title="Fragensätze importieren (Datei oder Text)" aria-label="Fragensätze importieren">${icon('upload')}</button>
               ${t ? `<button class="icon-btn" data-act="set-edit" title="Umbenennen, kopieren oder löschen" aria-label="Fragensatz bearbeiten">${icon('edit')}</button>` : ''}</div>
             </div>
           </div>
+          ${t && c ? (!t.classId ? `<p class="notice">Dieser Fragensatz hat noch keine Klasse und lässt sich so nicht starten. <button class="link" data-act="set-assign">„${esc(c.name)}“ zuordnen</button> · <button class="link" data-act="set-edit">andere Auswahl</button></p>`
+            : `<p class="muted small-text">${t.classId === ALL ? 'Für <b>alle Klassen</b> freigegeben.' : `Nur für <b>${esc(c.name)}</b> – in anderen Klassen erscheint dieser Fragensatz nicht.`}</p>`) : ''}
           ${t ? questionList(t) : `<p class="muted">Lege einen Fragensatz an oder starte mit „Schnellstart“ und stelle die Fragen mündlich.</p>`}
           <div class="card-foot">
             <button class="btn ghost" data-act="q-add" ${t ? '' : 'disabled'}>${icon('plus', 16)} Frage hinzufügen</button>
@@ -390,8 +398,9 @@ function onClick(e) {
     case 'set-edit': return setDialog(qset());
     case 'q-add': return questionDialog(qset());
     case 'q-edit': return questionDialog(qset(), i);
-    case 'q-up': return store.update(s => { const t = s.quiz.sets.find(x => x.id === s.quiz.activeSetId); [t.questions[i - 1], t.questions[i]] = [t.questions[i], t.questions[i - 1]]; });
-    case 'q-del': return (async () => { if (await confirmDialog('Frage löschen', `„${qset().questions[i].text || 'Frage ' + (i + 1)}“ löschen?`)) store.update(s => { s.quiz.sets.find(x => x.id === s.quiz.activeSetId).questions.splice(i, 1); }); })();
+    case 'set-assign': { const t = qset(), c = cls(); if (t && c) store.update(s => { const x = s.quiz.sets.find(y => y.id === t.id); if (x) x.classId = c.id; }); return; }
+    case 'q-up': return store.update(s => { const id = qset()?.id, t = s.quiz.sets.find(x => x.id === id); [t.questions[i - 1], t.questions[i]] = [t.questions[i], t.questions[i - 1]]; });
+    case 'q-del': return (async () => { if (await confirmDialog('Frage löschen', `„${qset().questions[i].text || 'Frage ' + (i + 1)}“ löschen?`)) { const id = qset().id; store.update(s => { s.quiz.sets.find(x => x.id === id).questions.splice(i, 1); }); } })();
     case 'start': return start(false);
     case 'start-quick': return start(true);
     case 'result': return resultDialog(b.dataset.id);
@@ -419,6 +428,12 @@ function go(d) { updateRun(s => { const n = Math.max(0, Math.min(s.questions.len
 function start(quick) {
   const c = cls(), t = qset(); if (!c) return;
   if (!c.students.length) return toast('Die Klasse hat noch keine Schüler.', { kind: 'warn' });
+  if (!quick) {
+    if (!t) return;
+    // Sperre gegen Verklicken: ein Fragensatz startet nur in seiner Klasse (oder wenn er bewusst für alle freigegeben ist)
+    if (!t.classId) return toast(`„${t.title}“ hat noch keine Klasse. Bitte zuerst zuordnen.`, { kind: 'warn', action: `„${c.name}“ zuordnen`, onAction: () => store.update(s => { const x = s.quiz.sets.find(y => y.id === t.id); if (x) x.classId = c.id; }) });
+    if (t.classId !== ALL && t.classId !== c.id) return toast(`„${t.title}“ gehört zu einer anderen Klasse.`, { kind: 'warn' });
+  }
   const old = Q().sessions.find(x => !x.done && x.device === DEVICE);
   const questions = quick ? [{ id: uid(), text: '', options: ['', '', '', ''], correct: null }] : t.questions.filter(x => x.options.length >= 2);
   store.update(s => {
@@ -606,7 +621,7 @@ function classesDialog() {
       if (b.dataset.m === 'new') { close(); return classDialog(); }
       if (b.dataset.m === 'edit') { close(); return classEditDialog(c); }
       close();
-      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten, die Rangliste der Klasse entfällt.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
+      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten, die Rangliste der Klasse entfällt. Ihre Fragensätze bleiben und stehen danach ohne Klasse da.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); s.quiz.sets.forEach(t => { if (t.classId === id) t.classId = ''; }); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
     }) });
 }
 const countField = (n = 16) => `<label class="field">Anzahl Kinder <small class="muted">(Karte 1 bis ${CARD_COUNT})</small><input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${n}" inputmode="numeric" required></label>`;
@@ -707,18 +722,37 @@ async function rankReset(c) {
 // Fragensätze und Fragen
 // ======================================================================
 function setDialog(t) {
+  const q = Q(), c = cls(), cur = t ? t.classId : (c?.id ?? '');
+  const className = id => (id === ALL ? 'alle Klassen' : q.classes.find(x => x.id === id)?.name || '');
   dialog({ title: t ? 'Fragensatz bearbeiten' : 'Neuer Fragensatz', submit: 'Speichern', body: `
     <label class="field">Titel<input name="title" class="input" value="${esc(t?.title || '')}" maxlength="80" placeholder="z. B. Werkzeugkunde – Wiederholung" required></label>
-    ${t ? `<div class="tools"><button type="button" class="btn ghost sm" data-m="copy">Kopie anlegen</button><button type="button" class="btn ghost sm" data-m="export">${icon('download', 15)} Exportieren</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Löschen</button></div>` : ''}`,
+    <label class="field">Klasse <small class="muted">(nur dort erscheint der Fragensatz)</small><select name="classId" class="select">
+      ${cur ? '' : '<option value="" selected>Bitte wählen …</option>'}
+      ${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
+      <option value="${ALL}" ${cur === ALL ? 'selected' : ''}>Alle Klassen (bewusst freigeben)</option></select></label>
+    ${t ? `<div class="tools"><button type="button" class="btn ghost sm" data-m="copy" title="Legt eine Kopie für die oben gewählte Klasse an">Kopie für gewählte Klasse</button><button type="button" class="btn ghost sm" data-m="export">${icon('download', 15)} Exportieren</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Löschen</button></div>` : ''}`,
     onOpen: (el, close) => {
-      el.querySelector('[data-m=copy]')?.addEventListener('click', () => { close(); const copy = { ...structuredClone(t), id: uid(), demo: false, title: t.title + ' (Kopie)' }; copy.questions.forEach(x => { x.id = uid(); }); store.update(s => { s.quiz.sets.push(copy); s.quiz.activeSetId = copy.id; }); });
+      el.querySelector('[data-m=copy]')?.addEventListener('click', () => {
+        const classId = el.querySelector('[name=classId]').value; if (!classId) return toast('Bitte zuerst eine Klasse wählen.', { kind: 'warn' });
+        close(); const copy = { ...structuredClone(t), id: uid(), demo: false, classId, title: (classId === t.classId ? t.title + ' (Kopie)' : t.title).slice(0, 80) }; copy.questions.forEach(x => { x.id = uid(); });
+        store.update(s => { s.quiz.sets.push(copy); if (fits(copy, s.quiz.activeClassId)) s.quiz.activeSetId = copy.id; });
+        toast(`Kopie für ${classId === ALL ? 'alle Klassen' : '„' + className(classId) + '“'} angelegt.`);
+      });
       el.querySelector('[data-m=export]')?.addEventListener('click', () => downloadFile(`Fragensatz-${t.title}.json`.replace(/[\\/:*?"<>|]/g, '_'), exportSets([t])));
-      el.querySelector('[data-m=del]')?.addEventListener('click', async () => { close(); if (await confirmDialog('Fragensatz löschen', `„${t.title}“ mit ${t.questions.length} Frage(n) löschen? Gespeicherte Ergebnisse bleiben erhalten.`)) store.update(s => { s.quiz.sets = s.quiz.sets.filter(x => x.id !== t.id); if (s.quiz.activeSetId === t.id) s.quiz.activeSetId = s.quiz.sets[0]?.id ?? null; }); });
+      el.querySelector('[data-m=del]')?.addEventListener('click', async () => { close(); if (await confirmDialog('Fragensatz löschen', `„${t.title}“ mit ${t.questions.length} Frage(n) löschen? Gespeicherte Ergebnisse bleiben erhalten.`)) store.update(s => { s.quiz.sets = s.quiz.sets.filter(x => x.id !== t.id); }); });
     },
     onSubmit: fd => {
       const title = String(fd.get('title')).trim(); if (!title) throw new Error('Bitte einen Titel eingeben.');
-      if (t) store.update(s => { s.quiz.sets.find(x => x.id === t.id).title = title; });
-      else { const n = { id: uid(), title, questions: [] }; store.update(s => { s.quiz.sets.push(n); s.quiz.activeSetId = n.id; }); setTimeout(() => questionDialog(qset()), 50); }
+      const classId = String(fd.get('classId') || '');
+      if (!classId) throw new Error(q.classes.length ? 'Bitte eine Klasse wählen (oder bewusst „Alle Klassen“).' : 'Bitte zuerst eine Klasse anlegen (oder bewusst „Alle Klassen“ wählen).');
+      if (t) {
+        store.update(s => { const x = s.quiz.sets.find(y => y.id === t.id); x.title = title; x.classId = classId; });
+        if (c && !fits({ classId }, c.id)) toast(`„${title}“ gehört jetzt zu „${className(classId)}“ und erscheint nur noch dort.`);
+      } else {
+        const n = { id: uid(), title, classId, questions: [] }; store.update(s => { s.quiz.sets.push(n); if (fits(n, s.quiz.activeClassId)) s.quiz.activeSetId = n.id; });
+        if (c && !fits(n, c.id)) toast(`Fragensatz für „${className(classId)}“ angelegt – wechsle die Klasse, um Fragen einzugeben.`);
+        else setTimeout(() => questionDialog(qset()), 50);
+      }
     } });
 }
 
@@ -754,14 +788,15 @@ function importSetsDialog() {
   dialog({ title: 'Fragensätze importieren', submit: 'Importieren', body: `
     <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“ beim Bearbeiten eines Fragensatzes)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
     <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "sets": [ { "title": "…", "questions": [ { "text": "…", "options": ["…", "…"], "correct": "A" } ] } ] }'></textarea></label>
-    <p class="muted small-text">Die Fragensätze kommen zu den vorhandenen dazu; nichts wird überschrieben. Bilder sind in der Datei nicht enthalten.</p>`,
+    <p class="muted small-text">Die Fragensätze kommen zu den vorhandenen dazu und gehören zur gerade gewählten Klasse${cls() ? ` (<b>${esc(cls().name)}</b>)` : ''}; nichts wird überschrieben. Bilder sind in der Datei nicht enthalten.</p>`,
     onOpen: el => { el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
     onSubmit: fd => {
       const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
       const sets = parseSets(text), titles = new Set(Q().sets.map(x => x.title));
       sets.forEach(t => { const base = t.title; let n = 2; while (titles.has(t.title)) t.title = `${base} (${n++})`.slice(0, 80); titles.add(t.title); });
+      const c = cls(); sets.forEach(t => { t.classId = c?.id ?? ''; });
       store.update(s => { s.quiz.sets.push(...sets); s.quiz.activeSetId = sets[0].id; });
-      toast(`${sets.length === 1 ? '1 Fragensatz' : sets.length + ' Fragensätze'} mit ${sets.reduce((a, t) => a + t.questions.length, 0)} Fragen importiert.`);
+      toast(`${sets.length === 1 ? '1 Fragensatz' : sets.length + ' Fragensätze'} mit ${sets.reduce((a, t) => a + t.questions.length, 0)} Fragen importiert${c ? ` – für „${c.name}“` : ''}.`);
     } });
 }
 function questionDialog(t, index = -1) {
