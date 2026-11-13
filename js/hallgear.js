@@ -321,7 +321,7 @@ def('schlaeger', 'Schläger', G4, { views: SIDE4, build: b => {
   });
 } });
 def('ballwagen', 'Ballwagen', G4, { views: SIDE4, build: b => {
-  // Gitterkorb auf vier Lenkrollen mit Schiebebügel (seit 1.25.0): Innenraum grau, darin ein Haufen Bälle,
+  // Gitterkorb auf vier Lenkrollen mit Schiebebügel (seit 1.25.0): Innenraum grau, darin vom Boden an gestapelte Bälle (seit 1.26.0),
   // davor die Gitterwände und der Metallrahmen; die Bälle schauen oben aus dem Korb heraus.
   const L = 1.0, D = 0.6, z0 = 0.16, H = 0.6, zt = z0 + H, cage = 'url(#h-grid)';
   [[0.07, 0.07], [L - 0.07, 0.07], [0.07, D - 0.07], [L - 0.07, D - 0.07]].forEach(([x, y]) => {
@@ -329,10 +329,15 @@ def('ballwagen', 'Ballwagen', G4, { views: SIDE4, build: b => {
     b.poly(b.vcircle(x, y, 0.05, 0.05, b.swap ? 'y' : 'x', 16), C.black, { layer: -2, sw: 2 });
   });
   b.box(0, 0, z0, L, D, H, '#d3d8df', { front: '#dfe3e8', back: '#dfe3e8', side: '#cfd4db', top: 'none', layer: -1 });
-  const balls = [[0.2, 0.44, C.orange, 'b'], [0.5, 0.46, C.white, 'v'], [0.8, 0.43, C.yellow, 'v'], [0.35, 0.3, '#3d6fb5', ''], [0.65, 0.3, C.red, ''],
-    [0.17, 0.16, C.white, 'f'], [0.5, 0.15, C.orange, 'b'], [0.82, 0.17, '#4f8f5b', '']];
-  balls.forEach(([x, y, c, t], k) => {
-    const z = zt - 0.05 + (k % 3 === 1 ? 0.03 : 0), p = b.P(x, y, z), R = 0.12 * U, f = v => n1(v);
+  // Bälle liegen am Boden des Korbs und stapeln sich nach oben (drei Lagen, hinten und vorn); die oberste Lage schaut leicht heraus
+  const r = 0.12, cols = [C.orange, C.white, '#3d6fb5', C.yellow, C.red, '#4f8f5b'], types = ['b', 'v', '', 'v', '', 'f'];
+  const balls = [];
+  [[0.13, [0.15, 0.5, 0.85]], [0.34, [0.3, 0.68]], [0.55, [0.2, 0.52, 0.82]]].forEach(([dz, xs], lv) => [0.45, 0.17].forEach((y, ry) => xs.forEach((x, k) => {
+    if (lv === 2 && ry === 0 && k === 1) return; // oben hinten eine Lücke, damit der Haufen nicht zu gleichmäßig wirkt
+    const n = balls.length, j = ((n * 37) % 7 - 3) * 0.01; balls.push([x + j, y - j, z0 + dz + (k % 2) * 0.02, cols[(n * 5 + lv) % 6], types[(n * 5 + lv) % 6]]);
+  })));
+  balls.forEach(([x, y, z, c, t]) => {
+    const p = b.P(x, y, z), R = r * U, f = v => n1(v);
     const deco = t === 'b' ? `<path d="M${f(p[0] - R)} ${f(p[1])}H${f(p[0] + R)}M${f(p[0])} ${f(p[1] - R)}V${f(p[1] + R)}M${f(p[0] - R * .6)} ${f(p[1] - R * .8)}Q${f(p[0] - R * .1)} ${f(p[1])} ${f(p[0] - R * .6)} ${f(p[1] + R * .8)}" fill="none" stroke-width="1.8"/>`
       : t === 'v' ? `<path d="M${f(p[0] - R * .95)} ${f(p[1] - R * .25)}Q${f(p[0])} ${f(p[1] - R * .1)} ${f(p[0] + R * .6)} ${f(p[1] - R * .8)}M${f(p[0] - R * .7)} ${f(p[1] + R * .7)}Q${f(p[0] + R * .1)} ${f(p[1] + R * .2)} ${f(p[0] + R * .95)} ${f(p[1] + R * .2)}" fill="none" stroke-width="1.8"/>`
       : t === 'f' ? `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="${f(R * .32)}" fill="${C.black}" stroke-width="1.5"/>` : '';
