@@ -80,6 +80,8 @@ function keepAwake(want) {
     navigator.wakeLock.request('screen').then(l => { wakeLock = l; if (!root || !(running() || podiumId)) keepAwake(false); }).catch(() => {}).finally(() => { wakePending = false; });
   } else if (!want && held) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
+// Läuft gerade ein Quiz oder steht das Podium? (für die automatische App-Sperre)
+export const busy = () => !!(root && (running() || podiumId));
 function onVisible() { if (document.visibilityState === 'visible' && root) keepAwake(!!(running() || podiumId)); }
 
 // Automatisch auflösen, sobald alle anwesenden Kinder geantwortet haben (je Frage nur einmal)

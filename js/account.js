@@ -2,7 +2,11 @@
 // Aus dem Passwort werden auf dem Gerät zwei Werte abgeleitet: ein Anmeldewert für Supabase
 // und ein Schlüssel für die Verschlüsselung. Der Server sieht weder Passwort noch Klartext.
 import * as store from './store.js';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_KEY, ALLOWED_DOMAIN } from './config.js';
+export { ALLOWED_DOMAIN };
+export const NOT_ALLOWED = 'E-Mail-Adresse nicht berechtigt.';
+// Darf mit dieser Adresse ein neues Konto angelegt werden?
+export const allowedEmail = email => !ALLOWED_DOMAIN || String(email).trim().toLowerCase().endsWith('@' + ALLOWED_DOMAIN.toLowerCase());
 
 export const enabled = !!(SUPABASE_URL && SUPABASE_KEY);
 const SESSION_KEY = 'klassenkompass.account', DB = 'klassenkompass-account', OS = 'keys';
@@ -85,6 +89,7 @@ async function ensureFresh() { if (session && session.expires_at - 60 < Date.now
 const friendly = e => {
   const m = String(e?.message || e);
   if (/Invalid login credentials/i.test(m)) return 'E-Mail oder Passwort stimmt nicht.';
+  if (/Database error saving new user|nicht berechtigt|not allowed|signups not allowed/i.test(m)) return NOT_ALLOWED;
   if (/already registered|already been registered|User already/i.test(m)) return 'Für diese E-Mail gibt es schon ein Konto. Bitte anmelden.';
   if (/Email not confirmed/i.test(m)) return 'Die E-Mail-Adresse ist noch nicht bestätigt (Bestätigung ist in Supabase eingeschaltet).';
   if (/rate limit|too many/i.test(m)) return 'Zu viele Versuche. Bitte kurz warten.';
@@ -237,6 +242,7 @@ export async function retryConflict() { if (state === 'conflict') { state = 'ok'
 export async function login(email, password, { register = false, decide } = {}) {
   email = email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Bitte eine gültige E-Mail-Adresse eingeben.');
+  if (register && !allowedEmail(email)) throw new Error(NOT_ALLOWED);
   if (password.length < 8) throw new Error('Das Passwort muss mindestens 8 Zeichen lang sein.');
   const { authPw, key } = await deriveKeys(email, password);
   let data;

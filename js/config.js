@@ -2,3 +2,6 @@
 // Leer lassen = App läuft ohne Konten, nur lokal.
 export const SUPABASE_URL = 'https://kmwllpyoyuboastgykqw.supabase.co';
 export const SUPABASE_KEY = 'sb_publishable_bxX4Ji-XXpyHTvIQKhr9Mw_e47_N8DF';
+// Neue Konten nur mit E-Mail-Adressen dieser Domain (zusätzlich serverseitig geprüft, siehe supabase/setup.sql).
+// Leer lassen = jede Adresse erlaubt.
+export const ALLOWED_DOMAIN = 'kws-rw.de';

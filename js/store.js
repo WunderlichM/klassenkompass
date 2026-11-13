@@ -1,11 +1,11 @@
-// Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage).
+// Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage) – mit App-Sperre nur verschlüsselt.
 import { uid } from './engine.js';
 import { GEAR, gearSize, scaleOf } from './hallgear.js';
 import { MARKS, fromOldFloor } from './hallfloor.js';
 import { animalName } from './animals.js';
 import { FORM_IDS, bandOf } from './hallplan.js';
 
-const KEY = 'klassenkompass.v1';
+const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
 export const SCHEMA = 1;
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
@@ -79,6 +79,29 @@ export function load() {
   } catch { state = freshState(); }
   return state;
 }
+// ---------- Verschlüsselte Ablage (App-Sperre, js/lock.js) ----------
+// Ist eine Verschlüsselung gesetzt, liegt der Zustand nur verschlüsselt unter ENC_KEY; der Klartext-Schlüssel KEY wird entfernt.
+let cipher = null, saving = Promise.resolve(), pending = false;
+export const encrypted = () => !!cipher;
+// Nach dem Entsperren: verschlüsselten Stand laden. Ein Klartext-Stand (z. B. von einer älteren App-Fassung geschrieben) hat Vorrang.
+export async function loadEncrypted(c) {
+  cipher = c;
+  const plain = localStorage.getItem(KEY), enc = localStorage.getItem(ENC_KEY);
+  try {
+    if (plain) state = normalize(JSON.parse(plain));
+    else if (enc) state = normalize(JSON.parse(await c.decrypt(JSON.parse(enc))));
+    else state = freshState();
+  } catch (e) { if (e?.decrypt) throw e; state = freshState(); }
+  if (plain || !enc) await flush();
+  return state;
+}
+// Verschlüsselung ein- (Objekt mit encrypt/decrypt) oder ausschalten (null); schreibt den Stand sofort im neuen Format
+export async function setCipher(c) {
+  await saving;
+  cipher = c;
+  if (c) await flush();
+  else { saveNow(); if (!lastError) localStorage.removeItem(ENC_KEY); }
+}
 export const get = () => state;
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 export function storageError() { return lastError; }
@@ -95,15 +118,37 @@ function scheduleSave() {
 }
 export function saveNow() {
   clearTimeout(saveTimer);
+  if (cipher) { flush(); return; }
   try { localStorage.setItem(KEY, JSON.stringify(state)); lastError = null; }
   catch (e) { lastError = 'Speichern nicht möglich (Speicher voll oder privates Fenster). Sichere deine Daten über „Daten exportieren“.'; }
+}
+// Verschlüsselt speichern; mehrere Aufrufe kurz hintereinander werden zu einem zusammengefasst
+export function flush() {
+  clearTimeout(saveTimer);
+  if (!cipher) { saveNow(); return Promise.resolve(); }
+  if (pending) return saving;
+  pending = true;
+  saving = saving.then(async () => {
+    pending = false;
+    if (!cipher) return;
+    try {
+      const box = await cipher.encrypt(JSON.stringify(state));
+      localStorage.setItem(ENC_KEY, JSON.stringify(box)); localStorage.removeItem(KEY); lastError = null;
+    } catch (e) { lastError = 'Speichern nicht möglich (Speicher voll oder privates Fenster). Sichere deine Daten über „Daten exportieren“.'; }
+  });
+  return saving;
 }
 addEventListener('pagehide', saveNow);
 addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
 // Andere geöffnete Tabs desselben Geräts übernehmen Änderungen
-addEventListener('storage', e => {
-  if (e.key !== KEY || !e.newValue) return;
-  try { state = normalize(JSON.parse(e.newValue)); listeners.forEach(fn => fn(state)); } catch {}
+addEventListener('storage', async e => {
+  if (!e.newValue) return;
+  try {
+    if (cipher && e.key === ENC_KEY) state = normalize(JSON.parse(await cipher.decrypt(JSON.parse(e.newValue))));
+    else if (!cipher && e.key === KEY) state = normalize(JSON.parse(e.newValue));
+    else return;
+    listeners.forEach(fn => fn(state));
+  } catch {}
 });
 
 export function replaceState(next) { state = normalize(next); saveNow(); listeners.forEach(fn => fn(state)); }

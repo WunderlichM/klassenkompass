@@ -241,6 +241,8 @@ function anyRunning(now) {
     : w.type === 'interval' ? w.startedAt !== null && ivState(w, now).stage !== 'finished'
     : w.type === 'stopwatch' ? w.startedAt !== null : false);
 }
+// Läuft gerade etwas? (für die automatische App-Sperre)
+export const busy = () => anyRunning(Date.now());
 function keepAwake(want) {
   if (!('wakeLock' in navigator)) return;
   const held = wakeLock && !wakeLock.released;

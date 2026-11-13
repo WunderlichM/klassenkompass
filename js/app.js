@@ -10,16 +10,17 @@ import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 import * as theme from './theme.js';
+import * as lock from './lock.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '1.26.3';
+export const VERSION = '1.27.0';
 const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
   sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
 
 let unmount = null, installEvent = null;
-store.load();
+await lock.gate();   // mit App-Sperre: erst nach dem Passwort weiter
 
 function routeKey() { const k = location.hash.replace(/^#\/?/, '').split('?')[0]; return ROUTES[k] ? k : ''; }
 
@@ -36,12 +37,14 @@ function shell() {
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
       <button class="btn ghost sm" id="install-btn" ${isInstalled() ? 'hidden' : ''} title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
+      <button class="icon-btn" id="lock-btn" ${lock.enabled() ? '' : 'hidden'} aria-label="Jetzt sperren" title="Jetzt sperren – Daten verschlüsselt, Passwort zum Öffnen">${icon('lock')}</button>
       <button class="icon-btn" id="menu-btn" aria-label="Daten und Hilfe" title="Daten und Hilfe">${icon('gear')}</button>
     </div>
   </header>
   <main id="view" tabindex="-1"></main>
   <footer class="foot no-present no-print">KlassenKompass ${VERSION} · <span id="foot-store">${footStore()}</span> · <button class="link" id="foot-help">Hilfe &amp; Datenschutz</button></footer>`;
   document.getElementById('menu-btn').onclick = menuDialog;
+  document.getElementById('lock-btn').onclick = () => lock.lockNow();
   document.getElementById('foot-help').onclick = helpDialog;
   document.getElementById('install-btn').onclick = install;
 }
@@ -71,9 +74,10 @@ function setThemeColor() {
 function menuDialog() {
   const s = store.get(), size = new Blob([JSON.stringify(s)]).size;
   dialog({ title: 'Daten und Hilfe', submit: null, cancel: 'Schließen', body: `
-    <p class="muted">Alle Klassen, Sportgruppen, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
+    <p class="muted">Alle Klassen, Sportgruppen, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB${lock.enabled() ? ', verschlüsselt' : ''}). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
     <div class="menu-grid">
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
+      <button type="button" class="menu-item${lock.enabled() ? '' : ' recommend'}" data-m="lock">${icon('lock')}<span><b>${lock.enabled() ? 'App-Sperre · an' : 'App-Sperre einrichten (empfohlen)'}</b><small>${lock.enabled() ? esc(lock.describe()) : 'Daten auf diesem Gerät mit einem Passwort verschlüsseln. Nach einer Zeit ohne Bedienung sperrt sich die App.'}</small></span></button>
       <div class="menu-item theme-item">${icon('moon')}<span><b>Design</b><small>Automatisch folgt der Einstellung des Geräts. Gilt nur für dieses Gerät.</small></span>
         <div class="seg" role="group" aria-label="Design">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button type="button" data-theme-opt="${v}" class="${theme.get() === v ? 'on' : ''}" aria-pressed="${theme.get() === v}">${l}</button>`).join('')}</div></div>
       <button type="button" class="menu-item" data-m="music">${icon('volume')}<span><b>Musik bei Signalen · ${esc(MUSIC_MODES[musicMode()].name)}</b><small>Läuft auf diesem Gerät Musik (z. B. Spotify, YouTube), kann die App sie bei Timer-Signalen leiser stellen oder kurz anhalten. Testen und auswählen.</small></span></button>
@@ -90,6 +94,7 @@ function menuDialog() {
         el.querySelectorAll('[data-theme-opt]').forEach(o => { const on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
       });
       el.querySelector('[data-m=help]').onclick = () => { close(); helpDialog(); };
+      el.querySelector('[data-m=lock]').onclick = () => { close(); lockDialog(); };
       el.querySelector('[data-m=music]').onclick = () => { close(); musicDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
       const file = el.querySelector('#import-file');
@@ -103,6 +108,43 @@ function menuDialog() {
     } });
 }
 
+// App-Sperre: Daten auf diesem Gerät mit eigenem Passwort verschlüsseln (js/lock.js)
+const minuteSelect = cur => `<label class="field">Automatisch sperren nach<select name="min" class="select">${lock.MINUTES.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+  <p class="muted small-text">ohne Bedienung. Solange ein Timer, eine Stoppuhr, ein Intervalltimer oder ein Quiz läuft, sperrt sich die App nicht.</p>`;
+function lockDialog() {
+  const refresh = () => { const b = document.getElementById('lock-btn'); if (b) b.hidden = !lock.enabled(); };
+  if (!lock.enabled()) {
+    dialog({ title: 'App-Sperre einrichten', submit: 'Verschlüsseln', body: `
+      <p>Die Daten auf diesem Gerät (Namen, Gruppen, Ergebnisse …) werden mit diesem Passwort verschlüsselt. Beim Öffnen der App und nach der eingestellten Zeit ohne Bedienung fragt die App danach.</p>
+      <label class="field">Passwort der App-Sperre<input name="pw" type="password" class="input" autocomplete="new-password" minlength="8" required></label>
+      <label class="field">Passwort wiederholen<input name="pw2" type="password" class="input" autocomplete="new-password" minlength="8" required></label>
+      ${minuteSelect(15)}
+      <div class="notice"><b>Wichtig:</b> Passwort vergessen = Daten auf diesem Gerät verloren. Mit Konto holst du sie durch Anmelden zurück, sonst nur aus einer Sicherung („Daten exportieren“). Die Sperre gilt nur für dieses Gerät – auf anderen Geräten einzeln einrichten.</div>`,
+      onSubmit: async (fd, form) => {
+        const sub = form.querySelector('button[type=submit]'); sub.disabled = true; sub.textContent = 'Wird verschlüsselt …';
+        try { await lock.setup(String(fd.get('pw') || ''), String(fd.get('pw2') || ''), Number(fd.get('min'))); }
+        finally { sub.disabled = false; sub.textContent = 'Verschlüsseln'; }
+        refresh(); toast('App-Sperre eingerichtet. Die Daten auf diesem Gerät sind jetzt verschlüsselt.');
+      } });
+    return;
+  }
+  dialog({ title: 'App-Sperre', submit: null, cancel: 'Schließen', body: `
+    <p>${esc(lock.describe())}</p>
+    ${minuteSelect(lock.minutes())}
+    <div class="menu-grid">
+      <button type="button" class="menu-item" data-l="now">${icon('lock')}<span><b>Jetzt sperren</b><small>Auch über das Schloss oben rechts.</small></span></button>
+      <button type="button" class="menu-item" data-l="pw">${icon('edit')}<span><b>Passwort ändern</b></span></button>
+      <button type="button" class="menu-item danger" data-l="off">${icon('x')}<span><b>App-Sperre ausschalten</b><small>Die Daten liegen danach wieder unverschlüsselt im Browser.</small></span></button>
+    </div>`,
+    onOpen: (el, close) => {
+      el.querySelector('[name=min]').onchange = e => { lock.setMinutes(Number(e.target.value)); toast('Gespeichert.'); };
+      el.querySelector('[data-l=now]').onclick = () => { close(); lock.lockNow(); };
+      el.querySelector('[data-l=pw]').onclick = () => { close(); dialog({ title: 'Passwort der App-Sperre ändern', submit: 'Ändern', body: `<label class="field">Bisheriges Passwort<input name="old" type="password" class="input" autocomplete="current-password" required></label><label class="field">Neues Passwort<input name="n1" type="password" class="input" autocomplete="new-password" minlength="8" required></label><label class="field">Neues Passwort wiederholen<input name="n2" type="password" class="input" autocomplete="new-password" required></label>`,
+        onSubmit: async fd => { await lock.changePassword(String(fd.get('old') || ''), String(fd.get('n1') || ''), String(fd.get('n2') || '')); toast('Passwort der App-Sperre geändert.'); } }); };
+      el.querySelector('[data-l=off]').onclick = () => { close(); dialog({ title: 'App-Sperre ausschalten', submit: 'Ausschalten', danger: true, body: `<p>Die Daten auf diesem Gerät werden entschlüsselt und liegen danach wieder lesbar im Browser. Für Schülerdaten auf privaten Geräten nicht empfohlen.</p><label class="field">Passwort der App-Sperre<input name="pw" type="password" class="input" autocomplete="current-password" required></label>`,
+        onSubmit: async fd => { await lock.disable(String(fd.get('pw') || '')); refresh(); toast('App-Sperre ausgeschaltet.'); } }); };
+    } });
+}
 // Musik bei Signalen: Varianten am Gerät ausprobieren; die zuletzt getestete bleibt eingestellt (gilt nur für dieses Gerät)
 function musicDialog() {
   const row = ([id, m]) => `<div class="music-row ${musicMode() === id ? 'on' : ''}" data-mode="${id}">
@@ -213,7 +255,8 @@ function helpDialog() {
     <h3>Datenschutz</h3>
     <ul class="help-list">
       <li><b>Ohne Konto</b> bleiben alle Eingaben ausschließlich im Speicher dieses Browsers auf diesem Gerät.</li>
-      <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Weder der Betreiber noch Supabase können die Namen lesen.</li>
+      <li><b>App-Sperre</b> (Zahnrad → „App-Sperre einrichten“): Die Daten auf dem Gerät werden mit einem eigenen Passwort verschlüsselt (AES-256). Die App fragt beim Öffnen und nach einer einstellbaren Zeit ohne Bedienung danach; das Schloss oben rechts sperrt sofort. Für Schülerdaten auf privaten Geräten einschalten. Passwort vergessen = Daten auf dem Gerät verloren (mit Konto durch Anmelden zurückholen).</li>
+      <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Neue Konten sind nur mit einer Schul-E-Mail-Adresse (@${esc(account.ALLOWED_DOMAIN)}) möglich. Weder der Betreiber noch Supabase können die Namen lesen.</li>
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Das Quiz kennt keine Namen, nur Kartennummern und Tiere; die Zuordnung Tier ↔ Kind steht nur auf deinem Papierblatt. Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Karte. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
@@ -329,6 +372,16 @@ theme.init(() => { if (document.querySelector('meta[name=theme-color]')) setThem
 addEventListener('hashchange', navigate);
 navigate();
 tour();
+lock.startAutoLock(() => screen.busy() || quiz.busy());
+// Hinweis auf die App-Sperre, solange eigene Daten unverschlüsselt auf dem Gerät liegen (höchstens einmal pro Woche)
+(() => {
+  if (lock.enabled()) return;
+  const s = store.get(), own = s.technik.classes.some(c => !c.demo) || s.sport.groups.some(g => !g.demo) || s.quiz.classes.some(c => !c.demo);
+  const k = 'klassenkompass.lockHint', last = Number(localStorage.getItem(k) || 0);
+  if (!own || Date.now() - last < 7 * 864e5) return;
+  try { localStorage.setItem(k, String(Date.now())); } catch {}
+  setTimeout(() => toast('Schülernamen liegen auf diesem Gerät unverschlüsselt. Mit der App-Sperre werden sie mit einem Passwort verschlüsselt.', { action: 'Einrichten', onAction: lockDialog }), 2500);
+})();
 function renderStatus() {
   const el = document.getElementById('status'); if (!el) return;
   const err = store.storageError(), ac = account.status(), st = ac.state !== 'off' ? { ...ac, fileName: ac.email } : { state: 'off' };
@@ -378,6 +431,7 @@ function accountDialog(startMode = 'login') {
       <label class="field">E-Mail<input name="email" type="email" class="input" autocomplete="username" value="${esc(st.email)}" required></label>
       <label class="field">Passwort<input name="pw" type="password" class="input" autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" minlength="8" required></label>
       ${mode === 'register' ? `<label class="field">Passwort wiederholen<input name="pw2" type="password" class="input" autocomplete="new-password" minlength="8"></label>
+      <p class="muted small-text">Neue Konten nur mit einer E-Mail-Adresse <b>@${esc(account.ALLOWED_DOMAIN)}</b>.</p>
       <div class="notice"><b>Wichtig:</b> Deine Daten werden mit diesem Passwort auf dem Gerät verschlüsselt. Niemand – auch nicht der Betreiber – kann sie lesen oder das Passwort zurücksetzen. <b>Passwort vergessen = Daten im Konto verloren.</b> Notiere es sicher und exportiere ab und zu eine Sicherung.</div>
       <label class="check"><input type="checkbox" name="ok" required> Verstanden</label>` : `<p class="muted small-text">Nach der Anmeldung bleiben deine Daten auf allen Geräten gleich. Auf gemeinsam genutzten Schul-PCs nach der Stunde abmelden.</p>`}`;
     dialog({ title: 'Konto & Synchronisierung', submit: 'Weiter', body: `<div data-acc>${body()}</div>`,

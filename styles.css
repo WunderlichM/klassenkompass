@@ -1085,3 +1085,16 @@ dialog.modal[open] { animation: modal-in .22s cubic-bezier(.2,.9,.3,1.2); } dial
 @media (prefers-reduced-motion: reduce) { main.enter > *, dialog.modal[open], dialog.modal[open]::backdrop { animation: none; } .brand:hover .logo { transform: none; } }
 @media print { h1 { -webkit-text-fill-color: currentColor; background: none; } .qs { box-shadow: none; } }
 main:focus-visible { outline: none; }
+
+/* ---------- App-Sperre (seit 1.27.0, js/lock.js) ---------- */
+.lock-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 14%, var(--paper)), var(--paper) 70%); }
+.lock-card { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; display: grid; gap: 12px; text-align: center; box-shadow: 0 14px 34px -18px rgba(30,30,40,.3); }
+.lock-card .logo { justify-self: center; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 82%, #fff), color-mix(in srgb, var(--accent) 78%, #000)); }
+.lock-card h1 { margin: 0; font-size: 22px; }
+.lock-card .field { text-align: left; }
+.lock-card .btn { justify-content: center; }
+.lock-card .link { justify-self: center; }
+.lock-reset { text-align: left; display: grid; gap: 8px; }
+.lock-reset p { margin: 0; }
+.menu-item.recommend { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+#lock-btn[hidden] { display: none; }

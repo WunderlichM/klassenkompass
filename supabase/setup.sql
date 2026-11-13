@@ -161,3 +161,25 @@ drop policy if exists "eigenen Bilder-Schlüssel ändern" on public.image_keys;
 create policy "eigenen Bilder-Schlüssel ändern" on public.image_keys for update to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 revoke all on public.image_keys from anon;
 grant select, insert, update on public.image_keys to authenticated;
+
+-- ---------- Neue Konten nur mit Schul-E-Mail-Adresse (ab Version 1.27.0) ----------
+-- Die App prüft das schon vor dem Absenden; diese Prüfung im Server verhindert, dass jemand die App umgeht.
+-- Bestehende Konten sind nicht betroffen (gilt nur beim Anlegen). Domain bei Bedarf hier und in js/config.js ändern.
+create or replace function public.only_school_emails()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if lower(coalesce(new.email, '')) not like '%@kws-rw.de' then
+    raise exception 'E-Mail-Adresse nicht berechtigt' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.only_school_emails() from public, anon, authenticated;
+
+drop trigger if exists only_school_emails on auth.users;
+create trigger only_school_emails before insert on auth.users
+  for each row execute function public.only_school_emails();
