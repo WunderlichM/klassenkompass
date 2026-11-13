@@ -11,7 +11,7 @@ export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const KINDS = {
   zone: { label: 'Bereich', w: 420, h: 560, color: '#3d6fb5', text: 'Gruppe', rotate: false },
   cone: { label: 'Hütchen', w: 70, h: 70, color: '#2e7d4f', text: 'H1', keep: true },
-  kid: { label: 'Kind', w: 56, h: 96, color: '#3d6fb5', text: '1', keep: true },
+  kid: { label: 'Kind', w: 56, h: 96, color: '#3d6fb5', keep: true },
   ball: { label: 'Ball', w: 40, h: 40, color: '#6c6cf0', keep: true },
   arrow: { label: 'Laufweg', w: 220, h: 44, color: '#2f5e8e' },
   path: { label: 'Weg (Freigabe)', w: 320, h: 34, color: '#b0602a' },
@@ -67,6 +67,47 @@ function textLines(t, x, y, size, cls = '') {
   const lines = String(t || '').split('\n');
   return `<text x="${num(x)}" y="${num(y)}" font-size="${num(size)}" class="${cls}" text-anchor="middle">${lines.map((l, i) => `<tspan x="${num(x)}" dy="${i ? '1.15em' : 0}">${esc(l)}</tspan>`).join('')}</text>`;
 }
+// ---------- Kind (seit 1.24.0) ----------
+// Kinderfigur in Gruppenfarbe (T-Shirt) mit weißem Rand und Bodenschatten. Frisur, Haarfarbe und Hautton werden zufällig
+// gewählt, aber fest aus der Kennung des Elements abgeleitet: Beim Neuzeichnen, auf allen Geräten und im Druck sieht
+// dasselbe Kind gleich aus; ein neues Kind (auch eine Kopie) bekommt ein neues Aussehen. Die Füße stehen bei 0,7 · h.
+// Eine Nummer oder Beschriftung zeigt das Kind bewusst nicht (Nutzerentscheidung 13.11.2026).
+const KID_SKIN = ['#f7d7bd', '#eec09b', '#d9a077', '#b67a52', '#8a5636', '#5f3a24'];
+const KID_HAIR = ['#2a1d15', '#4a2f1d', '#6e4524', '#a8702f', '#d9ab5c', '#9c3d1b', '#1b1b1d'];
+const KID_STYLES = 6; // 0 kurz, 1 Seitenscheitel, 2 Locken (Jungen); 3 Pferdeschwanz, 4 lange Haare, 5 Dutt (Mädchen)
+function kidHash(t) { let h = 2166136261; for (const ch of String(t || '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+export function kidLook(i) {
+  const h = kidHash(i.id || 'kind');
+  return { skin: KID_SKIN[h % KID_SKIN.length], hair: KID_HAIR[(h >>> 4) % KID_HAIR.length], style: (h >>> 9) % KID_STYLES, shirt: i.color || KINDS.kid.color };
+}
+function kidSvg(i) {
+  const s = i.w / 56, L = kidLook(i), X = v => num(v * s), ink = '#1f2a3c', sw = num(1.8 * s);
+  const P = (d, fill, extra = '') => `<path d="${d}" fill="${fill}"${extra}/>`;
+  // Körperteile (Koordinaten im 56 × 96-Raster)
+  const shirt = `M${X(16)} ${X(27.5)}Q${X(28)} ${X(24.5)} ${X(40)} ${X(27.5)}L${X(46.5)} ${X(36)}L${X(41)} ${X(38.5)}L${X(40.5)} ${X(48)}L${X(15.5)} ${X(48)}L${X(15)} ${X(38.5)}L${X(9.5)} ${X(36)}Z`;
+  const shorts = `M${X(16)} ${X(47)}H${X(40)}L${X(40.5)} ${X(56)}H${X(29.5)}L${X(28)} ${X(51)}L${X(26.5)} ${X(56)}H${X(15.5)}Z`;
+  const legs = `M${X(19)} ${X(55)}H${X(25.5)}V${X(63.5)}H${X(19)}ZM${X(30.5)} ${X(55)}H${X(37)}V${X(63.5)}H${X(30.5)}Z`;
+  const shoes = `M${X(18)} ${X(63)}H${X(26)}V${X(68)}H${X(14.5)}Q${X(14.5)} ${X(63)} ${X(18)} ${X(63)}ZM${X(30)} ${X(63)}H${X(38)}Q${X(41.5)} ${X(63)} ${X(41.5)} ${X(68)}H${X(30)}Z`;
+  const arms = `M${X(11.5)} ${X(37)}Q${X(10)} ${X(43)} ${X(11.5)} ${X(49)}M${X(44.5)} ${X(37)}Q${X(46)} ${X(43)} ${X(44.5)} ${X(49)}`;
+  const head = `<circle cx="${X(28)}" cy="${X(15)}" r="${X(10.5)}"`;
+  // Haare hinter dem Kopf (lange Haare, Pferdeschwanz) und auf dem Kopf
+  const back = L.style === 4 ? P(`M${X(17)} ${X(14)}Q${X(16)} ${X(28)} ${X(19)} ${X(31)}H${X(37)}Q${X(40)} ${X(28)} ${X(39)} ${X(14)}Z`, L.hair)
+    : L.style === 3 ? P(`M${X(36)} ${X(9)}Q${X(46)} ${X(11)} ${X(43)} ${X(25)}Q${X(41)} ${X(17)} ${X(35)} ${X(15)}Z`, L.hair)
+    : L.style === 5 ? `<circle cx="${X(28)}" cy="${X(3.5)}" r="${X(5)}" fill="${L.hair}"/>` : '';
+  const top = L.style === 0 ? P(`M${X(17.5)} ${X(14.5)}A${X(10.5)} ${X(10.5)} 0 0 1 ${X(38.5)} ${X(14.5)}Q${X(33)} ${X(9.5)} ${X(28)} ${X(10.5)}Q${X(22)} ${X(9.5)} ${X(17.5)} ${X(14.5)}Z`, L.hair)
+    : L.style === 1 ? P(`M${X(17.5)} ${X(16)}A${X(10.5)} ${X(10.5)} 0 0 1 ${X(38.5)} ${X(15)}Q${X(36)} ${X(9)} ${X(24)} ${X(11.5)}Q${X(20)} ${X(12.5)} ${X(17.5)} ${X(16)}Z`, L.hair)
+    : L.style === 2 ? `<g fill="${L.hair}">${[[19, 12], [22.5, 7.5], [28, 5.5], [33.5, 7.5], [37, 12], [18, 16.5], [38, 16.5]].map(([a, b]) => `<circle cx="${X(a)}" cy="${X(b)}" r="${X(4.3)}"/>`).join('')}</g>`
+    : P(`M${X(17.5)} ${X(16)}A${X(10.5)} ${X(10.5)} 0 0 1 ${X(38.5)} ${X(16)}Q${X(37)} ${X(10)} ${X(30)} ${X(9.5)}Q${X(27)} ${X(12.5)} ${X(17.5)} ${X(16)}Z`, L.hair);
+  const face = [24.3, 31.7].map(x => `<circle cx="${X(x)}" cy="${X(16.3)}" r="${X(1.45)}" fill="${ink}"/><circle cx="${X(x + 0.5)}" cy="${X(15.8)}" r="${X(0.5)}" fill="#fff"/>`).join('')
+    + `<path d="M${X(24.8)} ${X(20)}Q${X(28)} ${X(22.8)} ${X(31.2)} ${X(20)}" fill="none" stroke="${ink}" stroke-width="${num(1.3 * s)}" stroke-linecap="round"/>`;
+  // weißer Rand: alle Flächen einmal breit weiß nachzeichnen, damit sich das Kind vom Hallenboden und von Bereichen abhebt
+  const halo = `<g fill="#fff" stroke="#fff" stroke-width="${num(6 * s)}" stroke-linejoin="round" stroke-linecap="round">${back.replace(/fill="[^"]*"/g, '')}${head}/>${P(shirt, '#fff')}${P(shorts, '#fff')}${P(legs, '#fff')}${P(shoes, '#fff')}<path d="${arms}" fill="none" stroke-width="${num(10 * s)}"/></g>`;
+  const line = ` stroke="${ink}" stroke-width="${sw}" stroke-linejoin="round"`;
+  return `<ellipse cx="${X(28)}" cy="${X(68.5)}" rx="${X(18)}" ry="${X(4.5)}" fill="#000" opacity=".22"/>${halo}`
+    + `${back}${P(legs, L.skin, line)}${P(shoes, ink)}${P(shorts, '#33415c', line)}`
+    + `<path d="${arms}" fill="none" stroke="${ink}" stroke-width="${num(6.6 * s)}" stroke-linecap="round"/><path d="${arms}" fill="none" stroke="${L.skin}" stroke-width="${num(3.6 * s)}" stroke-linecap="round"/>`
+    + `${P(shirt, L.shirt, line)}${head} fill="${L.skin}"${line}/>${top}${face}`;
+}
 export function shape(i) {
   const { w, h } = i, c = i.color || KINDS[i.kind]?.color || '#333';
   switch (i.kind) {
@@ -79,10 +120,8 @@ export function shape(i) {
       const r = Math.min(w, h) / 2, fs = r * (String(i.text || '').length > 2 ? 0.62 : 0.78);
       return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 3)}" fill="${c}" stroke="#1f2a3c" stroke-width="4"/>${i.text ? `<text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(fs)}" text-anchor="middle" class="h-on-color">${esc(i.text)}</text>` : ''}`;
     }
-    case 'kid': {
-      const s = w / 56, hy = 14 * s;
-      return `<g fill="${c}" stroke="#1f2a3c" stroke-width="${num(2.5 * s)}" stroke-linejoin="round"><circle cx="${w / 2}" cy="${num(hy)}" r="${num(11 * s)}"/><path d="M${num(w / 2 - 14 * s)} ${num(66 * s)}v${num(-26 * s)}a${num(14 * s)} ${num(12 * s)} 0 0 1 ${num(28 * s)} 0v${num(26 * s)}z"/></g>${i.text ? `<text x="${w / 2}" y="${num(h - 4 * s)}" font-size="${num(22 * s)}" text-anchor="middle" class="h-label">${esc(i.text)}</text>` : ''}`;
-    }
+    case 'kid':
+      return kidSvg(i);
     case 'ball': {
       const r = Math.min(w, h) / 2;
       return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 2)}" fill="${c}" stroke="#2c2f6e" stroke-width="3"/><circle cx="${num(w / 2 - r * .3)}" cy="${num(h / 2 - r * .3)}" r="${num(r * .22)}" fill="#fff" opacity=".6"/>`;

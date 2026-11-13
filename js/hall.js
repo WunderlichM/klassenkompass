@@ -15,7 +15,7 @@ export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
 const PLAN_TOOLS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text'];
-const hasText = k => ['zone', 'cone', 'kid', 'tag', 'text'].includes(k);
+const hasText = k => ['zone', 'cone', 'tag', 'text'].includes(k);
 const hasColor = i => (i.kind === 'gear' ? !!gear.GEAR[i.gear]?.color : ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(i.kind));
 // Seitenverhältnis beim Ziehen am Griff beibehalten (Geräte quer wie Bank oder Netz dürfen länger werden)
 const keepOf = i => (i.kind === 'gear' ? !gear.isStretch(i.gear, i.view) : !!KINDS[i.kind].keep);
@@ -206,7 +206,6 @@ function newItem(kind, at, imgEntry, gearId) {
   if (kind === 'img') i.img = imgEntry.id;
   if (g) { i.gear = g.id; i.view = g.views[0]; if (g.color) i.color = g.color; }
   if (kind === 'cone') i.text = 'H' + (p.items.filter(x => x.kind === 'cone').length + 1);
-  else if (kind === 'kid') i.text = String(p.items.filter(x => x.kind === 'kid').length + 1);
   else if (kind === 'zone') i.text = 'Gruppe ' + (p.items.filter(x => x.kind === 'zone').length + 1);
   else if (k.text) i.text = k.text;
   if (kind === 'zone') { const used = new Set(p.items.filter(x => x.kind === 'zone').map(x => x.color)); i.color = COLORS.find(([c]) => !used.has(c))?.[0] || k.color; }
