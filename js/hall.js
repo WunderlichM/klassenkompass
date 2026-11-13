@@ -9,7 +9,7 @@ import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
 
 import { BW, BH, HALL, MARKS, badmintonCourts } from './hallfloor.js';
-import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, parsePlans, exportPlans } from './hallplan.js';
+import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, parsePlans, exportPlans, ZONE_FORMS, bandOf } from './hallplan.js';
 export { boardSvg };
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
@@ -146,6 +146,7 @@ function selBarHtml(p) {
     : i.kind === 'gear' ? (g ? g.name + (g.views.length > 1 ? ' · ' + gear.viewLabel(g.views[vi]) : '') : 'Gerät') : KINDS[i.kind].label;
   return `<b class="small-text">${esc(label)}</b>
     ${hasText(i.kind) ? (i.kind === 'zone' ? `<textarea class="input sm h-text" data-hc="text" rows="1" maxlength="60" aria-label="Beschriftung">${esc(i.text || '')}</textarea>` : `<input class="input sm h-text" data-hc="text" maxlength="${i.kind === 'text' ? 60 : 8}" value="${esc(i.text || '')}" aria-label="Beschriftung">`) : ''}
+    ${i.kind === 'zone' ? formHtml(i) : ''}
     ${hasColor(i) ? `<span class="h-colors">${COLORS.map(([c, n]) => `<button class="h-color ${i.color === c ? 'on' : ''}" style="--c:${c}" data-h="color" data-color="${c}" title="${n}" aria-label="${n}"></button>`).join('')}</span>` : ''}
     ${views.length > 1 ? `<button class="btn ghost sm" data-h="view">${icon('repeat', 15)} Ansicht wechseln <span class="muted">${vi + 1}/${views.length}</span></button>` : ''}
     ${KINDS[i.kind].rotate === false ? '' : `<button class="icon-btn sm" data-h="rot" data-d="-15" title="Nach links drehen" aria-label="Nach links drehen">${icon('reset', 16)}</button><button class="icon-btn sm h-flip" data-h="rot" data-d="15" title="Nach rechts drehen" aria-label="Nach rechts drehen">${icon('reset', 16)}</button>`}
@@ -153,6 +154,15 @@ function selBarHtml(p) {
     <button class="btn ghost sm" data-h="dup">Kopie</button>
     <button class="btn ghost sm" data-h="front" title="Nach vorn">Vorn</button><button class="btn ghost sm" data-h="back" title="Nach hinten">Hinten</button>
     <button class="icon-btn sm danger" data-h="del" title="Entfernen (Entf)" aria-label="Entfernen">${icon('trash', 16)}</button>`;
+}
+
+// Form eines Bereichs (Rechteck, U, L, Rahmen) und Randbreite links/rechts bzw. vorn/hinten
+function formHtml(i) {
+  const f = i.form || 'rect', pct = v => Math.round(bandOf(v) * 100);
+  const tx = /^(u-l|u-r|u-v|u-h|l-|ring)/.test(f), ty = tx;
+  return `<label class="small-text h-form">Form <select class="select sm" data-hc="form" aria-label="Form des Bereichs">${ZONE_FORMS.map(([v, l]) => `<option value="${v}" ${f === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    ${f !== 'rect' ? `${tx ? `<label class="small-text h-form">Rand ↔ <input type="range" class="h-range" data-hc="tx" min="4" max="48" step="1" value="${pct(i.tx)}" aria-label="Randbreite links/rechts in Prozent"></label>` : ''}
+    ${ty ? `<label class="small-text h-form">Rand ↕ <input type="range" class="h-range" data-hc="ty" min="4" max="48" step="1" value="${pct(i.ty)}" aria-label="Randbreite vorn/hinten in Prozent"></label>` : ''}` : ''}`;
 }
 
 // Auswahlrahmen mit Griffen (Größe unten rechts, Drehen oben)
@@ -261,10 +271,18 @@ function onChange(e) {
   else if (hc === 'floor') commit(x => { x.floor = t.value; });
   else if (hc === 'text') { const v = t.value.trim().slice(0, 60); commit(x => { const i = itemOf(x, selected); if (i) { i.text = v; if (i.kind === 'text') i.w = Math.max(60, Math.round(v.length * i.h * .45 + 30)); } }); }
   else if (hc === 'files') { const files = [...t.files]; t.value = ''; importImages(files); }
+  else if (hc === 'form') commit(x => { const i = itemOf(x, selected); if (!i) return; if (t.value === 'rect') { delete i.form; delete i.tx; delete i.ty; } else { i.form = t.value; i.tx = bandOf(i.tx); i.ty = bandOf(i.ty); } });
+  else if (hc === 'tx' || hc === 'ty') { const v = bandOf(Number(t.value) / 100); commit(x => { const i = itemOf(x, selected); if (i) i[hc] = v; }); }
 }
 // Beschriftung sofort in der Zeichnung zeigen, gespeichert wird beim Verlassen des Feldes
 function onInput(e) {
-  if (e.target.dataset.hc !== 'text') return;
+  const hc = e.target.dataset.hc;
+  if (hc === 'tx' || hc === 'ty') {
+    const i = itemOf(plan(), selected), g = i && host.querySelector(`.hi[data-hid="${CSS.escape(i.id)}"]`);
+    if (g) g.innerHTML = shape({ ...i, [hc]: bandOf(Number(e.target.value) / 100) });
+    return;
+  }
+  if (hc !== 'text') return;
   const p = plan(), i = itemOf(p, selected); if (!i) return;
   const g = host.querySelector(`.hi[data-hid="${CSS.escape(i.id)}"]`);
   if (g) g.innerHTML = shape({ ...i, text: e.target.value });

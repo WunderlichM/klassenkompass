@@ -3,6 +3,7 @@ import { uid } from './engine.js';
 import { GEAR, gearSize, scaleOf } from './hallgear.js';
 import { MARKS, fromOldFloor } from './hallfloor.js';
 import { animalName } from './animals.js';
+import { FORM_IDS, bandOf } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1';
 export const SCHEMA = 1;
@@ -178,7 +179,8 @@ function normHalls(list) {
     v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
     items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && !(p.v >= 2) ? fromOldFloor(i) : i)).map(i => (i && !(p.v >= 3) ? toScale(i) : i)).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
       id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
-      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
+      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}),
+      ...(i.kind === 'zone' && FORM_IDS.includes(i.form) && i.form !== 'rect' ? { form: i.form, tx: bandOf(Number(i.tx)), ty: bandOf(Number(i.ty)) } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
       ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) })) }));
 }
 function normHallLib(list) {

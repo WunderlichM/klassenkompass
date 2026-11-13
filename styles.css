@@ -827,6 +827,8 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
 .hall-selbar .h-text { width: 140px; min-height: 36px; resize: vertical; }
 .hall-selbar textarea.h-text { width: 200px; }
 .h-colors { display: flex; gap: 4px; }
+.h-form { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.h-range { width: 96px; accent-color: var(--accent, #2e7d4f); }
 .h-color { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--card); background: var(--c); box-shadow: 0 0 0 1px var(--line); }
 .h-color.on { box-shadow: 0 0 0 2.5px var(--ink); }
 .h-flip .ic { transform: scaleX(-1); }

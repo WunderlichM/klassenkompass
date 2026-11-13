@@ -34,6 +34,35 @@ function floorSvg(p) {
   return `<polygon points="${floorPoints()}" class="hf-floor"/>${lines}${marksSvg(p.lines)}`;
 }
 function para(w, h, k = K) { const d = h * k; return `${num(d)},0 ${num(w)},0 ${num(w - d)},${num(h)} 0,${num(h)}`; }
+// Bereichsformen (seit 1.22.0): Rechteck oder U-, L-Form und Rahmen. tx, ty = Randbreite als Anteil von Breite bzw. Tiefe (0,04–0,48).
+// Gezeichnet im Rahmen des Bereichs (u nach rechts, v nach vorn = unten), dann in die Schräge der Halle gelegt.
+export const ZONE_FORMS = [['rect', 'Rechteck'], ['u-l', 'U – offen nach links'], ['u-r', 'U – offen nach rechts'], ['u-v', 'U – offen nach vorn'], ['u-h', 'U – offen nach hinten'],
+  ['l-vl', 'L – Ecke vorn links'], ['l-vr', 'L – Ecke vorn rechts'], ['l-hl', 'L – Ecke hinten links'], ['l-hr', 'L – Ecke hinten rechts'], ['ring', 'Rahmen']];
+export const FORM_IDS = ZONE_FORMS.map(f => f[0]);
+export const bandOf = v => clamp(Number.isFinite(v) ? v : 0.25, 0.04, 0.48);
+function formRings(form, tx, ty) {
+  const mx = r => r.map(([u, v]) => [1 - u, v]), my = r => r.map(([u, v]) => [u, 1 - v]);
+  const uL = [[0, 0], [1, 0], [1, 1], [0, 1], [0, 1 - ty], [1 - tx, 1 - ty], [1 - tx, ty], [0, ty]];
+  const uH = [[0, 0], [tx, 0], [tx, 1 - ty], [1 - tx, 1 - ty], [1 - tx, 0], [1, 0], [1, 1], [0, 1]];
+  const lVL = [[0, 0], [tx, 0], [tx, 1 - ty], [1, 1 - ty], [1, 1], [0, 1]];
+  switch (form) {
+    case 'u-l': return [uL];
+    case 'u-r': return [mx(uL)];
+    case 'u-h': return [uH];
+    case 'u-v': return [my(uH)];
+    case 'l-vl': return [lVL];
+    case 'l-vr': return [mx(lVL)];
+    case 'l-hl': return [my(lVL)];
+    case 'l-hr': return [mx(my(lVL))];
+    case 'ring': return [[[0, 0], [1, 0], [1, 1], [0, 1]], [[tx, ty], [1 - tx, ty], [1 - tx, 1 - ty], [tx, 1 - ty]]];
+  }
+  return null;
+}
+function zonePath(i) {
+  const rings = formRings(i.form, bandOf(i.tx), bandOf(i.ty)); if (!rings) return null;
+  const d = i.h * K, pt = ([u, v]) => `${num(d * (1 - v) + u * (i.w - d))},${num(v * i.h)}`;
+  return rings.map(r => 'M' + r.map(pt).join('L') + 'Z').join('');
+}
 function textLines(t, x, y, size, cls = '') {
   const lines = String(t || '').split('\n');
   return `<text x="${num(x)}" y="${num(y)}" font-size="${num(size)}" class="${cls}" text-anchor="middle">${lines.map((l, i) => `<tspan x="${num(x)}" dy="${i ? '1.15em' : 0}">${esc(l)}</tspan>`).join('')}</text>`;
@@ -43,7 +72,8 @@ export function shape(i) {
   switch (i.kind) {
     case 'zone': {
       const fs = clamp(Math.min(w, h) * 0.11, 18, 48);
-      return `<polygon points="${para(w, h)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="4"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
+      const zp = zonePath(i), body = zp ? `<path d="${zp}" fill-rule="evenodd"` : `<polygon points="${para(w, h)}"`;
+      return `${body} fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="4"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
     }
     case 'cone': {
       const r = Math.min(w, h) / 2, fs = r * (String(i.text || '').length > 2 ? 0.62 : 0.78);
@@ -121,6 +151,7 @@ export function lineAt(kind, from, to, { size = 1, color } = {}) {
 // { "app": "KlassenKompass", "kind": "hall-plans", "v": 1, "plans": [ { "title": "…", "floor": "halle", "lines": ["handball"], "items": [ … ] } ] }
 // Elemente stehen entweder in Einheiten der Zeichenfläche (x, y, w, h, rot – so exportiert die App) oder in Metern:
 //   { "kind": "zone", "m": [x0, x1, y0, y1], "color": "#2e7d4f", "text": "Feld 1" }
+//   { "kind": "zone", "m": [13.5, 26.2, 1.5, 13.5], "form": "u-l", "band": [3.6, 1.5] }   (Form und Randbreite in m, seit 1.22.0)
 //   { "kind": "gear", "gear": "bank_lang", "view": "laengs", "at": [9, 7.5], "L": 3.4 }        (ax, ay = Ankerpunkt 0…1, optional)
 //   { "kind": "cone" | "kid" | "ball" | "cross" | "tag" | "text", "at": [x, y], "text": "1", "color": "#c94040", "size": 1 }
 //   { "kind": "arrow" | "path", "from": [x, y], "to": [x, y] }
@@ -129,6 +160,7 @@ const PLAN_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'ta
 const COLOR_RE = /^#[0-9a-f]{6}$/i, IMG_RE = /^img_[0-9a-f]{20}$/;
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 const pair = (v, where) => { if (!Array.isArray(v) || v.length !== 2 || !v.every(isNum)) throw new Error(`${where}: Es braucht zwei Zahlen in Metern, z. B. [9, 7.5].`); return v; };
+const num2 = v => Math.round(v * 1000) / 1000;
 const int = (v, a, b, d) => (isNum(v) ? clamp(Math.round(v), a, b) : d);
 const str = (v, n) => String(v ?? '').trim().slice(0, n);
 
@@ -161,7 +193,18 @@ function readItem(raw, where) {
     Object.assign(i, { x: raw.x, y: raw.y, w: raw.w, h: raw.h, rot: raw.rot });
   } else if (isNum(raw.rot)) i.rot = raw.rot;
   const text = raw.text === undefined ? i.text : str(raw.text, 60), c = color || i.color;
-  return { id: uid(), kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80), rot: int(i.rot, -360, 360, 0),
+  let form;
+  if (kind === 'zone' && raw.form !== undefined && raw.form !== 'rect') {
+    if (!FORM_IDS.includes(raw.form)) throw new Error(`${where}: Form „${str(raw.form, 30)}“ gibt es nicht (möglich: ${FORM_IDS.join(', ')}).`);
+    let tx = raw.tx, ty = raw.ty;
+    if (raw.band !== undefined) {
+      const [bx, by] = pair(raw.band, where);
+      if (!raw.m) throw new Error(`${where}: „band“ (Randbreite in m) geht nur zusammen mit „m“.`);
+      tx = bx / (raw.m[1] - raw.m[0]); ty = by / (raw.m[3] - raw.m[2]);
+    }
+    form = { form: raw.form, tx: num2(bandOf(tx)), ty: num2(bandOf(ty)) };
+  }
+  return { id: uid(), kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80), rot: int(i.rot, -360, 360, 0), ...(form || {}),
     ...(c && COLOR_RE.test(c) ? { color: c } : {}), ...(text && kind !== 'gear' && kind !== 'img' ? { text } : {}), ...(kind === 'img' ? { img: i.img } : {}), ...(kind === 'gear' ? { gear: i.gear, view: i.view } : {}) };
 }
 
