@@ -73,13 +73,13 @@ function textLines(t, x, y, size, cls = '') {
 // gewählt, aber fest aus der Kennung des Elements abgeleitet: Beim Neuzeichnen, auf allen Geräten und im Druck sieht
 // dasselbe Kind gleich aus; ein neues Kind (auch eine Kopie) bekommt ein neues Aussehen. Die Füße stehen bei 0,7 · h.
 // Eine Nummer oder Beschriftung zeigt das Kind bewusst nicht (Nutzerentscheidung 13.11.2026).
-// Hauttöne nach Häufigkeit (Nutzerentscheidung 13.11.2026): 50 % hell, 45 % braun, 5 % dunkel; die Haarfarbe passt zum Hautton.
+// Hauttöne nach Häufigkeit (Nutzerentscheidung 13.11.2026): 60 % hell, 35 % braun, 5 % dunkel; die Haarfarbe passt zum Hautton.
 const KID_SKIN = { hell: ['#fae3d0', '#f7d7bd', '#f0c6a4'], braun: ['#dca47a', '#c48a5e', '#a96e44'], dunkel: ['#7d4c2f', '#5f3a24'] };
 const KID_HAIR = { hell: ['#2a1d15', '#4a2f1d', '#6e4524', '#a8702f', '#d9ab5c', '#e6c27a', '#9c3d1b'], braun: ['#1b1b1d', '#2a1d15', '#4a2f1d'], dunkel: ['#1b1b1d', '#2a1d15'] };
 const KID_STYLES = 6; // 0 kurz, 1 Seitenscheitel, 2 Locken (Jungen); 3 Pferdeschwanz, 4 lange Haare, 5 Dutt (Mädchen)
 function kidHash(t) { let h = 2166136261; for (const ch of String(t || '')) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13; return h >>> 0; }
 export function kidLook(i) {
-  const h = kidHash(i.id || 'kind'), q = h % 100, tone = q < 50 ? 'hell' : q < 95 ? 'braun' : 'dunkel', sk = KID_SKIN[tone], hr = KID_HAIR[tone];
+  const h = kidHash(i.id || 'kind'), q = h % 100, tone = q < 60 ? 'hell' : q < 95 ? 'braun' : 'dunkel', sk = KID_SKIN[tone], hr = KID_HAIR[tone];
   return { skin: sk[(h >>> 7) % sk.length], hair: hr[(h >>> 11) % hr.length], style: (h >>> 16) % KID_STYLES, shirt: i.color || KINDS.kid.color };
 }
 function kidSvg(i) {
