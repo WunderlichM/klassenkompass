@@ -12,6 +12,7 @@ export const KINDS = {
   zone: { label: 'Bereich', w: 420, h: 560, color: '#3d6fb5', text: 'Gruppe', rotate: false },
   cone: { label: 'Hütchen', w: 70, h: 70, color: '#2e7d4f', text: 'H1', keep: true },
   kid: { label: 'Kind', w: 56, h: 96, color: '#3d6fb5', keep: true },
+  teacher: { label: 'Lehrkraft', w: 56, h: 128, color: '#25272e', keep: true },
   ball: { label: 'Ball', w: 40, h: 40, color: '#6c6cf0', keep: true },
   arrow: { label: 'Laufweg', w: 220, h: 44, color: '#2f5e8e' },
   path: { label: 'Weg (Freigabe)', w: 320, h: 34, color: '#b0602a' },
@@ -108,6 +109,30 @@ function kidSvg(i) {
     + `<path d="${arms}" fill="none" stroke="${ink}" stroke-width="${num(6.6 * s)}" stroke-linecap="round"/><path d="${arms}" fill="none" stroke="${L.skin}" stroke-width="${num(3.6 * s)}" stroke-linecap="round"/>`
     + `${P(shirt, L.shirt, line)}${head} fill="${L.skin}"${line}/>${top}${face}`;
 }
+// ---------- Lehrkraft (seit 1.25.0) ----------
+// Erwachsene Figur für den Standort der Lehrkraft: blond, kurze Haare, Sportshirt in wählbarer Farbe, lange Trainingshose,
+// Pfeife am Band. Raster 56 × 128, die Füße stehen wie beim Kind bei 0,7 · h. Keine Beschriftung.
+function teacherSvg(i) {
+  const s = i.w / 56, X = v => num(v * s), ink = '#1f2a3c', skin = '#f4d3b8', hair = '#dcb35a', c = i.color || KINDS.teacher.color;
+  const P = (d, fill, extra = '') => `<path d="${d}" fill="${fill}"${extra}/>`, line = ` stroke="${ink}" stroke-width="${num(1.8 * s)}" stroke-linejoin="round"`;
+  const shirt = `M${X(16.5)} ${X(26)}Q${X(28)} ${X(23)} ${X(39.5)} ${X(26)}L${X(46)} ${X(38)}L${X(40.5)} ${X(40.5)}L${X(40)} ${X(59)}L${X(16)} ${X(59)}L${X(15.5)} ${X(40.5)}L${X(10)} ${X(38)}Z`;
+  const pants = `M${X(16.5)} ${X(58)}H${X(39.5)}L${X(38.5)} ${X(85)}H${X(29.5)}L${X(28)} ${X(64)}L${X(26.5)} ${X(85)}H${X(17.5)}Z`;
+  const shoes = `M${X(18)} ${X(84.5)}H${X(26.5)}V${X(90)}H${X(14)}Q${X(14)} ${X(84.5)} ${X(18)} ${X(84.5)}ZM${X(29.5)} ${X(84.5)}H${X(38)}Q${X(42)} ${X(84.5)} ${X(42)} ${X(90)}H${X(29.5)}Z`;
+  const arms = `M${X(12)} ${X(39)}Q${X(10.5)} ${X(48)} ${X(12)} ${X(58)}M${X(44)} ${X(39)}Q${X(45.5)} ${X(48)} ${X(44)} ${X(58)}`;
+  const head = `<circle cx="${X(28)}" cy="${X(13.5)}" r="${X(9.5)}"`;
+  const top = P(`M${X(18.4)} ${X(13)}A${X(9.6)} ${X(9.6)} 0 0 1 ${X(37.6)} ${X(12.5)}Q${X(37)} ${X(9.5)} ${X(33)} ${X(8.8)}Q${X(30)} ${X(11)} ${X(24)} ${X(9.8)}Q${X(20.5)} ${X(10)} ${X(18.4)} ${X(13)}Z`, hair);
+  const face = [24.6, 31.4].map(x => `<circle cx="${X(x)}" cy="${X(14.6)}" r="${X(1.3)}" fill="${ink}"/><circle cx="${X(x + 0.45)}" cy="${X(14.1)}" r="${X(0.45)}" fill="#fff"/>`).join('')
+    + `<path d="M${X(23)} ${X(11.6)}H${X(26.3)}M${X(29.7)} ${X(11.6)}H${X(33)}" stroke="#a9853a" stroke-width="${num(1.1 * s)}" stroke-linecap="round"/>`
+    + `<path d="M${X(25)} ${X(18)}Q${X(28)} ${X(20.6)} ${X(31)} ${X(18)}" fill="none" stroke="${ink}" stroke-width="${num(1.3 * s)}" stroke-linecap="round"/>`;
+  // Pfeife am Band
+  const whistle = `<path d="M${X(23.5)} ${X(24.5)}L${X(28)} ${X(37)}L${X(32.5)} ${X(24.5)}" fill="none" stroke="#f2f2f2" stroke-width="${num(1.4 * s)}"/>`
+    + `<rect x="${X(25.8)}" y="${X(36.5)}" width="${X(5.6)}" height="${X(3.6)}" rx="${X(1.2)}" fill="#c3c9d1" stroke="${ink}" stroke-width="${num(1 * s)}"/>`;
+  const halo = `<g fill="#fff" stroke="#fff" stroke-width="${num(6 * s)}" stroke-linejoin="round" stroke-linecap="round">${head}/>${P(shirt, '#fff')}${P(pants, '#fff')}${P(shoes, '#fff')}<path d="${arms}" fill="none" stroke-width="${num(10 * s)}"/></g>`;
+  return `<ellipse cx="${X(28)}" cy="${X(90.5)}" rx="${X(19)}" ry="${X(4.8)}" fill="#000" opacity=".22"/>${halo}`
+    + `${P(pants, '#3a465e', line)}<path d="M${X(28)} ${X(64)}V${X(84)}" stroke="#2a3346" stroke-width="${num(0.8 * s)}"/>${P(shoes, ink)}`
+    + `<path d="${arms}" fill="none" stroke="${ink}" stroke-width="${num(6.6 * s)}" stroke-linecap="round"/><path d="${arms}" fill="none" stroke="${skin}" stroke-width="${num(3.6 * s)}" stroke-linecap="round"/>`
+    + `${P(shirt, c, line)}${whistle}${head} fill="${skin}"${line}/>${top}${face}`;
+}
 export function shape(i) {
   const { w, h } = i, c = i.color || KINDS[i.kind]?.color || '#333';
   switch (i.kind) {
@@ -122,6 +147,8 @@ export function shape(i) {
     }
     case 'kid':
       return kidSvg(i);
+    case 'teacher':
+      return teacherSvg(i);
     case 'ball': {
       const r = Math.min(w, h) / 2;
       return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 2)}" fill="${c}" stroke="#2c2f6e" stroke-width="3"/><circle cx="${num(w / 2 - r * .3)}" cy="${num(h / 2 - r * .3)}" r="${num(r * .22)}" fill="#fff" opacity=".6"/>`;
@@ -148,7 +175,7 @@ export function shape(i) {
   return '';
 }
 const itemSvg = i => `<g class="hi" data-hid="${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
-export const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0L16 16M16 0L0 16" stroke="#9aa3b2" stroke-width="1.5"/></pattern></defs>';
+export const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0L16 16M16 0L0 16" stroke="#9aa3b2" stroke-width="1.5"/></pattern><pattern id="h-grid" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V14" stroke="#7d8794" stroke-width="1.6"/></pattern></defs>';
 // Ausschnitt um Hallenfläche und Elemente (für das Bildschirm-Objekt, damit wenig Rand bleibt)
 export function contentBox(p) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -177,7 +204,7 @@ export function gearAt(id, view, x, y, { ax = 0.5, ay = 0.9, L } = {}) {
 export function itemAt(kind, x, y, { size = 1, color, text } = {}) {
   const k = KINDS[kind], p = fp(x, y), t = text ?? (kind === 'zone' ? '' : k.text);
   const h = Math.round(k.h * size), w = Math.round(kind === 'text' ? Math.max(60, String(t || '').length * h * 0.45 + 30) : k.w * size);
-  return { id: uid(), kind, x: Math.round(p[0] - w / 2), y: Math.round(p[1] - (kind === 'kid' ? h * 0.7 : h / 2)), w, h, rot: 0, ...(color || k.color ? { color: color || k.color } : {}), ...(t ? { text: String(t) } : {}) };
+  return { id: uid(), kind, x: Math.round(p[0] - w / 2), y: Math.round(p[1] - (kind === 'kid' || kind === 'teacher' ? h * 0.7 : h / 2)), w, h, rot: 0, ...(color || k.color ? { color: color || k.color } : {}), ...(t ? { text: String(t) } : {}) };
 }
 // Laufweg (arrow) oder Weg nach Freigabe (path) zwischen zwei Bodenpunkten in Metern
 export function lineAt(kind, from, to, { size = 1, color } = {}) {
@@ -192,10 +219,10 @@ export function lineAt(kind, from, to, { size = 1, color } = {}) {
 //   { "kind": "zone", "m": [x0, x1, y0, y1], "color": "#2e7d4f", "text": "Feld 1" }
 //   { "kind": "zone", "m": [13.5, 26.2, 1.5, 13.5], "form": "u-l", "band": [3.6, 1.5] }   (Form und Randbreite in m, seit 1.22.0)
 //   { "kind": "gear", "gear": "bank_lang", "view": "laengs", "at": [9, 7.5], "L": 3.4 }        (ax, ay = Ankerpunkt 0…1, optional)
-//   { "kind": "cone" | "kid" | "ball" | "cross" | "tag" | "text", "at": [x, y], "text": "1", "color": "#c94040", "size": 1 }
+//   { "kind": "cone" | "kid" | "teacher" | "ball" | "cross" | "tag" | "text", "at": [x, y], "text": "1", "color": "#c94040", "size": 1 }
 //   { "kind": "arrow" | "path", "from": [x, y], "to": [x, y] }
 export const PLANS_KIND = 'hall-plans';
-const PLAN_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
+const PLAN_KINDS = ['zone', 'cone', 'kid', 'teacher', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
 const COLOR_RE = /^#[0-9a-f]{6}$/i, IMG_RE = /^img_[0-9a-f]{20}$/;
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
 const pair = (v, where) => { if (!Array.isArray(v) || v.length !== 2 || !v.every(isNum)) throw new Error(`${where}: Es braucht zwei Zahlen in Metern, z. B. [9, 7.5].`); return v; };

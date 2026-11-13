@@ -321,12 +321,29 @@ def('schlaeger', 'Schläger', G4, { views: SIDE4, build: b => {
   });
 } });
 def('ballwagen', 'Ballwagen', G4, { views: SIDE4, build: b => {
-  [[0.1, 0.55], [0.9, 0.55], [0.1, 0.05], [0.9, 0.05]].forEach(([x, y]) => b.sphere(x, y, 0.06, C.black, null, { shadow: false, layer: -1 }));
-  b.group([0, 0, 0.12], () => {
-    [[0.25, 0.4, C.orange], [0.55, 0.42, C.white], [0.8, 0.38, C.yellow], [0.2, 0.15, C.red], [0.5, 0.18, C.orange], [0.78, 0.16, '#3d6fb5']].forEach(([x, y, c]) => { const p = b.P(x, y, 0.62), R = 0.13 * U; b.raw(`<circle cx="${n1(p[0])}" cy="${n1(p[1])}" r="${n1(R)}" fill="${c}"/>`, p, R); });
-    b.box(0, 0, 0.12, 1.0, 0.6, 0.55, 'url(#h-net)', { side: 'url(#h-net)', top: 'none' });
+  // Gitterkorb auf vier Lenkrollen mit Schiebebügel (seit 1.25.0): Innenraum grau, darin ein Haufen Bälle,
+  // davor die Gitterwände und der Metallrahmen; die Bälle schauen oben aus dem Korb heraus.
+  const L = 1.0, D = 0.6, z0 = 0.16, H = 0.6, zt = z0 + H, cage = 'url(#h-grid)';
+  [[0.07, 0.07], [L - 0.07, 0.07], [0.07, D - 0.07], [L - 0.07, D - 0.07]].forEach(([x, y]) => {
+    b.rod([x, y, z0], [x, y, 0.1], 3, C.metalD, { layer: -2 });
+    b.poly(b.vcircle(x, y, 0.05, 0.05, b.swap ? 'y' : 'x', 16), C.black, { layer: -2, sw: 2 });
   });
-  b.rod([1.04, 0.05, 0.6], [1.04, 0.55, 0.6], 5, C.metalD, { layer: 1 });
+  b.box(0, 0, z0, L, D, H, '#d3d8df', { front: '#dfe3e8', back: '#dfe3e8', side: '#cfd4db', top: 'none', layer: -1 });
+  const balls = [[0.2, 0.44, C.orange, 'b'], [0.5, 0.46, C.white, 'v'], [0.8, 0.43, C.yellow, 'v'], [0.35, 0.3, '#3d6fb5', ''], [0.65, 0.3, C.red, ''],
+    [0.17, 0.16, C.white, 'f'], [0.5, 0.15, C.orange, 'b'], [0.82, 0.17, '#4f8f5b', '']];
+  balls.forEach(([x, y, c, t], k) => {
+    const z = zt - 0.05 + (k % 3 === 1 ? 0.03 : 0), p = b.P(x, y, z), R = 0.12 * U, f = v => n1(v);
+    const deco = t === 'b' ? `<path d="M${f(p[0] - R)} ${f(p[1])}H${f(p[0] + R)}M${f(p[0])} ${f(p[1] - R)}V${f(p[1] + R)}M${f(p[0] - R * .6)} ${f(p[1] - R * .8)}Q${f(p[0] - R * .1)} ${f(p[1])} ${f(p[0] - R * .6)} ${f(p[1] + R * .8)}" fill="none" stroke-width="1.8"/>`
+      : t === 'v' ? `<path d="M${f(p[0] - R * .95)} ${f(p[1] - R * .25)}Q${f(p[0])} ${f(p[1] - R * .1)} ${f(p[0] + R * .6)} ${f(p[1] - R * .8)}M${f(p[0] - R * .7)} ${f(p[1] + R * .7)}Q${f(p[0] + R * .1)} ${f(p[1] + R * .2)} ${f(p[0] + R * .95)} ${f(p[1] + R * .2)}" fill="none" stroke-width="1.8"/>`
+      : t === 'f' ? `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="${f(R * .32)}" fill="${C.black}" stroke-width="1.5"/>` : '';
+    b.raw(`<circle cx="${f(p[0])}" cy="${f(p[1])}" r="${f(R)}" fill="${c}"/>${deco}<circle cx="${f(p[0] - R * .35)}" cy="${f(p[1] - R * .38)}" r="${f(R * .2)}" fill="#fff" opacity=".55" stroke="none"/>`, p, R, [x, y, z]);
+  });
+  b.box(0, 0, z0, L, D, H, cage, { front: cage, back: cage, side: cage, top: 'none', layer: 1 });
+  // Rahmen: oberer Rand als Rohr (hintere Kante hinter den Bällen), dazu der Schiebebügel an einer Stirnseite
+  [[[0, D, zt], [L, D, zt], 0], [[0, 0, zt], [L, 0, zt], 2], [[L, 0, zt], [L, D, zt], 2], [[0, 0, zt], [0, D, zt], 2]].forEach(([a, e, layer]) => b.rod(a, e, 4, C.metal, { layer }));
+  const hl = b.swap && !b.front ? -1 : 3; // Bügel hinten (Längsansicht von vorn) liegt hinter dem Korb
+  [0.1, D - 0.1].forEach(y => b.rod([L, y, zt - 0.1], [L + 0.13, y, zt + 0.16], 5, C.metalD, { layer: hl }));
+  b.rod([L + 0.13, 0.06, zt + 0.16], [L + 0.13, D - 0.06, zt + 0.16], 8, C.black, { layer: hl });
 } });
 const R0 = 0.16;
 def('fussball', 'Fußball', G4, { views: ['quer'], build: ball(R0, '#ffffff', (x, y, R) => {

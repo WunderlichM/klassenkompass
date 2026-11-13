@@ -153,7 +153,7 @@ function normScreen(s) {
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
 // ---------- Hallenpläne ----------
-export const HALL_KINDS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
+export const HALL_KINDS = ['zone', 'cone', 'kid', 'teacher', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
 // Einfache Geräte bis 1.12 → Geräte aus dem Katalog (Kennung, Ansicht, damalige Standardbreite)
 const OLD_GEAR = { bench: ['bank_lang', 'quer', 340], mat: ['turnmatte', 'quer', 230], softmat: ['weichboden', 'quer', 290], box: ['kasten4', 'quer', 120], goal: ['tor', 'frontal', 200] };
 const COLOR_RE = /^#[0-9a-f]{6}$/i, GEAR_RE = /^[a-z0-9_]{1,30}$/, VIEW_RE = /^[a-z]{1,20}$/;

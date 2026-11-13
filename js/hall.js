@@ -14,9 +14,9 @@ export { boardSvg };
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
-const PLAN_TOOLS = ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'cross', 'tag', 'text'];
+const PLAN_TOOLS = ['zone', 'cone', 'kid', 'teacher', 'ball', 'arrow', 'path', 'cross', 'tag', 'text'];
 const hasText = k => ['zone', 'cone', 'tag', 'text'].includes(k);
-const hasColor = i => (i.kind === 'gear' ? !!gear.GEAR[i.gear]?.color : ['zone', 'cone', 'kid', 'ball', 'arrow', 'path', 'text'].includes(i.kind));
+const hasColor = i => (i.kind === 'gear' ? !!gear.GEAR[i.gear]?.color : ['zone', 'cone', 'kid', 'teacher', 'ball', 'arrow', 'path', 'text'].includes(i.kind));
 // Seitenverhältnis beim Ziehen am Griff beibehalten (Geräte quer wie Bank oder Netz dürfen länger werden)
 const keepOf = i => (i.kind === 'gear' ? !gear.isStretch(i.gear, i.view) : !!KINDS[i.kind].keep);
 
