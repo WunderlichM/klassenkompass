@@ -189,7 +189,7 @@ function drawHome() {
         <div class="card">
           <div class="card-head small">
             <h3>${icon('cards', 16)} Klasse &amp; Karten ${c ? `<span class="badge">${c.students.length}</span>` : ''}</h3>
-            ${c ? `<button class="icon-btn sm" data-act="class-edit" title="Name oder Kinderzahl ändern" aria-label="Klasse bearbeiten">${icon('edit', 16)}</button>` : ''}
+            ${c ? `<div class="tools"><button class="icon-btn sm" data-act="student-add" title="Kind hinzufügen (nächstes Tier)" aria-label="Kind hinzufügen" ${c.count >= CARD_COUNT ? 'disabled' : ''}>${icon('plus', 16)}</button><button class="icon-btn sm" data-act="class-edit" title="Name oder Kinderzahl ändern" aria-label="Klasse bearbeiten">${icon('edit', 16)}</button></div>` : ''}
           </div>
           ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span>${sym(s.card)}<span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button></li>`).join('')}</ul>
           <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind hat ein festes Tier (Karte 1 Adler, 2 Biber …) – in allen Klassen gleich. Wer welches Tier ist, steht nur auf deinem Zuordnungsblatt.</p>`; })() : `<p class="muted">Lege eine Klasse an: Name und Anzahl der Kinder genügen.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
@@ -388,6 +388,7 @@ function onClick(e) {
     case 'classes': return classesDialog();
     case 'class-new': return classDialog();
     case 'class-edit': return classEditDialog(cls());
+    case 'student-add': return addStudent(cls());
     case 'student-absent': { const off = absentFor(cls().id), id = b.dataset.id; off.has(id) ? off.delete(id) : off.add(id); return draw(); }
     case 'print': return printDialog();
     case 'print-sheet': return sheetDialog();
@@ -623,7 +624,12 @@ function classesDialog() {
       if (b.dataset.m === 'new') { close(); return classDialog(); }
       if (b.dataset.m === 'edit') { close(); return classEditDialog(c); }
       close();
-      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? Gespeicherte Ergebnisse bleiben erhalten, die Rangliste der Klasse entfällt. Ihre Fragensätze bleiben und stehen danach ohne Klasse da.`)) store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); s.quiz.sets.forEach(t => { if (t.classId === id) t.classId = ''; }); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
+      const n = Q().sessions.filter(x => x.done && x.classId === id).length;
+      // Seit 1.23.0 gehen die Ergebnisse der Klasse mit (laufende Quiz bleiben unberührt)
+      if (await confirmDialog('Klasse löschen', `Die Quiz-Klasse „${c.name}“ löschen? ${n ? `${n === 1 ? 'Ihr gespeichertes Ergebnis wird' : 'Ihre ' + n + ' gespeicherten Ergebnisse werden'} ebenfalls gelöscht, die Rangliste entfällt.` : 'Die Rangliste der Klasse entfällt.'} Ihre Fragensätze bleiben und stehen danach ohne Klasse da.`)) {
+        store.update(s => { s.quiz.classes = s.quiz.classes.filter(x => x.id !== id); s.quiz.sessions = s.quiz.sessions.filter(x => !(x.done && x.classId === id)); s.quiz.sets.forEach(t => { if (t.classId === id) t.classId = ''; }); if (s.quiz.activeClassId === id) s.quiz.activeClassId = s.quiz.classes[0]?.id ?? null; });
+        toast(n ? `Klasse und ${n === 1 ? '1 Ergebnis' : n + ' Ergebnisse'} gelöscht.` : 'Klasse gelöscht.');
+      }
     }) });
 }
 const countField = (n = 16) => `<label class="field">Anzahl Kinder <small class="muted">(Karte 1 bis ${CARD_COUNT})</small><input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${n}" inputmode="numeric" required></label>`;
@@ -641,12 +647,20 @@ function classDialog() {
       toast(`Klasse angelegt: Karten 1 bis ${count} (${ANIMALS[0]} bis ${ANIMALS[count - 1]}).`);
     } });
 }
+// Ein Kind dazu: Die Klasse bekommt die nächste Karte mit ihrem festen Tier (bisherige Tiere bleiben)
+function addStudent(c) {
+  if (!c) return;
+  if (c.count >= CARD_COUNT) return toast(`Mehr als ${CARD_COUNT} Karten gibt es nicht.`, { kind: 'warn' });
+  const count = c.count + 1;
+  store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); if (!k) return; k.count = count; k.students = store.quizStudents(k.id, count, k.students); k.demo = false; });
+  toast(`Karte ${count} hinzugefügt: ${ANIMALS[count - 1]}.`);
+}
 function classEditDialog(c) {
   if (!c) return;
   dialog({ title: `Klasse ${c.name}`, submit: 'Speichern', body: `
     <label class="field">Name<input name="name" class="input" value="${esc(c.name)}" maxlength="60" required></label>
     ${countField(c.count)}
-    <p class="muted small-text">Wird die Anzahl kleiner, fallen die letzten Tiere weg; frühere Ergebnisse bleiben gespeichert.</p>`,
+    <p class="muted small-text">Wird die Anzahl größer, kommen die nächsten Tiere dazu; wird sie kleiner, fallen die letzten weg. Frühere Ergebnisse bleiben gespeichert. Einzelne Kinder fügst du auch mit „+“ bei „Klasse &amp; Karten“ hinzu.</p>`,
     onSubmit: fd => {
       const name = String(fd.get('name')).trim(), count = readCount(fd);
       if (!name) throw new Error('Bitte einen Namen eingeben.');
