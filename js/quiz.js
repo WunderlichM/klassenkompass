@@ -135,7 +135,9 @@ function confetti(id) {
 // ======================================================================
 function drawHome() {
   const q = Q(), c = cls(), t = qset(), sets = setsFor();
-  const done = q.sessions.filter(x => x.done).slice().reverse();
+  // Ergebnisse nur der gewählten Klasse; Ergebnisse gelöschter Klassen bleiben überall sichtbar (sonst wären sie unerreichbar)
+  const known = id => q.classes.some(k => k.id === id);
+  const done = q.sessions.filter(x => x.done && (x.classId === c?.id || !known(x.classId))).slice().reverse();
   const other = q.sessions.filter(x => !x.done && x.device !== DEVICE && x.id !== live.remote?.sessionId);
   root.innerHTML = `
   <section class="page quiz">
@@ -179,7 +181,7 @@ function drawHome() {
         <div class="card">
           <h3>${icon('chart', 16)} Ergebnisse</h3>
           ${other.length ? other.map(x => `<p class="notice">Auf einem anderen Gerät läuft noch: ${esc(x.title)} · ${esc(x.className)} <button class="link" data-act="end-other" data-id="${esc(x.id)}">als beendet markieren</button></p>`).join('') : ''}
-          ${done.length ? `<ul class="result-list">${done.map(x => { const st = stats(x); return `<li><button class="result-row" data-act="result" data-id="${esc(x.id)}"><span class="r-date">${esc(displayDate(x.date))}</span><span class="r-title"><b>${esc(x.title)}</b><small>${esc(x.className)} · ${x.questions.length} Frage(n) · ${st.answered} Antworten</small></span><span class="r-score">${st.pct === null ? '–' : st.pct + ' %'}</span></button></li>`; }).join('')}</ul>` : '<p class="muted small-text">Noch keine Ergebnisse. Nach jedem Quiz erscheinen sie hier.</p>'}
+          ${done.length ? `<ul class="result-list">${done.map(x => { const st = stats(x); return `<li><button class="result-row" data-act="result" data-id="${esc(x.id)}"><span class="r-date">${esc(displayDate(x.date))}</span><span class="r-title"><b>${esc(x.title)}</b><small>${esc(x.className)} · ${x.questions.length} Frage(n) · ${st.answered} Antworten</small></span><span class="r-score">${st.pct === null ? '–' : st.pct + ' %'}</span></button></li>`; }).join('')}</ul>` : `<p class="muted small-text">Noch keine Ergebnisse${c ? ' für diese Klasse' : ''}. Nach jedem Quiz erscheinen sie hier.</p>`}
         </div>
         ${c ? rankCard(c) : ''}
       </div>
