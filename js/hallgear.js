@@ -375,6 +375,14 @@ def('tuer', 'Tür', G5, { views: FRONT4, build: b => {
     if (b.front) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 5, C.metalD);
   });
 } });
+// Geräteraumtor: breites Holztor mit waagrechten Brettern (seams zeichnen sie auch von der Seite), in der Breite dehnbar
+def('geraeteraumtor', 'Geräteraumtor', G5, { views: FRONT4, len: 3, stretch: true, short: 'Geräteraumtor', build: (b, L) => {
+  b.group([0, 0, 0], () => {
+    b.box(-0.1, -0.01, 0, L + 0.2, 0.08, 2.6, C.woodD);
+    b.box(0, -0.02, 0, L, 0.06, 2.45, C.wood, { seams: Array.from({ length: 7 }, (_, k) => 0.3 * (k + 1)) });
+    if (b.front) b.rod([L / 2 - 0.25, -0.04, 0.12], [L / 2 + 0.25, -0.04, 0.12], 5, C.metalD);
+  });
+} });
 def('lautsprecher', 'Lautsprecher', G5, { views: FRONT4, build: b => {
   b.group([0, 0, 0], () => {
     b.box(0, 0, 0, 0.46, 0.36, 0.72, '#30353d');
