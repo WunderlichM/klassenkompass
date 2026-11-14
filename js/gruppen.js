@@ -25,10 +25,10 @@ const LAYOUT_PICS = {
   arena: '<path d="M3 9q9-6 18 0M3 14q9-6 18 0M3 19q9-6 18 0"/>',
 };
 
-// Ansicht je Lerngruppe merken: Sport-Gruppen öffnen mit „Teams“, alle anderen mit „Sitzordnung“
+// Ansicht je Lerngruppe: Sport-Gruppen öffnen mit „Teams“, alle anderen mit „Sitzordnung“; eine andere Wahl gilt bis zur nächsten Auswahl der Lerngruppe (seit 2.8.1)
 const viewOf = groups.viewOf;
 let listMode = 'plan', search = '', root = null, problem = '';
-const viewFor = g => viewOf.get(g.id) || (g.subject === 'Sport' ? 'teams' : 'sitz');
+const viewFor = g => viewOf.get(g.id) || (groups.isSport(g) ? 'teams' : 'sitz');
 // Sitzordnung (seit 2.6.0) in zwei Fassungen: „std“ = Standardsitzplan (wer normalerweise wo sitzt, fest gespeichert),
 // „mix“ = gemischte Gruppen wie bisher. Gibt es einen Standardsitzplan, öffnet die Sitzordnung damit.
 const modeOf = new Map();

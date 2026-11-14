@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.8.1
+
+- **Sport-Lerngruppen öffnen mit „Teams“ (`js/groups.js`, `js/gruppen.js`):** Wird eine Lerngruppe ausgewählt (in Gruppen oder Turnieren), zeigt Gruppen wieder ihre Standardansicht – bei Sport „Teams“, sonst „Sitzordnung“. Bisher blieb eine einmal gewählte Ansicht bis zum Neuladen gemerkt. Als Sport gilt eine Lerngruppe, wenn ihr Fach oder das Fach ihres Sportteils „Sport“ ist (Groß-/Kleinschreibung egal).
+
 ## Neu in 2.8.0
 
 - **Räume oben wählen (`js/gruppen.js`, `js/room.js`):** Neben „Deine Lerngruppe“ steht die Auswahl **Raum** („Kein Raum (Standard)“, alle Räume, „+ Neuer Raum …“). „Eigener Raum“ ist keine Organisationsform mehr: Jede Organisationsform (Omnibus, Gruppentische, Sitzkreis, Stehkreis, U-Form, Arena) wird im gewählten Raum gezeigt – maßstäblich mit Tafel, Pult, Tür, Fenstern und Schränken. Ohne Raum gelten die Organisationsformen wie bisher.

@@ -8,7 +8,9 @@ import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
 
 export const SUBJECTS = store.SUBJECTS;
 const absentById = new Map(); // „Heute nicht da“: gilt bis zum nächsten Öffnen, gemeinsam für alle Bereiche
-export const viewOf = new Map(); // Ansicht in Gruppen je Lerngruppe: 'sitz' oder 'teams'
+export const viewOf = new Map(); // Ansicht in Gruppen je Lerngruppe: 'sitz' oder 'teams' (gilt bis zur nächsten Auswahl der Lerngruppe)
+// Sport-Lerngruppe: Fach „Sport“ beim gemeinsamen Eintrag oder beim Sportteil (Groß-/Kleinschreibung egal)
+export const isSport = g => [g?.subject, g?.sport?.subject].some(x => String(x || '').trim().toLocaleLowerCase('de') === 'sport');
 
 // ---------- Lesen ----------
 const seatOf = (s, id) => s.technik.classes.find(c => c.id === id) || null;
@@ -107,6 +109,7 @@ export function sportPart(s, id) {
 }
 const parts = (s, id) => [seatOf(s, id), sportOf(s, id)].filter(Boolean);
 export function setActive(id) {
+  viewOf.delete(id);   // beim Auswählen wieder die Standardansicht (Sport: Teams, sonst Sitzordnung), nicht die zuletzt gewählte
   store.update(s => {
     s.active = id;
     if (seatOf(s, id)) s.technik.activeId = id;
