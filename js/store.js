@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 5;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0)
+export const SCHEMA = 6;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -178,8 +178,12 @@ function normClass(c) {
   const ids = new Set(students.map(s => s.id));
   const st = c?.settings || {};
   const plan = c?.plan && Array.isArray(c.plan.groups) ? { groups: c.plan.groups.map(g => (g || []).filter(id => ids.has(id))), createdAt: c.plan.createdAt || '' } : null;
-  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', subject: str(c?.subject, 30) || guessSubject(c?.name, 'Technik'), demo: !!c?.demo, students,
-    settings: { layout: LAYOUTS.includes(st.layout) ? st.layout : 'omnibus', tables: int(st.tables, 1, 40, 8), groups: int(st.groups, 1, 20, 4) },
+  // Standardsitzplan (seit 2.6.0, optional): wer normalerweise wo sitzt – Plätze als flache Liste, Tisch t = Plätze 2t und 2t + 1
+  const sd = c?.standard, seen = new Set();
+  const standard = sd && Array.isArray(sd.seats) ? { layout: LAYOUTS.includes(sd.layout) ? sd.layout : 'omnibus', tables: int(sd.tables, 1, 40, 8), groups: int(sd.groups, 1, 20, 4), cols: int(sd.cols, 0, 5, 0),
+    seats: sd.seats.slice(0, 80).map(id => (ids.has(id) && !seen.has(id) && seen.add(id) ? String(id) : null)), savedAt: str(sd.savedAt, 30) } : null;
+  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', subject: str(c?.subject, 30) || guessSubject(c?.name, 'Technik'), demo: !!c?.demo, students, ...(standard ? { standard } : {}),
+    settings: { layout: LAYOUTS.includes(st.layout) ? st.layout : 'omnibus', tables: int(st.tables, 1, 40, 8), groups: int(st.groups, 1, 20, 4), ...(int(st.cols, 0, 5, 0) ? { cols: int(st.cols, 2, 5, 3) } : {}) },
     rules: (Array.isArray(c?.rules) ? c.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1]) && r[0] !== r[1]).map(r => [r[0], r[1]]), plan };
 }
 function normSport(g) {

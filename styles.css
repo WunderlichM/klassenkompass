@@ -1371,3 +1371,51 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .result-h { display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; font-size: 15px; }
 .tag-table { margin-bottom: 14px; } .tag-table .weak span { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; white-space: nowrap; }
 @media (max-width: 760px) { .qs-lv { grid-template-columns: 1fr; } }
+
+/* Sitzordnung (seit 2.6.0): Raum füllt die Breite, Namen groß und dunkel, Tischnummer klein in der Ecke */
+.room-wrap { container-type: inline-size; }
+.room.v2 { min-width: 0; width: 100%; gap: clamp(14px, 2.2cqw, 30px); --seat-h: clamp(42px, 5.4cqw, 80px); --seat-f: clamp(13.5px, 1.95cqw, 26px); }
+.room.v2 .front { gap: clamp(6px, .9cqw, 12px); }
+.room.v2 .board { width: min(64%, 760px); text-align: center; padding: clamp(6px, .9cqw, 13px) 0; font-size: clamp(10px, 1.15cqw, 15px); letter-spacing: .24em; border-radius: 8px; }
+.room.v2 .desk { padding: clamp(5px, .7cqw, 9px) clamp(24px, 4cqw, 60px); font-size: clamp(11px, 1.1cqw, 14px); }
+.room.v2 .back { margin: 0; font-size: clamp(10px, 1cqw, 13px); }
+.room.v2 .seat { position: relative; min-width: 0; width: 100%; height: var(--seat-h); padding: 0 6px; font-size: var(--seat-f); font-weight: 650; letter-spacing: -.01em; line-height: 1.05; color: var(--ink); border-radius: clamp(8px, 1cqw, 14px); background: var(--card); align-content: center; }
+.room.v2 .seat span { max-width: 100%; }
+.room.v2 .seat.long { font-size: calc(var(--seat-f) * .8); letter-spacing: -.02em; } .room.v2 .seat.xlong { font-size: calc(var(--seat-f) * .66); letter-spacing: -.02em; }
+.room.v2.gruppen { --seat-f: clamp(13px, 1.7cqw, 24px); }
+.room.v2 .seat small { font-size: .5em; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.room.v2 .seat.away { background: transparent; border-style: dashed; color: var(--muted); } .room.v2 .seat.away span { text-decoration: line-through; }
+.room.v2 .seat.free { background: transparent; border-style: dashed; color: color-mix(in srgb, var(--muted) 55%, transparent); font-weight: 500; font-size: calc(var(--seat-f) * .7); }
+.room.v2 .seat.drop-over { box-shadow: 0 0 0 3px var(--accent); }
+.room.v2 .table { position: relative; padding: clamp(5px, .7cqw, 10px); border-radius: clamp(10px, 1.3cqw, 18px); min-width: 0; }
+.room.v2 .table.plain { background: color-mix(in srgb, #d8c9a8 26%, var(--card)); border: 1.5px solid color-mix(in srgb, #b9a77d 55%, var(--line)); }
+.room.v2 .table.plain .seat { border-color: color-mix(in srgb, #b9a77d 45%, var(--line)); }
+.room.v2 .table.grouped .seat { color: var(--ink); }
+.room.v2 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(4px, .6cqw, 9px); width: 100%; }
+.tno { position: absolute; z-index: 1; top: -10px; left: 10px; display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 8px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font-style: normal; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tno .gtag { margin-left: -6px; height: 15px; min-width: 24px; border-radius: 99px; }
+.room.v2.omnibus .rows { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: clamp(16px, 2cqw, 30px) clamp(18px, 4.2cqw, 76px); width: 100%; max-width: calc(var(--cols) * 360px); padding-top: 6px; }
+@container (max-width: 520px) { .room.v2.omnibus .rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; } .room.v2 .seat { padding: 0 3px; } .room.v2 .seat.long { font-size: calc(var(--seat-f) * .74); } .room.v2 .seat.xlong { font-size: calc(var(--seat-f) * .6); } .room.v2 .islands { grid-template-columns: minmax(0, 1fr); } }
+.room.v2 .islands { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: clamp(14px, 2.4cqw, 36px) clamp(16px, 3.6cqw, 64px); width: 100%; justify-content: stretch; }
+.room.v2 .island { padding: clamp(8px, 1cqw, 14px); gap: 8px; align-items: stretch; min-width: 0; }
+.room.v2 .island small { font-size: clamp(11px, 1.15cqw, 15px); }
+.room.v2 .cluster { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+.room.v2 .cluster.has-end { grid-template-columns: minmax(0, 1fr) clamp(64px, 9.5cqw, 140px); }
+.room.v2 .cluster .side { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.room.v2 .cluster .table { display: block; border-radius: 6px; }
+.room.v2 .cluster .end .table { width: 100%; } .room.v2 .cluster .end .pair { grid-template-columns: 1fr; height: 100%; } .room.v2 .cluster .end .seat { height: 100%; min-height: var(--seat-h); }
+.room.v2 .u { grid-template-columns: clamp(92px, 15cqw, 210px) minmax(0, 1fr) clamp(92px, 15cqw, 210px); grid-template-rows: auto; grid-template-areas: "l m r" "b b b"; gap: clamp(10px, 1.6cqw, 22px); }
+.room.v2.flip .u { grid-template-areas: "b b b" "l m r"; }
+.room.v2 .u-left { grid-area: l; } .room.v2 .u-right { grid-area: r; } .room.v2 .u-mid { grid-area: m; }
+.room.v2 .u-left .pair, .room.v2 .u-right .pair { grid-template-columns: 1fr; }
+.room.v2 .u-bottom { grid-area: b; display: flex; flex-wrap: nowrap; justify-content: center; gap: clamp(8px, 1.2cqw, 16px); } .room.v2 .u-bottom .table { flex: 0 1 250px; }
+.room.v2.circle .seat.round { width: auto; min-width: clamp(62px, 10cqw, 140px); height: clamp(34px, 4.6cqw, 64px); padding: 0 12px; }
+.room.v2 .arena-row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 160px)); justify-content: center; gap: clamp(4px, .6cqw, 9px); width: 100%; transform: none; }
+.mode-seg button { font-size: 13px; font-weight: 600; padding: 7px 12px; }
+.mode-seg button.on { background: var(--accent); color: #fff; }
+.room-card .card-head .tools { flex-wrap: wrap; justify-content: flex-end; }
+.tray { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 12px; padding: 10px 12px; border: 1.5px dashed color-mix(in srgb, #d99a2b 60%, var(--line)); background: color-mix(in srgb, #f5c869 14%, var(--card)); border-radius: 12px; font-size: 13px; }
+.tray .chip { padding: 4px 12px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); font-weight: 650; font-size: 14px; cursor: grab; user-select: none; -webkit-user-select: none; }
+.tray.drop-over { box-shadow: 0 0 0 3px var(--accent); }
+.room-empty .tools { justify-content: center; margin: 14px 0 10px; }
+@media print { .room.v2 { --seat-h: 13mm; --seat-f: 11.5pt; } .room.v2 .seat.away { color: #000; border-style: solid; } .room.v2 .seat.away span { text-decoration: none; } .room.v2 .seat small { display: none; } }

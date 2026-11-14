@@ -2,6 +2,14 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.6.0
+
+- **Standardsitzplan (`js/gruppen.js`):** Die Sitzordnung hat zwei Fassungen – „Standardsitzplan“ (wer normalerweise wo sitzt) und „Gemischt“ (Gruppen nach Anwesenheit, wie bisher). Gibt es einen Standardsitzplan, öffnet die Sitzordnung damit. Anlegen: „Jetzige Verteilung übernehmen“ oder „Alphabetisch füllen“. Ordnen durch Ziehen: auf ein Kind = tauschen, auf einen freien Platz = umziehen, auf die Leiste „ohne Platz“ = Platz freigeben. Der Standardsitzplan wird nie von selbst gemischt; wer heute fehlt, erscheint grau („fehlt“), der Platz bleibt. Neue Kinder der Lerngruppe stehen in der Leiste „ohne Platz“ („Auf freie Plätze setzen“). Organisationsform, Tischzahl, Tische nebeneinander und Tischgruppen sind für den Standardsitzplan eigens gespeichert.
+- **Daten:** `technik.classes[].standard = { layout, tables, groups, cols, seats, savedAt }`; `seats` ist eine flache Liste (Kennung oder `null`), Tisch *t* sind die Plätze 2*t* und 2*t* + 1. `settings.cols` (2–5, ohne Angabe automatisch: 2 bis 6 Tische, 3 bis 15, sonst 4) legt bei Omnibus die Tische nebeneinander fest.
+- **Darstellung der Sitzordnung neu:** Der Raum nutzt die ganze Breite (Größen über Container-Abfragen statt fester Pixel), Namen stehen groß und dunkel, lange Namen werden kleiner statt abgeschnitten, die Tischnummer sitzt klein in der Ecke, Omnibus hat zwei bis fünf Tische nebeneinander. Gilt für alle Organisationsformen, auch im Druck und in der großen Ansicht.
+- **Blick von der Tafel:** Knopf im Sitzplan dreht den Raum um 180° (Tafel unten) – so, wie die Lehrkraft ihn von vorn sieht. Gilt je Gerät (`localStorage` `klassenkompass.seatFlip`).
+- **Datenstand 6:** ältere App-Fassungen speichern nichts mehr, bis sie die neue Version geladen haben.
+
 ## Neu in 2.5.0 (Stand 2.5.1)
 
 2.5.1 bringt nur aktualisierte Texte: Hilfe, Einführung und Datenschutzhinweise der App nennen die neuen Objekte, die Lautstärke-Ampel (Mikrofon) und die Differenzierung im Quiz.
