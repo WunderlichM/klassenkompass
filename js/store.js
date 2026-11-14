@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 8;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0)
+export const SCHEMA = 9;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -178,7 +178,7 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 // Räume des Raumplaners (seit 2.7.0, js/room.js): Maße in Metern. Seit 2.8.0 hat ein Raum einen Grundriss (items: Tafel,
 // Pult, Tür, Fenster, Schränke) und je Organisationsform eine eigene Anordnung der Plätze (layouts[Form]: Tische,
 // Werkbänke, Stühle, Stehplätze). Fehlt eine Anordnung, stellt die App die Organisationsform selbst in den Raum.
-export const ROOM_KINDS = ['table', 'bench', 'chair', 'spot', 'board', 'desk', 'door', 'window', 'cabinet'];
+export const ROOM_KINDS = ['table', 'bench', 'chair', 'spot', 'board', 'desk', 'door', 'window', 'cabinet', 'screen', 'beamboard', 'glassdoor', 'worktable'];
 export const SEAT_KINDS = ['table', 'bench', 'chair', 'spot'];
 const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n * 100) / 100)) : d; };
 function normItems(list, w, h, seated) {

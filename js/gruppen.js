@@ -7,6 +7,7 @@ import { enableDrag } from './drag.js';
 import { esc, icon, toast, palStyle, toggleFullscreen, rulesDialog, confirmDialog } from './ui.js';
 import { tournamentDialog } from './turniere.js';
 import * as rooms from './room.js';
+import { art } from './roomart.js';
 
 const LAYOUTS = [
   { id: 'omnibus', name: 'Omnibus', hint: 'Zweiertische in Reihen' },
@@ -232,7 +233,7 @@ function roomIn(c, d, off, r, L) {
 function room(c, d, off, r = null) {
   const L = d ? d.layout : c.settings.layout, std = !!d;
   if (r) return roomIn(c, d, off, r, L).html;
-  const front = `<div class="front"><span class="board">Tafel</span><div class="desk">Pult</div></div>`, back = `<div class="back">${flip ? 'Hinten (Blick von der Tafel)' : 'Hinten'}</div>`;
+  const front = `<div class="front"><div class="art-board" role="img" aria-label="Tafel">${art('board', 4.4, 0.2, flip ? 'n' : 's')}</div><div class="art-desk" role="img" aria-label="Schreibtisch">${art('desk', 1.6, 0.8, flip ? 'n' : 's', { chair: true })}</div></div>`, back = `<div class="back">${flip ? 'Hinten (Blick von der Tafel)' : 'Hinten'}</div>`;
   const wrap = (cls, body, style = '') => `<div class="room v2 ${cls} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}" style="${style}">${flip ? back + body + front : front + body + back}</div>`;
   if (L === 'omnibus') {
     let tables = tablesOf(c, d); const cols = colsOf(d ? d.cols : c.settings.cols, tables.length);
@@ -419,7 +420,7 @@ function fitRoom() {
   r.style.zoom = '';
   const cs = getComputedStyle(wrap), avail = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   let lo = Infinity, hi = -Infinity;
-  r.querySelectorAll('.seat, .desk, .table, .island').forEach(el => { const b = el.getBoundingClientRect(); lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); });
+  r.querySelectorAll('.seat, .art-desk, .table, .island').forEach(el => { const b = el.getBoundingClientRect(); lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); });
   const need = Math.max(r.scrollWidth, hi - lo + 8);
   if (need > avail + 1) r.style.zoom = String(Math.max(0.5, avail / need));
 }

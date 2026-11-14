@@ -2,6 +2,14 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.0
+
+- **Raum realistischer (`js/roomart.js`, `js/room.js`, `styles.css`):** Die Teile des Raums sind als Draufsicht gezeichnet statt als beschriftete Flächen – **Schreibtisch** (bisher „Pult“) mit Bildschirm, Tastatur, Maus, Heft, Stift, Stiftebecher und Stuhl, **Schrank** mit Türen und Griffen, **Tafel** als grüne Kreidetafel mit Ablage, **Tür** mit Zarge, offenem Türblatt und Öffnungsbogen, **Fenster** mit Rahmen und Scheiben. Die Vorderseite zeigt von der nächsten Wand weg in den Raum (`facing`), auch bei „Blick von der Tafel“. Eine eigene Beschriftung (z. B. am Schrank) steht weiter auf dem Teil.
+- **Neue Teile im Grundriss:** **Bildschirm**, **Tafel mit Beamer** (weiße Tafel, Arm, Beamer, Lichtkegel), **Glastür** und **Tisch ohne Plätze** (z. B. Werkzeugtisch; Größe und Beschriftung frei). An einem Tisch ohne Plätze sitzt niemand; er gilt wie Schrank und Tafel für alle Organisationsformen.
+- **Schülertische einheitlich:** Es gibt nur noch den Zweiertisch (1,30 m × 0,65 m, `TABLE_W`/`TABLE_H`) mit Holzplatte und zwei Stühlen. Gruppentische entstehen in der automatischen Anordnung aus zusammengeschobenen Zweiertischen (zwei Reihen gegenüber, ein übriger Tisch quer an der Stirnseite – wie in der Sitzordnung ohne Raum) statt aus einer großen Platte. Einzel- und Gruppentisch stehen nicht mehr in der Auswahl; in gespeicherten Räumen bleiben sie erhalten. Stühle stehen an der freien Längsseite (von der Tafel weg bzw. außen; steht dort ein anderer Tisch, an der anderen Seite). Werkbänke haben Hocker und einen Schraubstock, einzelne Stühle eine Lehne (im Kreis nach außen).
+- **Sitzordnung ohne Raum:** Tafel und Schreibtisch sind dieselben Zeichnungen, die Tische haben Holzplatte und Stühle; die Gruppenfarbe bleibt als Rand und Tönung.
+- **Datenstand 9:** neue Teile `screen`, `beamboard`, `glassdoor`, `worktable`. Räume aus 2.8 werden unverändert übernommen. Ältere App-Fassungen speichern nichts mehr, bis sie die neue Version geladen haben – nach dem Update alle Geräte einmal öffnen und „Neue Version“ übernehmen.
+
 ## Neu in 2.8.2
 
 - **Technik-Gruppen öffnen sicher mit „Sitzordnung“:** 2.8.1 hatte auch das Fach des Sportteils geprüft; Technik-Gruppen mit älterem Sportteil öffneten dadurch mit „Teams“. Jetzt zählt nur das Fach der Lerngruppe.

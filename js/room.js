@@ -1,7 +1,8 @@
 // Raumplaner (seit 2.7.0, neu gegliedert in 2.8.0). Maße in Metern (x nach rechts, y von der Tafel nach hinten).
 // Ein Raum gehört keiner Lerngruppe; er wird oben im Bereich Gruppen gewählt (js/gruppen.js), jede Lerngruppe kann einen
 // Standardraum haben. Ein Raum besteht aus
-//   - dem Grundriss (room.items): Tafel, Pult, Tür, Fenster, Schränke – gilt für alle Organisationsformen,
+//   - dem Grundriss (room.items): Tafel, Bildschirm, Tafel mit Beamer, Schreibtisch, Tür, Glastür, Fenster, Schränke und
+//     Tische ohne Plätze (z. B. Werkzeugtisch) – gilt für alle Organisationsformen,
 //   - je Organisationsform einer Anordnung der Plätze (room.layouts[Form]: Tische, Werkbänke, Stühle, Stehplätze).
 // Fehlt die Anordnung einer Organisationsform, stellt arrange() sie passend zur Lerngruppe selbst in den Raum
 // („automatisch“); sobald im Raumplaner etwas verschoben wird, ist sie „angepasst“ und gilt für alle Lerngruppen.
@@ -10,21 +11,29 @@
 import * as store from './store.js';
 import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
+import { art, chairs, facing, ART_KINDS } from './roomart.js';
 
+// Schülertische sind einheitlich Zweiertische (seit 2.9.0); ältere Einzel- und Gruppentische bleiben in gespeicherten
+// Räumen erhalten. Die Teile werden als Draufsicht gezeichnet (js/roomart.js).
+export const TABLE_W = 1.3, TABLE_H = 0.65;
 export const PRESETS = [
-  { id: 'table2', kind: 'table', name: 'Zweiertisch', w: 1.3, h: 0.65, seats: 2 },
-  { id: 'table1', kind: 'table', name: 'Einzeltisch', w: 0.7, h: 0.6, seats: 1 },
-  { id: 'table4', kind: 'table', name: 'Gruppentisch', w: 1.4, h: 1.3, seats: 4 },
+  { id: 'table2', kind: 'table', name: 'Schülertisch', w: TABLE_W, h: TABLE_H, seats: 2 },
   { id: 'bench', kind: 'bench', name: 'Werkbank', w: 2.0, h: 0.9, seats: 4 },
   { id: 'chair', kind: 'chair', name: 'Stuhl', w: 0.55, h: 0.55, seats: 1 },
   { id: 'spot', kind: 'spot', name: 'Stehplatz', w: 0.55, h: 0.55, seats: 1 },
   { id: 'board', kind: 'board', name: 'Tafel', w: 3.6, h: 0.2 },
-  { id: 'desk', kind: 'desk', name: 'Pult', w: 1.4, h: 0.7 },
-  { id: 'door', kind: 'door', name: 'Tür', w: 1.0, h: 0.15 },
-  { id: 'window', kind: 'window', name: 'Fenster', w: 1.6, h: 0.15 },
+  { id: 'beamboard', kind: 'beamboard', name: 'Tafel mit Beamer', w: 3.0, h: 0.9 },
+  { id: 'screen', kind: 'screen', name: 'Bildschirm', w: 1.9, h: 0.15 },
+  { id: 'desk', kind: 'desk', name: 'Schreibtisch', w: 1.6, h: 0.8 },
+  { id: 'worktable', kind: 'worktable', name: 'Tisch ohne Plätze', w: 1.6, h: 0.8 },
   { id: 'cabinet', kind: 'cabinet', name: 'Schrank', w: 1.2, h: 0.5 },
+  { id: 'door', kind: 'door', name: 'Tür', w: 1.0, h: 0.15 },
+  { id: 'glassdoor', kind: 'glassdoor', name: 'Glastür', w: 1.0, h: 0.15 },
+  { id: 'window', kind: 'window', name: 'Fenster', w: 1.6, h: 0.15 },
 ];
-const NAMES = { table: 'Tisch', bench: 'Werkbank', chair: 'Stuhl', spot: 'Stehplatz', board: 'Tafel', desk: 'Pult', door: 'Tür', window: 'Fenster', cabinet: 'Schrank' };
+const NAMES = { table: 'Tisch', bench: 'Werkbank', chair: 'Stuhl', spot: 'Stehplatz', board: 'Tafel', beamboard: 'Tafel mit Beamer', screen: 'Bildschirm', desk: 'Schreibtisch', worktable: 'Tisch ohne Plätze', door: 'Tür', glassdoor: 'Glastür', window: 'Fenster', cabinet: 'Schrank' };
+// Teile vorn im Raum, hinter denen die Plätze beginnen
+const FRONT = ['board', 'beamboard', 'screen', 'desk'];
 export const SEATED = ['table', 'bench', 'chair', 'spot'];
 // Organisationsformen, die ein Raum kennt (Reihenfolge wie in der Sitzordnung)
 export const FORMS = { omnibus: 'Omnibus', gruppen: 'Gruppentische', sitzkreis: 'Sitzkreis', stehkreis: 'Stehkreis', uform: 'U-Form', arena: 'Arena / Kino' };
@@ -36,7 +45,7 @@ const r2 = v => Math.round(v * 100) / 100;
 export const list = () => store.get().technik.rooms || [];
 export const byId = id => list().find(r => r.id === id) || null;
 export const seatsOf = it => (it.kind === 'chair' || it.kind === 'spot' ? 1 : SEATED.includes(it.kind) ? clamp(Math.round(Number(it.seats) || 0), 0, 12) : 0);
-export const nameOf = it => it.label || (it.kind === 'table' ? `${PRESETS.find(p => p.kind === 'table' && p.seats === seatsOf(it))?.name || 'Tisch'}` : NAMES[it.kind]);
+export const nameOf = it => it.label || (it.kind === 'table' ? (seatsOf(it) === 2 ? 'Schülertisch' : `Tisch (${seatsOf(it)} Plätze)`) : NAMES[it.kind]);
 // Angepasste Anordnung einer Organisationsform (oder null = automatisch)
 export const custom = (r, L) => (r && Array.isArray(r.layouts?.[L]) ? r.layouts[L] : null);
 export const customCount = r => Object.keys(FORMS).filter(L => custom(r, L)).length;
@@ -73,10 +82,10 @@ export function mixSlots(room, groups) {
 }
 
 // ---------- Automatische Anordnung ----------
-// Freie Fläche für Plätze: hinter Tafel und Pult, mit Abstand zu den Wänden
+// Freie Fläche für Plätze: hinter Tafel, Bildschirm und Schreibtisch, mit Abstand zu den Wänden
 export function area(r) {
   let front = 0;
-  for (const it of r.items) if ((it.kind === 'board' || it.kind === 'desk') && it.y + it.h / 2 < r.h / 2) front = Math.max(front, it.y + it.h);
+  for (const it of r.items) if (FRONT.includes(it.kind) && it.y + it.h / 2 < r.h / 2) front = Math.max(front, it.y + it.h);
   const top = Math.min(Math.max(0.9, front + 0.55), r.h * 0.45), x0 = Math.min(0.45, r.w * 0.06), y1 = r.h - Math.min(0.35, r.h * 0.05);
   return { x: x0, y: top, w: Math.max(1, r.w - 2 * x0), h: Math.max(1, y1 - top) };
 }
@@ -90,25 +99,28 @@ function place(r, parts, needW, needH, valign = 0.3) {
 // spec: tables (Omnibus, U-Form), cols (Tische nebeneinander), islands (Plätze je Tischgruppe), icols, n (Plätze in Kreis
 // und Arena). Rückgabe: die Plätze der Organisationsform als Teile des Raums (ohne Grundriss).
 export function arrange(r, L, spec = {}) {
-  const TW = 1.3, TH = 0.65, T = (x, y, w = TW, h = TH, seats = 2, grp) => ({ kind: 'table', x, y, w, h, seats, grp });
+  const TW = TABLE_W, TH = TABLE_H, T = (x, y, w = TW, h = TH, seats = 2, grp) => ({ kind: 'table', x, y, w, h, seats, grp });
   if (L === 'omnibus') {
     const n = Math.max(1, spec.tables || 1), cols = clamp(spec.cols || 3, 1, 8), rows = Math.ceil(n / cols), gx = 0.8, gy = 0.8;
     const parts = Array.from({ length: n }, (_, i) => T((i % cols) * (TW + gx), Math.floor(i / cols) * (TH + gy)));
     return place(r, parts, cols * TW + (cols - 1) * gx, rows * TH + (rows - 1) * gy + 0.45);
   }
   if (L === 'gruppen') {
-    // Tischgruppe aus zusammengeschobenen Tischen; mehr als 12 Plätze werden auf mehrere Tische nebeneinander verteilt
+    // Tischgruppe aus zusammengeschobenen Zweiertischen: zwei Reihen gegenüber, ein übriger Tisch steht quer an der
+    // Stirnseite (Reihenfolge der Tische wie in der Sitzordnung ohne Raum: obere Reihe, untere Reihe, Stirnseite)
     const isl = (spec.islands?.length ? spec.islands : [4]).map((n, k) => {
-      const chunks = []; let rest = Math.max(1, n); while (rest > 0) { const c = Math.min(12, rest); chunks.push(c); rest -= c; }
-      const tabs = chunks.map(c => ({ seats: c, w: Math.max(TW, Math.ceil(c / 2) * 0.65), h: c > 2 ? 1.3 : TH }));
-      return { k, tabs, w: tabs.reduce((s, t) => s + t.w, 0), h: Math.max(...tabs.map(t => t.h)) };
+      const t = Math.max(1, Math.ceil(n / 2)), end = t > 1 && t % 2 ? 1 : 0, rest = t - end, half = Math.ceil(rest / 2), tabs = [];
+      for (let i = 0; i < half; i++) tabs.push({ x: i * TW, y: 0, w: TW, h: TH });
+      for (let i = 0; i < rest - half; i++) tabs.push({ x: i * TW, y: TH, w: TW, h: TH });
+      if (end) tabs.push({ x: half * TW, y: 0, w: TH, h: TW });
+      return { k, tabs, w: half * TW + end * TH, h: rest > half ? 2 * TH : TH };
     });
     const cols = clamp(spec.icols || 2, 1, 6), gx = 1.1, gy = 1.1, cw = Math.max(...isl.map(i => i.w)), parts = [];
     const rowsH = []; isl.forEach((i, j) => { const row = Math.floor(j / cols); rowsH[row] = Math.max(rowsH[row] || 0, i.h); });
     isl.forEach((i, j) => {
       const row = Math.floor(j / cols), col = j % cols, y = rowsH.slice(0, row).reduce((s, v) => s + v + gy, 0) + (rowsH[row] - i.h) / 2;
-      let x = col * (cw + gx) + (cw - i.w) / 2;
-      for (const t of i.tabs) { parts.push(T(x, y, t.w, t.h, t.seats, i.k)); x += t.w; }
+      const x = col * (cw + gx) + (cw - i.w) / 2;
+      for (const t of i.tabs) parts.push(T(x + t.x, y + t.y, t.w, t.h, 2, i.k));
     });
     return place(r, parts, Math.min(cols, isl.length) * cw + (Math.min(cols, isl.length) - 1) * gx, rowsH.reduce((s, v) => s + v, 0) + (rowsH.length - 1) * gy + 0.4);
   }
@@ -146,28 +158,51 @@ export function arrange(r, L, spec = {}) {
 // dim(item) → im Editor blass und nicht wählbar
 export function roomHtml(room, opts = {}) {
   const { flip = false, edit = false } = opts, W = room.w, H = room.h, sel = edit ? editor.sel : null;
-  const items = room.items.map(it => {
-    const x = flip ? W - it.x - it.w : it.x, y = flip ? H - it.y - it.h : it.y, n = seatsOf(it), hor = it.w >= it.h;
+  const shown = room.items.map(it => ({ it, x: flip ? W - it.x - it.w : it.x, y: flip ? H - it.y - it.h : it.y, w: it.w, h: it.h }));
+  // Stühle stehen an der freien Längsseite eines Tisches: von der Tafel weg bzw. außen; steht dort ein anderer Tisch
+  // (zusammengeschobene Tische), an der anderen Seite
+  const tops = shown.filter(s => s.it.kind === 'table' || s.it.kind === 'bench');
+  const blocked = (s, side) => {
+    const z = { s: [s.x, s.y + s.h, s.w, 0.3], n: [s.x, s.y - 0.3, s.w, 0.3], e: [s.x + s.w, s.y, 0.3, s.h], w: [s.x - 0.3, s.y, 0.3, s.h] }[side];
+    return tops.some(o => o !== s && z[0] < o.x + o.w - 0.02 && z[0] + z[2] > o.x + 0.02 && z[1] < o.y + o.h - 0.02 && z[1] + z[3] > o.y + 0.02);
+  };
+  const sidesOf = (s, n, rows, cols) => {
+    const hor = s.w >= s.h;
+    if (rows === 2) return hor ? [{ side: 'n', n: cols }, { side: 's', n: n - cols }] : [{ side: 'w', n: cols }, { side: 'e', n: n - cols }];
+    const pref = hor ? (flip ? ['n', 's'] : ['s', 'n']) : (s.x + s.w / 2 < W / 2 ? ['w', 'e'] : ['e', 'w']);
+    return [{ side: blocked(s, pref[0]) && !blocked(s, pref[1]) ? pref[1] : pref[0], n }];
+  };
+  // Lehne einzelner Stühle: im Kreis nach außen, sonst von der Tafel weg
+  const loose = shown.filter(s => s.it.kind === 'chair'), mid = loose.length ? [loose.reduce((a, s) => a + s.x + s.w / 2, 0) / loose.length, loose.reduce((a, s) => a + s.y + s.h / 2, 0) / loose.length] : [0, 0];
+  const dist = loose.map(s => Math.hypot(s.x + s.w / 2 - mid[0], s.y + s.h / 2 - mid[1])), ring = loose.length >= 5 && Math.min(...dist) > 0.45 * Math.max(...dist);
+  const backOf = s => { const dx = s.x + s.w / 2 - mid[0], dy = s.y + s.h / 2 - mid[1]; return !ring ? (flip ? 'n' : 's') : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : (dy > 0 ? 's' : 'n'); };
+  const items = shown.map(s => {
+    const { it, x, y } = s, n = seatsOf(it), hor = it.w >= it.h, top = it.kind === 'table' || it.kind === 'bench';
     const rows = n >= 4 && Math.min(it.w, it.h) >= 0.9 ? 2 : 1, cols = Math.ceil(n / rows), [cls, style] = opts.itemClass?.(it) || ['', ''], dim = !!opts.dim?.(it), pick = edit && !dim;
-    let inner, sw = 0;
+    const label = it.label ? `<span class="rp-label">${esc(it.label)}</span>` : '';
+    let inner, sw = 0, extra = '';
     if (n) {
       const idx = Array.from({ length: n }, (_, i) => i); if (flip) idx.reverse();
       sw = hor ? it.w / cols : it.w / rows;
-      inner = `<div class="rp-seats" style="grid-template-columns:repeat(${hor ? cols : rows},minmax(0,1fr));grid-template-rows:repeat(${hor ? rows : cols},minmax(0,1fr));grid-auto-flow:${hor ? 'row' : 'column'}">${idx.map(i => (opts.seat ? opts.seat(it.id + ':' + i, it, i) : '<div class="seat free"></div>')).join('')}</div>`;
-    } else inner = `<span class="rp-label">${it.kind === 'door' ? icon('forward', 12) : ''}${esc(it.label || NAMES[it.kind])}</span>`;
+      inner = `${top ? chairs(it.w, it.h, sidesOf(s, n, rows, cols), { stool: it.kind === 'bench', vise: it.kind === 'bench' }) + '<div class="rp-top"></div>' : ''}<div class="rp-seats" style="grid-template-columns:repeat(${hor ? cols : rows},minmax(0,1fr));grid-template-rows:repeat(${hor ? rows : cols},minmax(0,1fr));grid-auto-flow:${hor ? 'row' : 'column'}">${idx.map(i => (opts.seat ? opts.seat(it.id + ':' + i, it, i) : '<div class="seat free"></div>')).join('')}</div>`;
+      if (it.kind === 'chair') extra = 'b-' + backOf(s);
+    } else if (ART_KINDS.includes(it.kind)) {
+      const f = facing(x, y, it.w, it.h, W, H), behind = { s: y, n: H - y - it.h, e: x, w: W - x - it.w }[f];
+      inner = art(it.kind, it.w, it.h, f, { chair: behind >= 0.45 }) + label;
+    } else inner = `<div class="rp-top"></div>${label || (top ? '' : `<span class="rp-label">${esc(NAMES[it.kind] || '')}</span>`)}`;
     const tag = opts.tag?.(it) || '';
-    return `<div class="rp-it k-${it.kind} ${it.h > it.w * 1.6 && !n ? 'vert' : ''} ${cls} ${dim ? 'dim' : ''} ${sel === it.id && pick ? 'sel' : ''}" ${pick ? `data-item="${esc(it.id)}" title="${esc(nameOf(it))}"` : ''} style="left:${(x / W) * 100}%;top:${(y / H) * 100}%;width:${(it.w / W) * 100}%;height:${(it.h / H) * 100}%;${sw ? `--sw:${sw.toFixed(2)};` : ''}${style}">${inner}${tag ? `<i class="rp-tag">${tag}</i>` : ''}${sel === it.id && pick ? '<i class="rp-rs" data-rs title="Größe ändern"></i>' : ''}</div>`;
+    return `<div class="rp-it k-${it.kind} ${extra} ${it.h > it.w * 1.6 && !n ? 'vert' : ''} ${cls} ${dim ? 'dim' : ''} ${sel === it.id && pick ? 'sel' : ''}" ${pick ? `data-item="${esc(it.id)}" title="${esc(nameOf(it))}"` : ''} style="left:${(x / W) * 100}%;top:${(y / H) * 100}%;width:${(it.w / W) * 100}%;height:${(it.h / H) * 100}%;${sw ? `--sw:${sw.toFixed(2)};` : ''}${style}">${inner}${tag ? `<i class="rp-tag">${tag}</i>` : ''}${sel === it.id && pick ? '<i class="rp-rs" data-rs title="Größe ändern"></i>' : ''}</div>`;
   });
-  return `<div class="rp ${edit ? 'edit' : ''}" style="aspect-ratio:${W} / ${H};--W:${W};--H:${H}">${items.join('')}${room.items.length ? '' : '<p class="rp-empty">Leerer Raum – rechts Tafel, Tür, Fenster und mehr hinzufügen.</p>'}</div>`;
+  return `<div class="rp ${edit ? 'edit' : ''} ${flip ? 'flip' : ''}" style="aspect-ratio:${W} / ${H};--W:${W};--H:${H}">${items.join('')}${room.items.length ? '' : '<p class="rp-empty">Leerer Raum – rechts Tafel, Tür, Fenster und mehr hinzufügen.</p>'}</div>`;
 }
 
 // ---------- Vorlagen: Grundriss und Tischreihen ----------
-const KINDS_GEN = { table2: 'Zweiertische', table1: 'Einzeltische', table4: 'Gruppentische (4 Plätze)', bench: 'Werkbänke (4 Plätze)' };
+const KINDS_GEN = { table2: 'Schülertische (2 Plätze)', bench: 'Werkbänke (4 Plätze)' };
 const DOORS = { vl: 'vorne links', vr: 'vorne rechts', hl: 'hinten links', hr: 'hinten rechts' };
 export function generateBase({ w, h, door }) {
   const items = [], it = (k, x, y, iw, ih) => items.push({ id: uid(), kind: k, x: r2(x), y: r2(y), w: iw, h: ih }), left = door[1] === 'l';
   it('board', (w - Math.min(3.6, w - 1)) / 2, 0.05, r2(Math.min(3.6, w - 1)), 0.2);
-  it('desk', left ? w - 2.0 : 0.6, 0.7, 1.4, 0.7);
+  it('desk', left ? w - 2.2 : 0.6, 0.85, 1.6, 0.8);
   it('door', left ? 0.02 : w - 0.17, door[0] === 'v' ? 0.5 : h - 1.6, 0.15, 1.0);
   for (let i = 0; i < Math.min(3, Math.floor((h - 1.5) / 2.2)); i++) it('window', left ? w - 0.17 : 0.02, 1.2 + i * 2.2, 0.15, 1.6);
   return items;
@@ -200,7 +235,7 @@ export function roomDialog({ tables = 14, cols = 3, onDone } = {}) {
     <label class="field">Tiefe (m) <small class="muted">– Tafel bis Rückwand</small><input name="h" class="input" type="number" step="0.1" min="3" max="30" value="${dh}"></label></div>
     <label class="field">Tür<select name="door" class="select">${Object.entries(DOORS).map(([k, v]) => `<option value="${k}" ${k === 'vr' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
     ${rowsFields(per, rows, true)}
-    <p class="muted small-text">Der Raum entsteht mit Tafel, Pult, Tür und Fenstern. Bei „Automatisch“ stellt die App jede Organisationsform passend zur Lerngruppe in den Raum. Feste Tische oder Werkbänke legst du hier als Anordnung für Omnibus an; alles lässt sich danach im Raumplaner verschieben.</p>`,
+    <p class="muted small-text">Der Raum entsteht mit Tafel, Schreibtisch, Tür und Fenstern. Bei „Automatisch“ stellt die App jede Organisationsform passend zur Lerngruppe in den Raum. Feste Tische oder Werkbänke legst du hier als Anordnung für Omnibus an; alles lässt sich danach im Raumplaner verschieben.</p>`,
     onSubmit: fd => {
       if (list().length >= 30) throw new Error('Höchstens 30 Räume.');
       const w = clamp(Number(fd.get('w')) || 8, 3, 30), h = clamp(Number(fd.get('h')) || 7, 3, 30), spec = readRows(fd);
@@ -237,7 +272,7 @@ export function editorHtml() {
   const r = room(); if (!r) return '';
   const base = editor.part === 'base', L = base ? editor.form : editor.part, cus = custom(r, L), seated = cus || autoItems(r, L), shown = compose(r, seated);
   const seats = seatCount(compose(r, seated));
-  const status = base ? `<p class="rp-status">${icon('grid', 14)} <span><b>Grundriss</b> – Tafel, Pult, Tür, Fenster und Schränke gelten für alle Organisationsformen. Blass: die Plätze der Form „${esc(FORMS[L])}“.</span></p>`
+  const status = base ? `<p class="rp-status">${icon('grid', 14)} <span><b>Grundriss</b> – Tafel, Bildschirm, Schreibtisch, Türen, Fenster, Schränke und Tische ohne Plätze gelten für alle Organisationsformen. Blass: die Plätze der Form „${esc(FORMS[L])}“.</span></p>`
     : cus ? `<p class="rp-status custom">${icon('edit', 14)} <span><b>Angepasst</b> – diese Anordnung gilt für alle Lerngruppen in diesem Raum (${seats} Plätze).</span><button class="btn ghost sm" data-act="rp-reset">Zurück auf automatisch</button></p>`
       : `<p class="rp-status">${icon('repeat', 14)} <span><b>Automatisch</b> – passt sich der gewählten Lerngruppe an. Sobald du etwas verschiebst, wird die Anordnung fest übernommen.</span></p>`;
   return `<div class="card room-card">
@@ -274,7 +309,7 @@ export function editorSide() {
       <div class="card-head small"><h3>${esc(nameOf(it))}</h3><button class="icon-btn sm" data-act="rp-desel" aria-label="Auswahl aufheben">${icon('x', 15)}</button></div>
       ${['table', 'bench'].includes(it.kind) ? `<div class="num-row"><label>Plätze<span class="stepper"><button data-act="rp-seats" data-d="-1" ${n > 1 ? '' : 'disabled'}>−</button><output>${n}</output><button data-act="rp-seats" data-d="1" ${n < 12 ? '' : 'disabled'}>+</button></span></label></div>` : ''}
       <div class="two">${num('w', 'Breite (m)', it.w)}${num('h', 'Tiefe (m)', it.h)}</div>
-      ${n ? '' : `<label class="field">Beschriftung<input class="input" data-rp="label" maxlength="24" value="${esc(it.label || '')}" placeholder="${esc(NAMES[it.kind])}"></label>`}
+      ${n ? '' : `<label class="field">Beschriftung<input class="input" data-rp="label" maxlength="24" value="${esc(it.label || '')}" placeholder="${it.kind === 'worktable' ? 'z. B. Werkzeugtisch' : esc(NAMES[it.kind])}"></label>`}
       <div class="tools"><button class="btn ghost sm" data-act="rp-rot">${icon('repeat', 15)} Drehen</button><button class="btn ghost sm" data-act="rp-copy">${icon('plus', 15)} Kopieren</button><button class="btn ghost sm danger-text" data-act="rp-del">${icon('trash', 15)} Löschen</button></div>
     </div>` : `<div class="card"><p class="muted small-text">Ein Teil im Raum antippen, um ${base ? 'Größe oder Beschriftung' : 'Plätze oder Größe'} zu ändern, es zu drehen, zu kopieren oder zu löschen.</p></div>`}
     <div class="card"><button class="btn ghost full danger-text" data-act="rp-delroom">${icon('trash', 15)} Raum löschen</button></div>`;

@@ -1434,9 +1434,6 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .room.v2.raum { gap: 10px; }
 .rp { position: relative; width: 100%; max-width: 1500px; margin: 0 auto; container-type: inline-size; box-sizing: border-box; background: var(--card); border: 4px solid #8f8c80; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.04); }
 .rp-it { position: absolute; box-sizing: border-box; --m: calc(100cqw / var(--W)); --sf: clamp(8px, calc(var(--m) * min(.12, var(--sw, .65) * .185)), 30px); display: grid; place-items: center; min-width: 0; min-height: 0; }
-.rp-it.k-table, .rp-it.k-bench { padding: max(2px, calc(var(--m) * .045)); border-radius: max(3px, calc(var(--m) * .06)); background: color-mix(in srgb, #d8c9a8 30%, var(--card)); border: 1.5px solid color-mix(in srgb, #b9a77d 60%, var(--line)); }
-.rp-it.k-bench { background: color-mix(in srgb, #c39a62 42%, var(--card)); border-color: #9c7748; }
-.rp-it.grouped { background: color-mix(in srgb, var(--g-bg) 70%, var(--card)); border: 2px solid var(--g-dot); }
 .rp-it.k-chair { padding: 0; }
 .rp-seats { display: grid; gap: max(2px, calc(var(--m) * .04)); width: 100%; height: 100%; }
 .room.v2 .rp-it .seat { width: 100%; height: 100%; min-height: 0; padding: 0 2px; font-size: var(--sf); border-radius: max(3px, calc(var(--m) * .05)); border-width: 1.5px; }
@@ -1445,12 +1442,6 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .room.v2 .rp-it .seat small { font-size: .55em; }
 .rp-label { display: inline-flex; align-items: center; gap: 4px; font-size: clamp(8px, calc(var(--m) * .13), 15px); font-weight: 650; letter-spacing: .04em; overflow: hidden; white-space: nowrap; max-width: 100%; padding: 0 3px; }
 .rp-it.vert .rp-label { writing-mode: vertical-rl; }
-.rp-it.k-board { background: linear-gradient(180deg, #3f4f49, #34423d); border-radius: 3px; color: #e9efe9; } .rp-it.k-board .rp-label { text-transform: uppercase; letter-spacing: .2em; }
-.rp-it.k-desk { background: #e6e3d8; border: 1.5px solid #c9c5b6; border-radius: 4px; color: #6f6c62; }
-.rp-it.k-door { background: var(--card); border: 2px solid #9a6b3f; border-radius: 2px; color: #7b522c; }
-.rp-it.k-window { background: repeating-linear-gradient(90deg, #cfe3f2 0 10px, #e8f2fa 10px 14px); border: 1.5px solid #8fb3cf; color: #3c6789; }
-.rp-it.k-window.vert { background: repeating-linear-gradient(0deg, #cfe3f2 0 10px, #e8f2fa 10px 14px); }
-.rp-it.k-cabinet { background: #dedcd4; border: 1.5px solid #b8b5aa; border-radius: 3px; color: #6b6960; }
 .rp-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; margin: 0; }
 /* Editor */
 .rp.edit { background-image: linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px); background-size: calc(100% / var(--W)) calc(100% / var(--H)); }
@@ -1488,6 +1479,49 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .linkish { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 @media (max-width: 760px) { .pickers { flex-direction: column-reverse; align-items: stretch; } .room-picker, .pickers .picker { min-width: 0; } }
 [data-theme="dark"] .rp.edit { background-image: linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px); }
-[data-theme="dark"] .rp-it.k-desk, [data-theme="dark"] .rp-it.k-cabinet { background: #3a3934; border-color: #55534b; color: #b9b6aa; }
-[data-theme="dark"] .rp-it.k-door { background: #2a2c33; }
-[data-theme="dark"] .rp-it.k-window { background: repeating-linear-gradient(90deg, #2c4659 0 10px, #233848 10px 14px); color: #a9cbe5; }
+
+/* Raumteile als Draufsicht (seit 2.9.0, js/roomart.js): Tische mit Holzplatte und Stühlen, Tafel, Bildschirm, Tafel mit
+   Beamer, Schreibtisch, Schrank, Tür, Glastür und Fenster als Zeichnung */
+.rp-art { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.rp-top { position: absolute; inset: 0; box-sizing: border-box; border-radius: max(3px, calc(var(--m) * .05)); border: 1.5px solid #a8885a; box-shadow: 0 1px 2px rgba(60, 40, 10, .18);
+  background: linear-gradient(100deg, rgba(255,255,255,.22), rgba(255,255,255,0) 35%, rgba(120,90,50,.08)), repeating-linear-gradient(0deg, transparent 0 6px, rgba(120,90,50,.07) 6px 7px), #dcc198; }
+.rp-it.k-table, .rp-it.k-bench { padding: max(3px, calc(var(--m) * .055)); }
+.rp-it.k-bench .rp-top { border-color: #7d5c36; border-width: 2px; background: linear-gradient(100deg, rgba(255,255,255,.16), rgba(255,255,255,0) 35%, rgba(90,60,25,.1)), repeating-linear-gradient(0deg, transparent 0 9px, rgba(90,60,25,.12) 9px 10px), #c69c66; }
+.rp-it.grouped .rp-top { border: 2.5px solid var(--g-dot); background: linear-gradient(100deg, rgba(255,255,255,.22), rgba(255,255,255,0) 35%, rgba(120,90,50,.08)), color-mix(in srgb, var(--g-bg) 55%, #dcc198); }
+.rp-seats { position: relative; }
+.room.v2 .rp-it.k-table .seat, .room.v2 .rp-it.k-bench .seat { background: color-mix(in srgb, var(--card) 84%, transparent); border-color: rgba(120, 90, 50, .38); }
+.room.v2 .rp-it.k-table .seat.free, .room.v2 .rp-it.k-bench .seat.free, .room.v2 .rp-it.k-table .seat.away, .room.v2 .rp-it.k-bench .seat.away { background: transparent; }
+.rp-it .rp-label { position: relative; z-index: 1; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--card) 86%, transparent); color: var(--ink); }
+.rp-it.k-worktable .rp-top { border-color: #94714a; }
+.room.v2 .rp-it.k-chair .seat { border-radius: 26%; border-color: #6d7783; }
+.room.v2 .rp-it.k-chair.b-s .seat { border-bottom: max(3px, calc(var(--m) * .06)) solid #353e49; } .room.v2 .rp-it.k-chair.b-n .seat { border-top: max(3px, calc(var(--m) * .06)) solid #353e49; }
+.room.v2 .rp-it.k-chair.b-e .seat { border-right: max(3px, calc(var(--m) * .06)) solid #353e49; } .room.v2 .rp-it.k-chair.b-w .seat { border-left: max(3px, calc(var(--m) * .06)) solid #353e49; }
+.room.v2 .rp-it.k-chair .seat.free { border-style: dashed; }
+.rp-swatch.k-worktable { background: #dcc198; border: 1px solid #94714a; } .rp-swatch.k-screen { background: #14171b; } .rp-swatch.k-beamboard { background: #fafbfc; border: 1px solid #7d858e; }
+.rp-swatch.k-glassdoor { background: #b7dcf4; border: 2px solid #5b8db3; } .rp-swatch.k-desk { background: #dcc198; border: 1px solid #a8885a; } .rp-swatch.k-cabinet { background: #cfb084; border: 1px solid #a8885a; } .rp-swatch.k-board { background: #2f5f4c; }
+[data-theme="dark"] .rp-art { filter: brightness(.84); } [data-theme="dark"] .rp-top { filter: brightness(.7) saturate(.9); }
+[data-theme="dark"] .room.v2 .rp-it.k-table .seat, [data-theme="dark"] .room.v2 .rp-it.k-bench .seat { border-color: rgba(0, 0, 0, .4); }
+/* Sitzordnung ohne Raum: Tafel und Schreibtisch als Zeichnung, Tische mit Holzplatte und Stühlen */
+.room.v2 .front { gap: 0; }
+.art-board { position: relative; width: min(64%, 760px); aspect-ratio: 22 / 1; }
+.art-desk { position: relative; width: clamp(84px, 12cqw, 170px); aspect-ratio: 2 / 1; margin-top: clamp(32px, 4.6cqw, 62px); }
+.room.v2.flip .front { flex-direction: column-reverse; } .room.v2.flip .art-desk { margin-top: 0; margin-bottom: clamp(32px, 4.6cqw, 62px); }
+.room.v2 .table.plain { border: 1.5px solid #a8885a; box-shadow: 0 1px 2px rgba(60, 40, 10, .18);
+  background: linear-gradient(100deg, rgba(255,255,255,.22), rgba(255,255,255,0) 35%, rgba(120,90,50,.08)), repeating-linear-gradient(0deg, transparent 0 6px, rgba(120,90,50,.07) 6px 7px), #dcc198; }
+.room.v2 .table.plain .seat { border-color: rgba(120, 90, 50, .38); background: color-mix(in srgb, var(--card) 84%, transparent); }
+.room.v2 .table.plain .seat.free, .room.v2 .table.plain .seat.away { background: transparent; }
+.room.v2 .table { --ch: clamp(9px, 1.3cqw, 16px); }
+.room.v2 .table::before, .room.v2 .table::after { content: ""; position: absolute; top: 100%; width: 22%; height: var(--ch); background: #55606d; border-radius: 0 0 7px 7px; box-shadow: inset 0 -4px 0 #353e49; }
+.room.v2 .table::before { left: 15%; } .room.v2 .table::after { right: 15%; }
+.room.v2.omnibus.flip .table::before, .room.v2.omnibus.flip .table::after, .room.v2 .side.top:not(:only-child) .table::before, .room.v2 .side.top:not(:only-child) .table::after, .room.v2.flip .u-bottom .table::before, .room.v2.flip .u-bottom .table::after { top: auto; bottom: 100%; border-radius: 7px 7px 0 0; box-shadow: inset 0 4px 0 #353e49; }
+.room.v2 .u-left .table::before, .room.v2 .u-left .table::after, .room.v2 .u-right .table::before, .room.v2 .u-right .table::after, .room.v2 .cluster .end .table::before, .room.v2 .cluster .end .table::after { width: var(--ch); height: 22%; left: auto; right: auto; top: auto; bottom: auto; }
+.room.v2 .u-left .table::before, .room.v2 .u-left .table::after { right: 100%; border-radius: 7px 0 0 7px; box-shadow: inset 4px 0 0 #353e49; }
+.room.v2 .u-right .table::before, .room.v2 .u-right .table::after, .room.v2 .cluster .end .table::before, .room.v2 .cluster .end .table::after { left: 100%; border-radius: 0 7px 7px 0; box-shadow: inset -4px 0 0 #353e49; }
+.room.v2 .u-left .table::before, .room.v2 .u-right .table::before, .room.v2 .cluster .end .table::before { top: 15%; } .room.v2 .u-left .table::after, .room.v2 .u-right .table::after, .room.v2 .cluster .end .table::after { bottom: 15%; }
+.room.v2 .cluster { margin-block: clamp(10px, 1.4cqw, 18px); } .room.v2 .cluster.has-end { padding-right: clamp(10px, 1.4cqw, 18px); }
+.room.v2 .u { padding: 0 clamp(10px, 1.5cqw, 20px) clamp(10px, 1.5cqw, 20px); } .room.v2.flip .u { padding: clamp(10px, 1.5cqw, 20px) clamp(10px, 1.5cqw, 20px) 0; }
+[data-theme="dark"] .room.v2 .table.plain { filter: none; background: linear-gradient(100deg, rgba(255,255,255,.08), rgba(255,255,255,0) 35%), #8f7a58; border-color: #5e4d33; }
+[data-theme="dark"] .art-board, [data-theme="dark"] .art-desk { filter: brightness(.84); }
+@media print { .rp-top, .rp-art, .room.v2 .table, .room.v2 .table::before, .room.v2 .table::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+.room.v2 .table.grouped { background: linear-gradient(100deg, rgba(255,255,255,.22), rgba(255,255,255,0) 35%, rgba(120,90,50,.08)), color-mix(in srgb, var(--g-bg) 50%, #dcc198); }
+[data-theme="dark"] .room.v2 .table.grouped { background: color-mix(in srgb, var(--g-bg) 55%, #8f7a58); }
