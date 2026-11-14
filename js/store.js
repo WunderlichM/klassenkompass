@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 1;
+export const SCHEMA = 2;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -15,11 +15,11 @@ const DEMO_NAMES = ['Amelie', 'Ben', 'Clara', 'David', 'Emma', 'Felix', 'Greta',
 const DEMO_SPORT = ['Anton', 'Bela', 'Carla', 'Dana', 'Elias', 'Frida', 'Gabriel', 'Hanna', 'Ilias', 'Jana', 'Kian', 'Lea', 'Mats', 'Nele', 'Oskar', 'Pia', 'Quentin', 'Romy', 'Samu', 'Tilda'];
 
 export function demoClass() {
-  return { id: uid(), name: 'Demoklasse', demo: true, students: DEMO_NAMES.map(name => ({ id: uid(), name })),
+  return { id: uid(), name: 'Demoklasse', subject: 'Technik', demo: true, students: DEMO_NAMES.map(name => ({ id: uid(), name })),
     settings: { layout: 'omnibus', tables: 8, groups: 4 }, rules: [], plan: null };
 }
 export function demoSportGroup() {
-  return { id: uid(), name: 'Demogruppe Sport', demo: true, teamCount: 4, rules: [], teams: [], tournaments: [], series: [],
+  return { id: uid(), name: 'Demogruppe Sport', subject: 'Sport', demo: true, teamCount: 4, rules: [], teams: [], tournaments: [], series: [],
     students: DEMO_SPORT.map((name, i) => ({ id: uid(), name, className: i % 2 ? '6b' : '6a' })) };
 }
 // Hallenplan: Beispiel mit drei Bereichen hintereinander (schematisch, ohne Maße)
@@ -37,7 +37,7 @@ export function demoHall() {
   items.push(it('path', 90, 820, 1100, 34, { color: '#b0602a' }));
   items.push(it('tag', 1180, 880, 90, 64, { text: 'S' }));
   items.push(it('tag', 1300, 880, 110, 64, { text: 'LK' }));
-  return { id: uid(), title: 'Beispiel: drei Bereiche', demo: true, floor: 'halle', v: 3, lines: [], items: items.map(fromOldFloor) };
+  return { id: uid(), title: 'Beispiel: drei Bereiche', topic: 'Beispiele', demo: true, floor: 'halle', v: 3, lines: [], items: items.map(fromOldFloor) };
 }
 export function defaultScreen() {
   return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
@@ -65,17 +65,24 @@ export function demoQuiz() {
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
   const h = demoHall();
-  return { schema: SCHEMA, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [] }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
+  return { schema: SCHEMA, active: c.id, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [] }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
 }
 
 let state;
 const listeners = new Set();
+// Schutz (seit 2.0.0): Stammen die Daten von einer neueren App-Fassung, speichert diese Fassung nichts – sonst gingen
+// Felder verloren, die sie nicht kennt. Die App bittet dann, die neue Version zu laden.
+let newer = false;
+export const outdated = () => newer;
+export function checkNewer(raw) { if (Number(raw?.schema) > SCHEMA) { newer = true; lastError = NEWER_MSG; } return newer; }
+const NEWER_MSG = 'Diese Daten stammen von einer neueren App-Fassung. Bitte die App neu laden („Neue Version“), damit nichts verloren geht.';
 let saveTimer = null, lastError = null;
 
 export function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    state = raw ? normalize(JSON.parse(raw)) : freshState();
+    const data = raw ? JSON.parse(raw) : null; checkNewer(data);
+    state = data ? normalize(data) : freshState();
   } catch { state = freshState(); }
   return state;
 }
@@ -88,8 +95,9 @@ export async function loadEncrypted(c) {
   cipher = c;
   const plain = localStorage.getItem(KEY), enc = localStorage.getItem(ENC_KEY);
   try {
-    if (plain) state = normalize(JSON.parse(plain));
-    else if (enc) state = normalize(JSON.parse(await c.decrypt(JSON.parse(enc))));
+    const data = plain ? JSON.parse(plain) : enc ? JSON.parse(await c.decrypt(JSON.parse(enc))) : null;
+    checkNewer(data);
+    if (data) state = normalize(data);
     else state = freshState();
   } catch (e) { if (e?.decrypt) throw e; state = freshState(); }
   if (plain || !enc) await flush();
@@ -118,6 +126,7 @@ function scheduleSave() {
 }
 export function saveNow() {
   clearTimeout(saveTimer);
+  if (newer) { lastError = NEWER_MSG; return; }
   if (cipher) { flush(); return; }
   try { localStorage.setItem(KEY, JSON.stringify(state)); lastError = null; }
   catch (e) { lastError = 'Speichern nicht möglich (Speicher voll oder privates Fenster). Sichere deine Daten über „Daten exportieren“.'; }
@@ -125,7 +134,7 @@ export function saveNow() {
 // Verschlüsselt speichern; mehrere Aufrufe kurz hintereinander werden zu einem zusammengefasst
 export function flush() {
   clearTimeout(saveTimer);
-  if (!cipher) { saveNow(); return Promise.resolve(); }
+  if (!cipher || newer) { saveNow(); return Promise.resolve(); }
   if (pending) return saving;
   pending = true;
   saving = saving.then(async () => {
@@ -144,9 +153,12 @@ addEventListener('visibilitychange', () => { if (document.visibilityState === 'h
 addEventListener('storage', async e => {
   if (!e.newValue) return;
   try {
-    if (cipher && e.key === ENC_KEY) state = normalize(JSON.parse(await cipher.decrypt(JSON.parse(e.newValue))));
-    else if (!cipher && e.key === KEY) state = normalize(JSON.parse(e.newValue));
+    let data;
+    if (cipher && e.key === ENC_KEY) data = JSON.parse(await cipher.decrypt(JSON.parse(e.newValue)));
+    else if (!cipher && e.key === KEY) data = JSON.parse(e.newValue);
     else return;
+    if (checkNewer(data)) return;
+    state = normalize(data);
     listeners.forEach(fn => fn(state));
   } catch {}
 });
@@ -156,6 +168,9 @@ export function replaceState(next) { state = normalize(next); saveNow(); listene
 // ---------- Prüfen und Vereinheitlichen ----------
 const str = (v, max = 80) => String(v ?? '').trim().slice(0, max);
 const int = (v, min, max, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
+// Fach einer Lerngruppe (seit 2.0.0); ältere Klassen aus „Technik“ bekommen es aus dem Namen, sonst Technik
+export const SUBJECTS = ['Technik', 'Sport', 'Informatik'];
+function guessSubject(name, d) { const n = String(name || '').toLocaleLowerCase('de'); return SUBJECTS.find(x => n.includes(x.toLocaleLowerCase('de'))) || d; }
 const LAYOUTS = ['omnibus', 'gruppen', 'sitzkreis', 'stehkreis', 'uform', 'arena'];
 
 function normClass(c) {
@@ -163,7 +178,7 @@ function normClass(c) {
   const ids = new Set(students.map(s => s.id));
   const st = c?.settings || {};
   const plan = c?.plan && Array.isArray(c.plan.groups) ? { groups: c.plan.groups.map(g => (g || []).filter(id => ids.has(id))), createdAt: c.plan.createdAt || '' } : null;
-  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, students,
+  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', subject: str(c?.subject, 30) || guessSubject(c?.name, 'Technik'), demo: !!c?.demo, students,
     settings: { layout: LAYOUTS.includes(st.layout) ? st.layout : 'omnibus', tables: int(st.tables, 1, 40, 8), groups: int(st.groups, 1, 20, 4) },
     rules: (Array.isArray(c?.rules) ? c.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1]) && r[0] !== r[1]).map(r => [r[0], r[1]]), plan };
 }
@@ -186,7 +201,7 @@ function normSport(g) {
     participants: (s.participants || []).map(p => ({ id: String(p.id), name: str(p.name, 40), className: str(p.className, 20) })),
     sessions: (s.sessions || []).map(x => ({ id: String(x.id || uid()), date: str(x.date, 10), title: str(x.title, 80), tournamentId: x.tournamentId || null,
       points: Object.fromEntries(Object.entries(x.points || {}).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)])) })) }));
-  return { id: String(g?.id || uid()), name: str(g?.name, 60) || 'Sportgruppe', demo: !!g?.demo, students, teamCount: int(g?.teamCount, 2, 20, 4),
+  return { id: String(g?.id || uid()), name: str(g?.name, 60) || 'Sportgruppe', subject: str(g?.subject, 30) || 'Sport', demo: !!g?.demo, students, teamCount: int(g?.teamCount, 2, 20, 4),
     rules: (Array.isArray(g?.rules) ? g.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1])).map(r => [r[0], r[1]]),
     teams: (Array.isArray(g?.teams) ? g.teams : []).map(t => ({ id: String(t.id || uid()), name: str(t.name, 40), members: (t.members || []).filter(id => ids.has(id)) })),
     tournaments, series };
@@ -198,6 +213,7 @@ function normScreen(s) {
   return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
 }
 // ---------- Hallenpläne ----------
+export const HALL_MAX = 120;
 export const HALL_KINDS = ['zone', 'cone', 'kid', 'teacher', 'ball', 'arrow', 'path', 'cross', 'tag', 'text', 'gear', 'img'];
 // Einfache Geräte bis 1.12 → Geräte aus dem Katalog (Kennung, Ansicht, damalige Standardbreite)
 const OLD_GEAR = { bench: ['bank_lang', 'quer', 340], mat: ['turnmatte', 'quer', 230], softmat: ['weichboden', 'quer', 290], box: ['kasten4', 'quer', 120], goal: ['tor', 'frontal', 200] };
@@ -218,7 +234,9 @@ function toScale(i) {
   return { ...i, x: Math.round((Number(i.x) || 0) + (w - nw) / 2), y: Math.round((Number(i.y) || 0) + (h - nh) * 0.8), w: nw, h: nh };
 }
 function normHalls(list) {
-  return (Array.isArray(list) ? list : []).slice(0, 60).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
+  return (Array.isArray(list) ? list : []).slice(0, HALL_MAX).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
+    // Thema, Stunde und Phase (seit 2.0.0): ordnen die Sammlung; Phase 0 = keine Phase
+    topic: str(p?.topic, 60), lesson: str(p?.lesson, 80), phase: p?.lesson ? int(p?.phase, 1, 20, 1) : 0,
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
     // v 2 = Halle 27 m × 15 m (seit 1.15), v 3 = Geräte maßstäblich (seit 1.16); ältere Pläne werden einmal umgerechnet
     v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
@@ -286,7 +304,9 @@ export function normalize(raw) {
   if (!raw || typeof raw !== 'object') return fresh;
   const classes = (raw.technik?.classes || []).map(normClass);
   const groups = (raw.sport?.groups || []).map(normSport);
-  return { schema: SCHEMA,
+  const known = id => classes.some(c => c.id === id) || groups.some(g => g.id === id);
+  const active = known(raw.active) ? raw.active : known(raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? groups[0]?.id ?? null;
+  return { schema: SCHEMA, active,
     technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null },
     sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null, ...hallPart(raw.sport) },
     quiz: normQuiz(raw.quiz), screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
@@ -300,6 +320,7 @@ export function exportJson() {
 // Liest eigene Sicherungen und das Format der früheren ChatGPT-App
 export function parseImport(text) {
   const raw = JSON.parse(text);
+  if (raw?.app === 'KlassenKompass' && Number(raw.data?.schema ?? raw.schema) > SCHEMA) throw new Error('Diese Sicherung stammt von einer neueren App-Fassung. Bitte zuerst die App neu laden („Neue Version“).');
   if (raw?.app === 'KlassenKompass' && raw.data) return normalize({ quiz: { classes: [], sets: [] }, ...raw.data });
   const legacyClasses = raw?.classes ?? raw?.technik;
   const legacyGroups = raw?.groups ?? raw?.sport;
@@ -322,6 +343,7 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.sport.groups = merge(next.sport.groups, incoming.sport.groups);
   if (incoming.technik.classes.length) next.technik.activeId = incoming.technik.classes[0].id;
   if (incoming.sport.groups.length) next.sport.activeId = incoming.sport.groups[0].id;
+  next.active = incoming.technik.classes[0]?.id ?? incoming.sport.groups[0]?.id ?? next.active;
   next.sport.halls = merge(next.sport.halls, incoming.sport.halls.filter(h => !h.demo));
   next.sport.hallLib = merge(next.sport.hallLib, incoming.sport.hallLib);
   const iq = incoming.quiz, nq = next.quiz;

@@ -161,7 +161,7 @@ function widgetHtml(w) {
   if (w.type === 'hall') {
     const p = w.planId ? hall.planById(w.planId) : null;
     return frame(w, p ? `<div class="hall-mini">${hall.boardSvg(p, { crop: true })}</div>`
-      : `<div class="hall-pick"><p class="muted small-text">${w.planId ? 'Dieser Hallenplan wurde gelöscht.' : 'Welcher Hallenplan soll hier stehen?'}</p><button class="btn primary sm" data-act="settings">${icon('hall', 15)} Hallenplan wählen</button><p class="muted small-text">Hallenpläne zeichnest du unter Sport → Hallenplan.</p></div>`, 'hall');
+      : `<div class="hall-pick"><p class="muted small-text">${w.planId ? 'Dieser Hallenplan wurde gelöscht.' : 'Welcher Hallenplan soll hier stehen?'}</p><button class="btn primary sm" data-act="settings">${icon('hall', 15)} Hallenplan wählen</button><p class="muted small-text">Hallenpläne zeichnest du im Bereich Hallenpläne.</p></div>`, 'hall');
   }
   return '';
 }
@@ -438,7 +438,7 @@ function settingsDialog(w) {
   if (w.type === 'timer') body += `<div class="two">${durField('dur', 'Dauer', w.durationMs)}<label class="field">Darstellung<select name="style" class="select">${[['digital', 'Digital'], ['circle', 'Kreis'], ['egg', 'Ei']].map(([v, l]) => `<option value="${v}" ${w.style === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
     <label class="check"><input type="checkbox" name="sound" ${w.sound ? 'checked' : ''}> Signalton am Ende</label><p class="muted small-text">Eine geänderte Dauer setzt nur diesen Timer zurück.</p>`;
   if (w.type === 'qr') body += `<label class="field">Link oder Text<textarea name="content" class="input" rows="4" maxlength="2000">${esc(w.content)}</textarea></label><p class="muted small-text">Der QR-Code wird direkt auf diesem Gerät erzeugt; der Text wird an keinen Dienst gesendet.</p>`;
-  if (w.type === 'hall') { const list = hall.planList(); body += list.length ? `<label class="field">Hallenplan<select name="plan" class="select">${list.map(p => `<option value="${esc(p.id)}" ${p.id === w.planId ? 'selected' : ''}>${esc(p.title)}</option>`).join('')}</select></label><p class="muted small-text">Bearbeiten unter Sport → Hallenplan; Änderungen erscheinen hier sofort.</p>` : '<p class="muted">Noch kein Hallenplan. Lege einen unter Sport → Hallenplan an.</p>'; }
+  if (w.type === 'hall') { const list = hall.planList(); body += list.length ? `<label class="field">Hallenplan<select name="plan" class="select">${list.map(p => `<option value="${esc(p.id)}" ${p.id === w.planId ? 'selected' : ''}>${esc(p.title)}</option>`).join('')}</select></label><p class="muted small-text">Bearbeiten im Bereich Hallenpläne; Änderungen erscheinen hier sofort.</p>` : '<p class="muted">Noch kein Hallenplan. Lege einen im Bereich Hallenpläne an.</p>'; }
   if (w.type === 'stopwatch') body += `<p class="muted small-text">${w.mode === 'people' ? 'Mehrpersonen-Stoppuhr: gemeinsame Uhr starten, für jede Person „Zeit speichern“ drücken.' : 'Einfache Stoppuhr mit Hundertstelsekunden.'}</p>`;
   if (w.type === 'interval') {
     const tones = { ...DEFAULT_INTERVAL_TONES, ...(w.tones || {}) };
@@ -487,7 +487,7 @@ function helpDialog() {
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter.</li>
-      <li><b>Hallenplan:</b> Zeigt einen Plan aus Sport → Hallenplan, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
+      <li><b>Hallenplan:</b> Zeigt einen Plan aus dem Bereich Hallenpläne, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
       <li><b>Intervalltimer:</b> Trainingszeit, Satzpause, Sätze, Runden, Rundenpause, Lautstärke und Töne einstellen. Die Phasen wechseln automatisch.</li>
       <li><b>Töne:</b> Der Browser spielt Töne nur, solange die Seite geöffnet und das Gerät nicht gesperrt ist. Mit „Töne an/aus“ schaltest du alle Signale stumm. Läuft auf dem Gerät Musik (Spotify, YouTube), kann die App sie bei Signalen leiser stellen oder kurz anhalten: Zahnrad oben rechts → „Musik bei Signalen“.</li>
       <li><b>Präsentieren:</b> „Große Ansicht“ blendet alles andere aus. Mit Esc oder „Ansicht verkleinern“ zurück.</li>

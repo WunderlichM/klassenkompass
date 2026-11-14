@@ -193,11 +193,13 @@ async function pull() {
   return rows?.[0] || null;
 }
 async function push() {
+  if (store.outdated()) throw new Error('Diese App-Fassung ist veraltet. Bitte neu laden („Neue Version“).');
   const payload = await encrypt(store.get());
   const v = await call('/rest/v1/rpc/save_vault', { method: 'POST', body: { p_ciphertext: payload.ciphertext, p_iv: payload.iv, p_expected: meta.version || 0 } });
   meta.version = v; meta.lastSyncAt = new Date().toISOString(); meta.dirty = false; dirty = false; saveMeta();
 }
 function apply(data, version) {
+  if (store.checkNewer(data)) throw new Error('Im Konto liegt ein Stand einer neueren App-Fassung. Bitte die App neu laden („Neue Version“).');
   applying = true;
   try { store.replaceState({ ...data, welcomed: true }); } finally { applying = false; }
   meta.version = version; meta.lastSyncAt = new Date().toISOString(); meta.dirty = false; dirty = false; saveMeta();

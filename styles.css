@@ -7,6 +7,7 @@
 }
 body.t-sport { --accent: #2f6b55; --accent-dark: #24543f; --accent-soft: #e4f0ea; }
 body.t-screen { --accent: #3d5a99; --accent-dark: #30487c; --accent-soft: #e5ebf6; }
+body.t-hall { --accent: #2d6f7d; --accent-dark: #225764; --accent-soft: #e2f0f2; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.45 var(--font); -webkit-text-size-adjust: 100%; }
 body { min-height: 100vh; min-height: 100dvh; overflow-x: hidden; background: radial-gradient(1400px 420px at 50% -160px, var(--accent-soft), transparent 72%) no-repeat, var(--paper); }
@@ -735,6 +736,7 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
   }
   :root[data-theme="dark"] body.t-sport { --accent: #3a8d6d; --accent-dark: #93d6b8; --accent-soft: #1c302a; }
   :root[data-theme="dark"] body.t-screen { --accent: #5b7cc4; --accent-dark: #aec3f0; --accent-soft: #222b40; }
+  :root[data-theme="dark"] body.t-hall { --accent: #3f95a6; --accent-dark: #9fd8e3; --accent-soft: #1b2f33; }
   :root[data-theme="dark"] body.t-quiz { --accent: #c0703a; --accent-dark: #f1b88d; --accent-soft: #37291f; }
 
   /* Grundgerüst */
@@ -891,8 +893,10 @@ body.presenting .hall-host { margin-top: 0; }
 @media print {
   .hall-host { page: hall; }
   @page hall { size: A4 landscape; margin: 10mm; }
-  .hall-work { display: block; } .hall-board { border: 0; padding: 0; }
-  .hall-board svg { width: 100%; height: auto; max-height: 170mm; }
+  .hall-bar, .hall-selbar, .hall-work { display: none !important; }
+  .hall-print { display: flex !important; flex-direction: column; height: 189mm; color: #1f2a3c; }
+  .hall-print h1 { font-size: 20pt; margin: 0 0 4mm; } .hall-print p { font-size: 9pt; color: #6b6d78; margin: 2mm 0 0; }
+  .hall-print svg { flex: 1; min-height: 0; width: 100%; }
   .hall-svg .h-sel { display: none; }
   .hall-svg * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
@@ -1098,3 +1102,56 @@ main:focus-visible { outline: none; }
 .lock-reset p { margin: 0; }
 .menu-item.recommend { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 #lock-btn[hidden] { display: none; }
+
+/* ---------- 2.0.0: Lerngruppen, Gruppen, Turniere, Bereich Hallenpläne ---------- */
+.lg-manage li { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto auto auto; gap: 8px; align-items: center; }
+.lg-manage .lg-subj { min-height: 38px; }
+@media (max-width: 640px) { .lg-manage li { grid-template-columns: minmax(0, 1fr) 100px auto auto; } .lg-manage li .muted { display: none; } }
+.student-list .cls { color: var(--muted); font-size: 12px; margin-left: -4px; }
+.team-mini { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.team-mini li { display: flex; align-items: center; gap: 8px; }
+.team-mini small { margin-left: auto; }
+.turniere .side .btn.full + .btn.full { margin-top: 8px; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* Bereich Hallenpläne: Sammlung links, Editor rechts */
+.hallen .page-head .tools { display: flex; flex-wrap: wrap; gap: 6px; align-self: end; }
+.hall-page { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
+.hall-page.no-lib { grid-template-columns: minmax(0, 1fr); }
+.hall-lib { padding: 12px; position: sticky; top: 80px; max-height: calc(100dvh - 100px); overflow: hidden auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.hall-lib .input { width: 100%; min-width: 0; }
+.hall-topic, .hall-lesson { min-width: 0; }
+.hall-lib-head { display: flex; align-items: center; gap: 6px; } .hall-lib-head b { margin-right: auto; }
+.hall-lib-list { display: grid; gap: 4px; }
+.hall-topic { border-top: 1px solid var(--line); padding: 4px 0; }
+.hall-topic summary { font-weight: 650; font-size: 14px; padding: 4px 0; cursor: pointer; }
+.hall-topic > .link { margin: 4px 0 2px 6px; display: inline-flex; align-items: center; gap: 4px; }
+.hall-lesson { margin: 4px 0 4px 6px; padding-left: 8px; border-left: 2px solid var(--accent-soft); }
+.hall-lesson > p { margin: 2px 0; display: flex; align-items: center; gap: 4px; }
+.hall-lib-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); padding: 6px 8px; border-radius: 9px; font: inherit; font-size: 14px; cursor: pointer; }
+.hall-lib-item:hover { background: var(--soft); }
+.hall-lib-item.on { background: var(--accent-soft); color: var(--accent-dark); font-weight: 650; }
+.hall-lib-item .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hall-lib-item .ph { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--accent); color: #fff; }
+.hall-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hall-phase { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 10px; }
+.btn.on { background: var(--accent-soft); color: var(--accent-dark); border-color: var(--accent); }
+.hall.no-pal .hall-work { grid-template-columns: minmax(0, 1fr); }
+.h-kids { display: inline-flex; align-items: center; gap: 6px; padding-left: 6px; border-left: 1px solid var(--line); }
+.h-kids label { display: inline-flex; align-items: center; gap: 6px; }
+.h-num { width: 64px; min-height: 36px; }
+.hall-svg .h-band { fill: rgba(61, 111, 181, .1); stroke: #3d6fb5; stroke-width: 2.5; stroke-dasharray: 8 6; }
+.hall-print { display: none; }
+body.presenting .hall-page { display: block; }
+@media (max-width: 900px) {
+  .hall-page { grid-template-columns: minmax(0, 1fr); }
+  .hall-lib { position: static; max-height: 40vh; }
+}
+@media (min-width: 1800px) { .hall-page { grid-template-columns: 290px minmax(0, 1fr); } }
+@media print { .hall-lib { display: none !important; } .hall-page { display: block; } }
+/* Fünf Bereiche in der Navigation: auf schmalen Handys enger setzen, damit alle sichtbar bleiben */
+@media (max-width: 480px) { .nav { gap: 0; } .nav a { padding: 8px 3px; font-size: 12.5px; letter-spacing: -.01em; } }
+@media (max-width: 350px) { .nav a { font-size: 11.5px; padding: 8px 2px; } }
+/* Hallenpläne groß: nur die Zeichnung, der Knopf zum Verkleinern bleibt oben rechts */
+body.presenting .hallen .page-head { display: flex !important; position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 30; margin: 0; }
+body.presenting .hallen .page-head > div:first-child, body.presenting .hallen .page-head .tools > :not([data-p="present"]) { display: none; }

@@ -1,8 +1,9 @@
 // App-Rahmen: Navigation, Datenmenü, Installation, Offline-Betrieb
 import * as store from './store.js';
 import { esc, icon, logo, dialog, confirmDialog, toast, downloadFile } from './ui.js';
-import * as technik from './technik.js';
-import * as sport from './sport.js';
+import * as gruppen from './gruppen.js';
+import * as turniere from './turniere.js';
+import * as hallen from './hallen.js';
 import * as screen from './screen.js';
 import * as quiz from './quiz.js';
 import * as backup from './backup.js';
@@ -13,24 +14,36 @@ import * as theme from './theme.js';
 import * as lock from './lock.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '1.27.0';
-const ROUTES = { '': { mod: technik, title: 'Sitzplan & Gruppen', theme: '#7055a5', cls: 't-technik' },
-  sport: { mod: sport, title: 'Teams & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
+export const VERSION = '2.0.0';
+// Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
+const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
+  turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
+  hallenplaene: { mod: hallen, title: 'Hallenpläne', theme: '#2d6f7d', cls: 't-hall' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
+// Frühere Adressen: #/sport öffnet Gruppen → Teams, #/gruppen ist dasselbe wie #/
+const ALIASES = { gruppen: '', sport: '', technik: '', hallenplan: 'hallenplaene' };
 
 let unmount = null, installEvent = null;
 await lock.gate();   // mit App-Sperre: erst nach dem Passwort weiter
 
-function routeKey() { const k = location.hash.replace(/^#\/?/, '').split('?')[0]; return ROUTES[k] ? k : ''; }
+function routeKey() { const k = location.hash.replace(/^#\/?/, '').split('?')[0]; return ROUTES[k] ? k : ALIASES[k] ?? ''; }
+// Alte Adresse aufgerufen: passende Ansicht wählen und die Adresse ersetzen (ohne neuen Verlaufseintrag)
+function resolveAlias() {
+  const k = location.hash.replace(/^#\/?/, '').split('?')[0];
+  if (!(k in ALIASES)) return;
+  if (k === 'sport') gruppen.showTeams();
+  history.replaceState(null, '', '#/' + ALIASES[k]);
+}
 
 function shell() {
   document.getElementById('app').innerHTML = `
   <header class="topbar no-present">
     <a class="brand" href="#/"><span class="logo">${logo(26)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
     <nav class="nav" aria-label="Bereiche">
-      <a href="#/" data-route="">${icon('technik', 16)}<span>Technik</span></a>
-      <a href="#/sport" data-route="sport">${icon('sport', 16)}<span>Sport</span></a>
+      <a href="#/" data-route="">${icon('users', 16)}<span>Gruppen</span></a>
+      <a href="#/turniere" data-route="turniere">${icon('trophy', 16)}<span>Turniere</span></a>
+      <a href="#/hallenplaene" data-route="hallenplaene">${icon('hall', 16)}<span>Hallenpläne</span></a>
       <a href="#/quiz" data-route="quiz">${icon('cards', 16)}<span>Quiz</span></a>
       <a href="#/bildschirm" data-route="bildschirm">${icon('screen', 16)}<span>Bildschirm</span></a>
     </nav>
@@ -50,6 +63,7 @@ function shell() {
 }
 
 function navigate() {
+  resolveAlias();
   const key = routeKey(), r = ROUTES[key];
   unmount?.();
   document.body.classList.remove('presenting');
@@ -74,7 +88,7 @@ function setThemeColor() {
 function menuDialog() {
   const s = store.get(), size = new Blob([JSON.stringify(s)]).size;
   dialog({ title: 'Daten und Hilfe', submit: null, cancel: 'Schließen', body: `
-    <p class="muted">Alle Klassen, Sportgruppen, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB${lock.enabled() ? ', verschlüsselt' : ''}). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
+    <p class="muted">Alle Lerngruppen, Hallenpläne, Quizfragen und der Bildschirm sind nur in diesem Browser auf diesem Gerät gespeichert (${(size / 1024).toFixed(0)} KB${lock.enabled() ? ', verschlüsselt' : ''}). ${account.enabled ? 'Mit einem Konto werden sie zusätzlich verschlüsselt auf dem Server abgelegt.' : 'Es gibt keinen Server und keine Anmeldung.'}</p>
     <div class="menu-grid">
       ${account.enabled ? `<button type="button" class="menu-item" data-m="account">${icon('user')}<span><b>${account.status().state === 'off' ? 'Konto &amp; Synchronisierung' : 'Konto · ' + esc(account.status().email)}</b><small>${account.status().state === 'off' ? 'Anmelden, um deine Daten verschlüsselt auf allen Geräten gleich zu halten – auch Handy und Tablet.' : 'Angemeldet – Daten werden verschlüsselt abgeglichen. Abmelden, Passwort ändern, Konto löschen.'}</small></span></button>` : ''}
       <button type="button" class="menu-item${lock.enabled() ? '' : ' recommend'}" data-m="lock">${icon('lock')}<span><b>${lock.enabled() ? 'App-Sperre · an' : 'App-Sperre einrichten (empfohlen)'}</b><small>${lock.enabled() ? esc(lock.describe()) : 'Daten auf diesem Gerät mit einem Passwort verschlüsseln. Nach einer Zeit ohne Bedienung sperrt sich die App.'}</small></span></button>
@@ -102,7 +116,7 @@ function menuDialog() {
       file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); importFile(f); };
       el.querySelector('[data-m=reset]').onclick = async () => {
         close();
-        if (!(await confirmDialog('Alles zurücksetzen', 'Alle Klassen, Sportgruppen, Turniere, Ranglisten, Quizfragen und -ergebnisse und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
+        if (!(await confirmDialog('Alles zurücksetzen', 'Alle Lerngruppen, Turniere, Ranglisten, Hallenpläne, Quizfragen und -ergebnisse und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
         store.replaceState(store.freshState()); navigate(); toast('Zurückgesetzt.');
       };
     } });
@@ -219,16 +233,16 @@ async function importFile(f) {
     incoming = store.parseImport(text);
     try { const n = await images.unpack(JSON.parse(text).images); if (n) { toast(`${n} Bild(er) übernommen.`); dispatchEvent(new Event('kk-images')); } } catch {}
   } catch (e) { return toast('Import nicht möglich: ' + (e instanceof SyntaxError ? 'Die Datei ist keine gültige JSON-Datei.' : e.message), { kind: 'warn' }); }
-  const nC = incoming.technik.classes.length, nG = incoming.sport.groups.length, nW = incoming.screen.widgets.length;
+  const nW = incoming.screen.widgets.length;
   const hasDemoOnly = store.get().technik.classes.every(c => c.demo) && store.get().sport.groups.every(g => g.demo) && store.get().quiz.sets.every(t => t.demo) && store.get().quiz.classes.every(c => c.demo);
   dialog({ title: 'Daten importieren', submit: 'Importieren', body: `
-    <p>Gefunden: <b>${nC}</b> Klasse(n), <b>${nG}</b> Sportgruppe(n)${incoming.quiz.sets.length ? `, ${incoming.quiz.sets.length} Fragensatz/-sätze` : ''}${nW ? `, Bildschirm mit ${nW} Objekt(en)` : ''}.</p>
+    <p>Gefunden: <b>${lgCount(incoming)}</b> Lerngruppe(n), <b>${incoming.sport.halls.filter(h => !h.demo).length}</b> Hallenplan/-pläne${incoming.quiz.sets.length ? `, ${incoming.quiz.sets.length} Fragensatz/-sätze` : ''}${nW ? `, Bildschirm mit ${nW} Objekt(en)` : ''}.</p>
     <label class="check"><input type="radio" name="mode" value="merge" ${hasDemoOnly ? '' : 'checked'}> Zu den vorhandenen Daten hinzufügen <small class="muted">(gleiche Einträge werden aktualisiert)</small></label>
     <label class="check"><input type="radio" name="mode" value="replace" ${hasDemoOnly ? 'checked' : ''}> Vorhandene Daten ersetzen</label>
     ${nW ? '<label class="check"><input type="checkbox" name="screen" checked> Bildschirm übernehmen</label>' : ''}`,
     onSubmit: fd => {
       const replace = fd.get('mode') === 'replace', withScreen = fd.get('screen') === 'on';
-      const base = replace ? { ...store.freshState(), technik: { classes: [], activeId: null }, sport: { groups: [], activeId: null }, quiz: { classes: [], sets: [], sessions: [], activeClassId: null, activeSetId: null } } : store.get();
+      const base = replace ? { ...store.freshState(), technik: { classes: [], activeId: null }, sport: { groups: [], activeId: null, halls: [], activeHall: null, hallLib: [] }, quiz: { classes: [], sets: [], sessions: [], activeClassId: null, activeSetId: null } } : store.get();
       const next = store.mergeInto(base, incoming, { replaceScreen: withScreen });
       if (replace && !withScreen) next.screen = store.get().screen;
       store.replaceState(next); navigate(); toast('Import abgeschlossen.');
@@ -242,8 +256,10 @@ function helpDialog() {
     <p class="help-actions"><button type="button" class="btn ghost sm" data-h="tour">${icon('help', 16)} Einführung ansehen</button> <button type="button" class="btn ghost sm" data-h="install">${icon('install', 16)} App installieren – Anleitung</button></p>
     <h3>So funktioniert es</h3>
     <ul class="help-list">
-      <li><b>Technik:</b> Klasse anlegen (nur Vornamen), Organisationsform, Tische und Gruppen wählen, unter „Einteilung anpassen“ festlegen, wer nicht in dieselbe Gruppe soll (nur im Fenster sichtbar, nicht auf der Hauptseite), und oben „Neu mischen“. „Heute krank“ gilt nur bis zum nächsten Öffnen.</li>
-      <li><b>Sport:</b> Sportgruppe anlegen (Vorname, optional Klasse), Teams mischen, daraus ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen. <b>Hallenplan:</b> Bereiche, Hütchen, Kinder, Wege und über 50 Geräte (Matten, Kästen, Bänke, Turngeräte, Tore, Netze, Kleingeräte, Bälle) aus der Leiste in die schräg gezeichnete Halle (27 m × 15 m, Spielfeldlinien für Basketball, Handball, Volleyball, Badminton und Hallenfußball zuschaltbar, Voreinstellungen beim Anlegen) ziehen, verschieben, drehen, in der Größe ändern und die Ansicht (quer/längs) wechseln; groß zeigen oder als A4 quer drucken. Optional eigene Bilder über „Eigene Bilder hinzufügen“ – sie bleiben auf deinen Geräten bzw. verschlüsselt in deinem Konto.</li>
+      <li><b>Lerngruppen:</b> Eine Lerngruppe (Klasse oder Sportgruppe) hat ein Fach und eine Liste mit Vornamen, optional mit Klasse. Sie gilt für Gruppen, Turniere und Ranglisten; die Auswahl oben wechselt überall mit. Verwalten über das Regler-Symbol neben der Auswahl. „Heute nicht da“ gilt bis zum nächsten Öffnen.</li>
+      <li><b>Gruppen:</b> zwei Ansichten derselben Lerngruppe. <b>Sitzordnung:</b> Organisationsform, Tische und Gruppen wählen und „Neu mischen“. <b>Teams:</b> Anzahl Teams wählen und mischen. Unter „Einteilung anpassen“ festlegen, wer nicht in dieselbe Gruppe bzw. dasselbe Team soll (nur im Fenster sichtbar).</li>
+      <li><b>Turniere:</b> aus den Teams ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
+      <li><b>Hallenpläne:</b> eigene Sammlung, nach Themen geordnet und durchsuchbar; Pläne einer Stunde lassen sich als Phasen hintereinander anlegen. Bereiche, Hütchen, Kinder, Lehrkraft und über 50 Geräte aus der Leiste in die schräg gezeichnete Halle (27 m × 15 m, Spielfeldlinien zuschaltbar) ziehen, verschieben, drehen und in der Größe ändern; mit Umschalt-Klick mehrere Elemente wählen, „Kinder einsetzen“ füllt einen Bereich, „Raster“ richtet beim Verschieben aus. Groß zeigen oder als Schüleransicht (A4 quer) drucken. Optional eigene Bilder – sie bleiben auf deinen Geräten bzw. verschlüsselt in deinem Konto.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Im Quiz gibt es keine Namen, nur Tiere: Karte 1 ist immer der Adler, Karte 2 der Biber … – in jeder Klasse gleich, ein Kartensatz reicht für alle Klassen. Quiz-Klasse mit Name und Kinderzahl anlegen (bei weniger Kindern fallen die letzten Tiere weg), Karten und das Zuordnungsblatt drucken (die Kinder schreiben ihren Namen neben ihr Tier; das Blatt bleibt bei dir), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Das Quiz läuft dort als Bühne mit Tönen und Denkmusik (Lautsprecher-Knopf: an/aus, Lautstärke, Probehören); nach dem Auflösen zeigt „Zwischenstand“ die besten fünf Tiere. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Jede Klasse hat eine Rangliste über alle Quiz (sortiert nach Anteil richtiger Antworten), die sich zeigen, als CSV speichern und neu beginnen lässt. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer, QR-Codes und Hallenpläne frei anordnen und groß zeigen. Läuft auf dem Gerät Musik, kann die App sie bei Signalen leiser stellen oder kurz anhalten (Zahnrad → „Musik bei Signalen“).</li>
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
@@ -258,14 +274,14 @@ function helpDialog() {
       <li><b>App-Sperre</b> (Zahnrad → „App-Sperre einrichten“): Die Daten auf dem Gerät werden mit einem eigenen Passwort verschlüsselt (AES-256). Die App fragt beim Öffnen und nach einer einstellbaren Zeit ohne Bedienung danach; das Schloss oben rechts sperrt sofort. Für Schülerdaten auf privaten Geräten einschalten. Passwort vergessen = Daten auf dem Gerät verloren (mit Konto durch Anmelden zurückholen).</li>
       <li><b>Mit Konto</b> werden die Daten vor dem Hochladen auf dem Gerät mit deinem Passwort verschlüsselt (AES-256). Auf dem Server (Supabase, Rechenzentrum Frankfurt) liegt nur ein unlesbarer Datenblock und deine E-Mail-Adresse. Neue Konten sind nur mit einer Schul-E-Mail-Adresse (@${esc(account.ALLOWED_DOMAIN)}) möglich. Weder der Betreiber noch Supabase können die Namen lesen.</li>
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
-      <li>Bitte nur Vornamen (und bei Sport die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
+      <li>Bitte nur Vornamen (und bei Bedarf die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Das Quiz kennt keine Namen, nur Kartennummern und Tiere; die Zuordnung Tier ↔ Kind steht nur auf deinem Papierblatt. Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Karte. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
     <h3>Datenschutzhinweise im Einzelnen</h3>
     <ul class="help-list">
-      <li><b>Welche Daten:</b> Vornamen, optional Klasse (Sport), Klassen- und Gruppennamen, Sitzpläne, Teams, Ergebnisse, Quizfragen und Quizantworten je Kind sowie Einstellungen. Mit Konto zusätzlich die E-Mail-Adresse.</li>
+      <li><b>Welche Daten:</b> Vornamen, optional Klasse, Namen und Fach der Lerngruppen, Sitzpläne, Teams, Ergebnisse, Quizfragen und Quizantworten je Kind sowie Einstellungen. Mit Konto zusätzlich die E-Mail-Adresse.</li>
       <li><b>Live-Quiz mit Konto:</b> Während ein Quiz läuft, tauschen Beamer-Gerät und Handy über Supabase die aktuelle Frage, die Kartennummern und die gescannten Antwortbuchstaben aus – ebenfalls auf dem Gerät verschlüsselt, ohne Schülernamen. Beim Beenden wird dieser Zwischenstand gelöscht, spätestens nach einem Tag.</li>
       <li><b>Wozu:</b> ausschließlich zur Unterrichtsorganisation der angemeldeten Lehrkraft.</li>
       <li><b>Wo:</b> im Browser (Websitedaten) des Geräts. Mit Konto zusätzlich verschlüsselt bei Supabase (Rechenzentrum Frankfurt) als Auftragsverarbeiter.</li>
@@ -325,13 +341,14 @@ function tour({ force = false } = {}) {
   if (!force && store.get().welcomed) return;
   const steps = [
     { ic: logo(34), title: 'Willkommen bei KlassenKompass', html: `<p>Deine Helfer für den Unterricht an einem Ort:</p>
-      <ul class="tour-list"><li>${icon('technik')}<span><b>Technik</b> – Klassen anlegen, Sitzplan und Gruppen per Zufall verteilen.</span></li>
-      <li>${icon('sport')}<span><b>Sport</b> – Teams mischen, Turniere (jeder gegen jeden, K.-o., King of the Court), Ranglisten und Hallenpläne zum Zusammenstellen.</span></li>
+      <ul class="tour-list"><li>${icon('users')}<span><b>Gruppen</b> – Lerngruppen anlegen, Sitzordnung oder Teams per Zufall verteilen.</span></li>
+      <li>${icon('trophy')}<span><b>Turniere</b> – jeder gegen jeden, K.-o. und King of the Court ohne Ausscheiden, dazu Einzelranglisten.</span></li>
+      <li>${icon('hall')}<span><b>Hallenpläne</b> – Hallen schräg von oben zeichnen, nach Themen ordnen und als Schüleransicht drucken.</span></li>
       <li>${icon('cards')}<span><b>Quiz</b> – Kartenquiz: Kinder heben Antwortkarten, das Handy scannt die ganze Klasse.</span></li>
       <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Intervalltimer und QR-Codes groß zeigen.</span></li></ul>
-      <p class="muted small-text">Zum Ausprobieren sind eine Demoklasse und eine Demogruppe mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },
+      <p class="muted small-text">Zum Ausprobieren sind zwei Demo-Lerngruppen mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },
     { ic: icon('check', 30), title: 'Deine Daten', html: `<ul class="help-list">
-      <li>Bitte <b>nur Vornamen</b> eintragen (bei Sport optional die Klasse).</li>
+      <li>Bitte <b>nur Vornamen</b> eintragen (optional die Klasse).</li>
       <li>Ohne Konto bleibt alles <b>nur in diesem Browser auf diesem Gerät</b>. Werden die Browserdaten gelöscht, sind auch deine Klassen weg.</li>
       <li>Über das Zahnrad oben rechts kannst du jederzeit eine Sicherung exportieren und wieder importieren.</li></ul>` },
     ...(account.enabled ? [{ ic: icon('user', 30), title: 'Konto erstellen – empfohlen', html: `<p>Mit einem kostenlosen Konto sind deine Daten <b>gesichert</b> und auf <b>allen deinen Geräten gleich</b> – PC in der Schule, Laptop zu Hause, Tablet und Handy.</p>
@@ -373,6 +390,8 @@ addEventListener('hashchange', navigate);
 navigate();
 tour();
 lock.startAutoLock(() => screen.busy() || quiz.busy());
+// Daten einer neueren App-Fassung: nichts speichern, neu laden lassen (store.outdated)
+if (store.outdated()) toast('Diese Daten stammen von einer neueren App-Fassung. Änderungen werden nicht gespeichert – bitte neu laden.', { kind: 'warn', action: 'Neu laden', onAction: () => location.reload() });
 // Hinweis auf die App-Sperre, solange eigene Daten unverschlüsselt auf dem Gerät liegen (höchstens einmal pro Woche)
 (() => {
   if (lock.enabled()) return;
@@ -405,7 +424,8 @@ document.getElementById('status').onclick = async () => {
 
 // ---------- Hilfsfunktionen für Konto und Sicherung ----------
 const fmt = iso => iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–';
-const summary = data => `${data?.technik?.classes?.length ?? 0} Klasse(n), ${data?.sport?.groups?.length ?? 0} Sportgruppe(n), ${data?.quiz?.sets?.length ?? 0} Fragensatz/-sätze`;
+const lgCount = data => new Set([...(data?.technik?.classes || []), ...(data?.sport?.groups || [])].map(x => x.id)).size;
+const summary = data => `${lgCount(data)} Lerngruppe(n), ${data?.sport?.halls?.length ?? 0} Hallenplan/-pläne, ${data?.quiz?.sets?.length ?? 0} Fragensatz/-sätze`;
 
 // ---------- Konto ----------
 function remoteChoice(remote, { title, intro }) {

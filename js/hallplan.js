@@ -215,7 +215,8 @@ export function lineAt(kind, from, to, { size = 1, color } = {}) {
 }
 
 // ---------- Austauschformat ----------
-// { "app": "KlassenKompass", "kind": "hall-plans", "v": 1, "plans": [ { "title": "…", "floor": "halle", "lines": ["handball"], "items": [ … ] } ] }
+// { "app": "KlassenKompass", "kind": "hall-plans", "v": 1, "plans": [ { "title": "…", "topic": "Völkerball", "floor": "halle", "lines": ["handball"], "items": [ … ] } ] }
+// Optional (seit 2.0.0): "topic" = Thema, "lesson" = Stunde, "phase" = Phase in dieser Stunde (1, 2, …).
 // Elemente stehen entweder in Einheiten der Zeichenfläche (x, y, w, h, rot – so exportiert die App) oder in Metern:
 //   { "kind": "zone", "m": [x0, x1, y0, y1], "color": "#2e7d4f", "text": "Feld 1" }
 //   { "kind": "zone", "m": [13.5, 26.2, 1.5, 13.5], "form": "u-l", "band": [3.6, 1.5] }   (Form und Randbreite in m, seit 1.22.0)
@@ -288,10 +289,11 @@ export function parsePlans(text) {
     if (p.floor !== undefined && !['halle', 'linien', 'leer'].includes(p.floor)) throw new Error(`Plan ${k + 1} („${title}“): „floor“ muss halle, linien oder leer sein.`);
     const unknown = (Array.isArray(p.lines) ? p.lines : []).filter(m => !MARKS.some(x => x.id === m));
     if (unknown.length) throw new Error(`Plan ${k + 1} („${title}“): Spielfeldlinien „${unknown.join(', ')}“ gibt es nicht (möglich: ${MARKS.map(m => m.id).join(', ')}).`);
-    return { id: uid(), title, demo: false, floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n))) };
+    const lesson = str(p.lesson, 80), phase = lesson ? int(p.phase, 1, 20, 1) : 0;
+    return { id: uid(), title, topic: str(p.topic, 60), lesson, phase, demo: false, floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n))) };
   });
 }
 export function exportPlans(plans) {
-  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, floor: p.floor, lines: p.lines || [],
+  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, ...(p.topic ? { topic: p.topic } : {}), ...(p.lesson ? { lesson: p.lesson, phase: p.phase || 1 } : {}), floor: p.floor, lines: p.lines || [],
     items: p.items.map(({ id, ...i }) => i) })) }, null, 2);
 }

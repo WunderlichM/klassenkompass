@@ -8,6 +8,7 @@ import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
 import * as images from './images.js';
 import * as sound from './sound.js';
+import * as groups from './groups.js';
 
 // Jedes Gerät bekommt eine zufällige Kennung, damit klar ist, wo ein Quiz läuft
 const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localStorage.getItem(k); if (!d) { d = uid(); localStorage.setItem(k, d); } return d; } catch { return uid(); } })();
@@ -193,6 +194,7 @@ function drawHome() {
             <h3>${icon('cards', 16)} Klasse &amp; Karten ${c ? `<span class="badge">${c.students.length}</span>` : ''}</h3>
             ${c ? `<div class="tools"><button class="icon-btn sm" data-act="student-add" title="Kind hinzufügen (nächstes Tier)" aria-label="Kind hinzufügen" ${c.count >= CARD_COUNT ? 'disabled' : ''}>${icon('plus', 16)}</button><button class="icon-btn sm" data-act="class-edit" title="Name oder Kinderzahl ändern" aria-label="Klasse bearbeiten">${icon('edit', 16)}</button></div>` : ''}
           </div>
+          ${c ? linkNote(c) : ''}
           ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span>${sym(s.card)}<span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button></li>`).join('')}</ul>
           <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind hat ein festes Tier (Karte 1 Adler, 2 Biber …) – in allen Klassen gleich. Wer welches Tier ist, steht nur auf deinem Zuordnungsblatt.</p>`; })() : `<p class="muted">Lege eine Klasse an: Name und Anzahl der Kinder genügen.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
           <button class="btn ghost full" data-act="print">${icon('print', 16)} Karten drucken</button>
@@ -376,7 +378,7 @@ function soundDialog() {
 // ======================================================================
 function onChange(e) {
   const t = e.target;
-  if (t.id === 'quiz-class') store.update(s => { s.quiz.activeClassId = t.value; });
+  if (t.id === 'quiz-class') store.update(s => { s.quiz.activeClassId = t.value; const g = groups.groupOfQuiz(s.quiz.classes.find(x => x.id === t.value), s); if (g) s.active = g.id; });   // verknüpfte Lerngruppe mitwählen
   else if (t.id === 'quiz-set') store.update(s => { s.quiz.activeSetId = t.value; });
   else if (t.dataset.act === 'names') { showNames = t.checked; draw(); }
   else if (t.dataset.act === 'auto') store.update(s => { s.quiz.autoReveal = t.checked; });
@@ -391,6 +393,7 @@ function onClick(e) {
     case 'class-new': return classDialog();
     case 'class-edit': return classEditDialog(cls());
     case 'student-add': return addStudent(cls());
+    case 'class-sync': { const c = cls(), n = Number(b.dataset.n); if (!c || !(n >= 1 && n <= CARD_COUNT)) return; store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); if (!k) return; k.count = n; k.students = store.quizStudents(k.id, n, k.students); k.demo = false; }); return toast(`Jetzt Karten 1 bis ${n} (${ANIMALS[0]} bis ${ANIMALS[n - 1]}).`); }
     case 'student-absent': { const off = absentFor(cls().id), id = b.dataset.id; off.has(id) ? off.delete(id) : off.add(id); return draw(); }
     case 'print': return printDialog();
     case 'print-sheet': return sheetDialog();
@@ -637,17 +640,31 @@ function classesDialog() {
 const countField = (n = 16) => `<label class="field">Anzahl Kinder <small class="muted">(Karte 1 bis ${CARD_COUNT})</small><input name="count" type="number" class="input" min="1" max="${CARD_COUNT}" value="${n}" inputmode="numeric" required></label>`;
 const readCount = fd => { const n = Math.round(Number(fd.get('count'))); if (!(n >= 1 && n <= CARD_COUNT)) throw new Error(`Bitte eine Anzahl von 1 bis ${CARD_COUNT} eingeben.`); return n; };
 function classDialog() {
+  // Seit 2.0.0: aus einer Lerngruppe übernehmen – nur Name und Kinderzahl, nie die Vornamen
+  const lgs = groups.list().filter(g => g.students.length && !Q().classes.some(c => c.id === g.id || c.name === g.name));
   dialog({ title: 'Neue Quiz-Klasse', submit: 'Anlegen', body: `
-    <label class="field">Name der Klasse<input name="name" class="input" maxlength="60" placeholder="z. B. Technik 6" required></label>
+    ${lgs.length ? `<label class="field">Aus Lerngruppe <small class="muted">– übernimmt nur Name und Kinderzahl</small><select name="lg" class="select"><option value="">– frei eingeben –</option>${lgs.map(g => `<option value="${esc(g.id)}">${esc(g.name)} (${Math.min(g.students.length, CARD_COUNT)} Kinder)</option>`).join('')}</select></label>` : ''}
+    <label class="field">Name der Klasse<input name="name" class="input" maxlength="60" placeholder="z. B. Technik 6"></label>
     ${countField(16)}
-    <p class="muted small-text">Die Kinder bekommen die Karten 1 bis zur Anzahl mit festem Tier (1 Adler, 2 Biber, 3 Dachs …). Bei weniger Kindern fallen die letzten Tiere weg. Vornamen werden nicht eingegeben – wer welches Tier ist, notierst du auf dem Zuordnungsblatt.</p>`,
+    <p class="muted small-text">Die Kinder bekommen die Karten 1 bis zur Anzahl mit festem Tier (1 Adler, 2 Biber, 3 Dachs …). Bei weniger Kindern fallen die letzten Tiere weg. Vornamen kommen nicht ins Quiz – wer welches Tier ist, notierst du auf dem Zuordnungsblatt.</p>`,
+    onOpen: el => {
+      const sel = el.querySelector('[name=lg]'); if (!sel) return;
+      sel.onchange = () => { const g = lgs.find(x => x.id === sel.value); if (!g) return; el.querySelector('[name=name]').value = g.name; el.querySelector('[name=count]').value = Math.min(g.students.length, CARD_COUNT); };
+    },
     onSubmit: fd => {
-      const name = String(fd.get('name')).trim(), count = readCount(fd);
+      const g = lgs.find(x => x.id === fd.get('lg'));
+      const name = String(fd.get('name')).trim() || g?.name || '', count = readCount(fd);
       if (!name) throw new Error('Bitte einen Namen eingeben.');
-      const id = uid(), c = { id, name, demo: false, count, resetAt: 0, students: store.quizStudents(id, count) };
+      const id = g ? g.id : uid(), c = { id, name, demo: false, count, resetAt: 0, students: store.quizStudents(id, count) };
       store.update(s => { s.quiz.classes.push(c); s.quiz.activeClassId = c.id; });
       toast(`Klasse angelegt: Karten 1 bis ${count} (${ANIMALS[0]} bis ${ANIMALS[count - 1]}).`);
     } });
+}
+// Hinweis, wenn die verknüpfte Lerngruppe (gleiche Kennung oder gleicher Name) eine andere Kinderzahl hat
+function linkNote(c) {
+  const g = groups.groupOfQuiz(c); if (!g) return '';
+  const n = Math.min(g.students.length, CARD_COUNT);
+  return n && n !== c.count ? `<p class="notice small-text">Die Lerngruppe „${esc(g.name)}“ hat ${n} Kinder, hier sind es ${c.count} Karten. <button class="link" data-act="class-sync" data-n="${n}">Auf ${n} Karten setzen</button></p>` : '';
 }
 // Ein Kind dazu: Die Klasse bekommt die nächste Karte mit ihrem festen Tier (bisherige Tiere bleiben)
 function addStudent(c) {

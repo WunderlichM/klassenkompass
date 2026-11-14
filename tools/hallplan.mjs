@@ -2,7 +2,7 @@
 // Hallenplan-Werkzeug: prüft eine Plan-Datei und erzeugt mit der Zeichnung der App je Plan
 //   „Hallenplan - <Titel> - Schüleransicht.pdf“ (A4 quer, zum Zeigen oder Drucken),
 //   „Hallenplan - <Titel>.png“ (nur die Zeichnung, für den Verlaufsplan) und
-//   „Hallenplan - <Titel>.json“ (zum Importieren in KlassenKompass → Sport → Hallenplan → Importieren).
+//   „Hallenplan - <Titel>.json“ (zum Importieren in KlassenKompass → Hallenpläne → Sammlung → Importieren).
 //
 // Aufruf:  node tools/hallplan.mjs <plan.json> [--out <Ordner>] [--check] [--list]
 //   --check  nur prüfen, nichts schreiben        --list  Geräte mit Ansichten ausgeben
