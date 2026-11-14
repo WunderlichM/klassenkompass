@@ -2,7 +2,9 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
-## Neu in 2.5.0
+## Neu in 2.5.0 (Stand 2.5.1)
+
+2.5.1 bringt nur aktualisierte Texte: Hilfe, Einführung und Datenschutzhinweise der App nennen die neuen Objekte, die Lautstärke-Ampel (Mikrofon) und die Differenzierung im Quiz.
 
 - **Endtöne der Timer zur Auswahl (`js/sound.js`):** Klangschale (neuer Standard: laut, aber ruhig, langer Ausklang), Glockenspiel, Windspiel, Gong, Wecker (der bisherige Ton) und Pfiff für die Halle. Am Zahnrad des Timers: Probehören, Lautstärke, Wiederholungen (1 bis 3 Mal) und ein leiser Vorwarnton (30 s bis 5 min vorher). Jeder Timer merkt sich seinen Ton; Timer ohne Angabe bekommen die Klangschale. Alle Töne entstehen im Browser und werden wie bisher im Voraus eingeplant. Die Grundtöne liegen bei etwa 250 bis 900 Hz, weil Beamer- und Laptoplautsprecher tiefe Töne kaum wiedergeben. Klangschale, Glockenspiel und Pfiff stehen auch im Intervalltimer zur Wahl.
 - **Neue Objekte für den Bildschirm (`js/widgets.js`, zweite Reihe unter „Hinzufügen“):**
@@ -92,6 +94,7 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - Mit Konto: Quiz am PC starten (Beamer), auf dem Handy mit demselben Konto Quiz → „Karten scannen“. Beide Geräte tauschen verschlüsselt Frage, Kartennummern und Antwortbuchstaben über die Tabelle `live_quiz` aus (Abfrage etwa jede Sekunde).
 - **Fragensätze importieren / exportieren (seit 1.14.0):** Pfeil-Symbol neben „Neuer Fragensatz“ liest eine `.json`-Datei oder eingefügten Text; „Exportieren“ beim Bearbeiten eines Fragensatzes schreibt eine solche Datei. Format: `{ "app": "KlassenKompass", "kind": "quiz-sets", "v": 1, "sets": [ { "title": "…", "questions": [ { "text": "…", "options": ["…", "…"], "correct": "A" } ] } ] }` – `correct` ist ein Buchstabe A–D, eine Zahl ab 0 oder `null` (Umfrage). Importierte Sätze kommen dazu, nichts wird überschrieben; Bilder sind nicht enthalten. Seit 2.4.0 im gemeinsamen Import-Dialog, siehe oben und `docs/IMPORT.md`.
 - Die frühere Einstellung „Decknamen verwenden“ (1.14–1.16) ist entfallen – das Quiz arbeitet immer mit Tiernamen.
+- **Differenzierung (seit 2.5.0, alles freiwillig, Standard aus):** Einstellungen in `quiz.diff` (`second`, `levels`, `goal`, `podium`, `speak`); jedes Quiz merkt sich in `sessions[].diff` die Einstellung beim Start. Je Frage optional `bonus` (Sternchenfrage), `tag` (Thema), `hint` (Tipp) und `g` (G-Fassung: `{ text, options, correct }`). Je Quiz-Klasse `g` = Kartennummern auf G-Niveau; je Sitzung `g` = Kennungen der Kinder, die die G-Fassung bearbeitet haben. Nach einer zweiten Chance trägt die Frage der Sitzung `first` (Antworten der ersten Runde) und `round: 2`; sie bekommt dabei eine neue Kennung, damit Scannen und Handy-Abgleich frisch beginnen. Gewertet wird überall über `keyFor`/`tally` in `js/quiz.js` (eigene Fassung, Sternchenfragen nur bei richtiger Antwort). Exportierte Fragensätze enthalten diese Felder; Beschreibung in `docs/IMPORT.md`.
 
 ## Hallenpläne
 
@@ -114,7 +117,7 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - **Bereichsformen (seit 1.22.0)**: Ein Bereich kann statt eines Rechtecks eine U-Form (offen nach links, rechts, vorn oder hinten), eine L-Form (Ecke vorn/hinten, links/rechts) oder ein Rahmen sein, z. B. für den Außenbereich der Grenzwächter hinter und neben dem gegnerischen Feld. Auswahl über „Form“ beim gewählten Bereich, Randbreite mit den Reglern „Rand ↔“ (links/rechts) und „Rand ↕“ (vorn/hinten). Im Plan stehen `form` (`u-l`, `u-r`, `u-v`, `u-h`, `l-vl`, `l-vr`, `l-hl`, `l-hr`, `ring`) und `tx`, `ty` (Randbreite als Anteil von Breite bzw. Tiefe, 0,04–0,48); in Metern beim Import: `{ "kind": "zone", "m": [13.5, 26.2, 1.5, 13.5], "form": "u-l", "band": [3.6, 1.5] }`. Ältere App-Fassungen zeigen solche Bereiche als Rechteck – nach dem Update alle Geräte einmal öffnen und „Neue Version“ übernehmen.
 - **Werkzeug `tools/hallplan.mjs`** (Node ab 18, Chrome/Chromium/Edge für PDF und PNG): `node tools/hallplan.mjs plan.json --out <Ordner>` prüft die Datei und schreibt je Plan `Hallenplan - <Titel> - Schüleransicht.pdf` (A4 quer), `Hallenplan - <Titel>.png` (nur die Zeichnung, 2000 px breit) und `Hallenplan - <Titel>.json` (zum Importieren). `--check` prüft nur, `--list` nennt alle Geräte mit ihren Ansichten. Der Ordner `tools` gehört nicht zur App (nicht im Service Worker).
 - „Ansicht vergrößern“ zeigt nur die Zeichnung, „Schüleransicht drucken“ druckt A4 quer mit Titel, auf die Elemente zugeschnittener Zeichnung und dem Hinweis „Schematisch · Abstände und nutzbaren Raum vor Ort prüfen“ – wie die Schüleransicht von `tools/hallplan.mjs`.
-- Im Bildschirm gibt es das Objekt „Hallenplan“ (Plan am Zahnrad wählen), z. B. neben dem Intervalltimer.
+- Im Bildschirm gibt es das Objekt „Hallenplan“ (Plan am Zahnrad wählen), z. B. neben dem Intervalltimer. Seit 2.5.0 zeigt auch das Objekt „Stationen“ auf Wunsch einen Hallenplan neben der Stationstabelle.
 - Das automatische Aufräumen der Bilder im Konto berücksichtigt Quiz und Hallenpläne (`images.usedIds`). Ältere App-Fassungen kennen die Hallenpläne nicht: Nach dem Update alle Geräte einmal öffnen und „Neue Version“ übernehmen.
 
 ## Turniere
@@ -123,6 +126,14 @@ Einfach den Link öffnen. Beim ersten Start erklärt eine kurze Einführung die 
 - **K.-o. mit Platzierung:** Die erste Runde wird ausgelost, die nächste Runde entsteht, sobald alle Ergebnisse eingetragen sind. Niemand scheidet aus: Verlierer spielen um die hinteren Plätze. Einstellbar: alle Plätze ausspielen oder nur Finale und Spiel um Platz 3 (die übrigen Teams teilen sich ihren Platz). Bei Gleichstand wird der Sieger ausgewählt; ungerade Teamzahlen erhalten Freilose. Für die Einzelrangliste erhält Platz 1 so viele Punkte, wie Teams teilnehmen, jeder weitere Platz einen weniger.
 - **King of the Court:** Alle Teams spielen gleichzeitig auf Teamzahl ÷ 2 Feldern; Feld 1 ist das Königsfeld. Sieger steigen ein Feld auf, Verlierer ein Feld ab; bei ungerader Teamzahl setzt je Runde ein Team aus. Punkte je Sieg hängen vom Feld ab (voreingestellt Feld 1 = höchste Punktzahl), Rundenzahl einstellbar. Bei Punktgleichheit zählt das bessere Feld.
 - Wird ein früheres Ergebnis geändert, passt die App die folgenden Paarungen an und fragt vorher, falls dadurch eingetragene Ergebnisse wegfallen.
+
+## Unterrichtsbildschirm – Daten (seit 2.5.0)
+
+- Objekte liegen in `screen.widgets` (höchstens 30). Typen: `timer`, `qr`, `stopwatch`, `interval`, `hall` sowie aus `js/widgets.js` `pick`, `mode`, `task`, `agenda`, `signal`, `duty`, `queue`, `score`, `stations`, `board`. Unbekannte Typen verwirft `normScreen` in `js/store.js` – deshalb der Datenstand 5.
+- Timer (und die Anzeigetafel mit Spielzeit): `tone` (`bowl`, `chimes`, `wind`, `gong`, `alarm`, `whistle`; ohne Angabe `bowl`), `volume` (10–100), `repeats` (1–3), `warn` (Sekunden vor dem Ende, 0 = aus), `sound` (Ton an/aus).
+- Vorlagen liegen in `screen.layouts` (höchstens 12): `{ id, name, background, widgets }`.
+- Die Tafel speichert Striche als `{ c, w, p: [x, y, …] }` in Pixeln der Zeichenfläche (höchstens 500 Striche bzw. 60 000 Zahlen; die ältesten weichen).
+- Das Mikrofon der Lautstärke-Ampel wird nur im geöffneten Tab ausgewertet; gespeichert werden nur die Einstellungen (`mic`, `adj`, `alarm`).
 
 ## Technik der Konten
 

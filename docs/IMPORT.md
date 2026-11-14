@@ -1,4 +1,4 @@
-# Import-Format (seit 2.4.0)
+# Import-Format (seit 2.4.0, Fragenfelder zur Differenzierung seit 2.5.0)
 
 Eine JSON-Datei (oder eingefügter Text) kann **Lerngruppen**, **Fragensätze** und **Hallenpläne** enthalten – einzeln oder gemeinsam. Alles wird in der App über **Zahnrad → Importieren** eingelesen (auch: Pfeil im Quiz / in den Hallenplänen, Datei ins Fenster ziehen, Strg+V). Vor dem Übernehmen zeigt die Vorschau, was erkannt wurde.
 
