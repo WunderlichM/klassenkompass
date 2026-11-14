@@ -1,6 +1,33 @@
 # KlassenKompass
 
-Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes und Hallenplänen.
+Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel und Stationen.
+
+## Neu in 2.5.0
+
+- **Endtöne der Timer zur Auswahl (`js/sound.js`):** Klangschale (neuer Standard: laut, aber ruhig, langer Ausklang), Glockenspiel, Windspiel, Gong, Wecker (der bisherige Ton) und Pfiff für die Halle. Am Zahnrad des Timers: Probehören, Lautstärke, Wiederholungen (1 bis 3 Mal) und ein leiser Vorwarnton (30 s bis 5 min vorher). Jeder Timer merkt sich seinen Ton; Timer ohne Angabe bekommen die Klangschale. Alle Töne entstehen im Browser und werden wie bisher im Voraus eingeplant. Die Grundtöne liegen bei etwa 250 bis 900 Hz, weil Beamer- und Laptoplautsprecher tiefe Töne kaum wiedergeben. Klangschale, Glockenspiel und Pfiff stehen auch im Intervalltimer zur Wahl.
+- **Neue Objekte für den Bildschirm (`js/widgets.js`, zweite Reihe unter „Hinzufügen“):**
+  - *Zufallsauswahl* – zieht ein Kind oder mehrere aus einer Lerngruppe, aus den Tieren des Kartenquiz oder aus Nummern; ohne Wiederholung, bis alle dran waren; „fehlt heute“ aus dem Bereich Gruppen wird übersprungen.
+  - *Arbeitsform* – Stille, Flüstern, Partnerarbeit, Gruppenarbeit, „Alle hören zu“ als großes Symbol. Auf Wunsch mit Lautstärke-Ampel über das Mikrofon (je Arbeitsform eine eigene Grenze, Regler für die Empfindlichkeit, optional Klangschale bei anhaltendem Lärm). Das Mikrofon wird nur ausgewertet; nichts wird aufgenommen, gespeichert oder gesendet.
+  - *Auftragskarte* – Pflicht, Zusatz, Material und Hilfe, dauerhaft sichtbar (wie die Auftragsfolie).
+  - *Stundenablauf* – Phasen mit Minuten und Uhrzeiten; die laufende Phase ist hervorgehoben („noch 12 min · dann: Aufräumen“), optional mit Ton beim Wechsel.
+  - *Ruhezeichen* – ein Knopf, der sofort einen Ton spielt (Standard: Klangschale).
+  - *Dienste* – verteilt Dienste (z. B. „Kehren 2“) reihum; „Weiter“ gibt sie an die nächsten Kinder.
+  - *Hilfe-Warteliste* – die Lehrkraft trägt ein, wer Hilfe braucht; der Haken entfernt das Kind.
+  - *Anzeigetafel* – Spielstand für zwei Teams, auf Wunsch mit Spielzeit und Schlusspfiff.
+  - *Stationen* – Zeit je Station und Wechselzeit; die Tabelle zeigt, welche Gruppe wo ist und wohin sie wechselt, auf Wunsch mit Hallenplan daneben. Töne wie beim Intervalltimer.
+- **Vorlagen für den Bildschirm:** „Vorlagen“ in der unteren Leiste speichert die jetzige Anordnung unter einem Namen (bis zu 12, z. B. Ankommen, Arbeitsphase, Aufräumen) und lädt sie wieder; Timer beginnen dabei von vorn.
+- **Mehrpersonen-Stoppuhr:** Zeiten als Tabelle (CSV).
+- **Kartenquiz – Differenzierung (alles freiwillig, Standard: aus; Quiz → „Differenzierung“):**
+  - *Zweite Chance* – nach dem ersten Scannen zeigt „Zweite Chance“ nur die Verteilung ohne Lösung; die Kinder beraten sich und zeigen ihre Karten noch einmal. Gewertet wird die zweite Antwort; wer beim zweiten Scannen fehlt, behält die erste. Beim Auflösen steht dabei, wie viele in der ersten Runde richtig lagen. Solange die zweite Chance möglich ist, wird nicht automatisch aufgelöst.
+  - *G- und M-Fassung* – eine Frage kann eine zweite, leichtere Fassung haben (eigene Antworten, eigene richtige Antwort, optional eigener Text). Beide stehen nebeneinander am Beamer. Bei „Klasse & Karten“ wird je Tier G oder M gewählt; gewertet wird gegen die eigene Fassung. Die G-Fassung hat höchstens so viele Antworten wie die Frage.
+  - *Sternchenfrage* – zählt nur, wenn sie richtig beantwortet wird (Rangliste, Ergebnis, Anteil richtig).
+  - *Thema* je Frage – die Ergebnisansicht zeigt je Thema den Anteil richtiger Antworten und die Tiere, die dort höchstens die Hälfte richtig hatten.
+  - *Tipp* je Frage – im Quiz einblendbar. *Vorlesen* – liest Frage und Antworten mit der Stimme des Geräts vor.
+  - *Klassenziel* und *Abschluss ohne Podium* – am Ende steht das gemeinsame Ergebnis der Klasse (mit „Ziel erreicht“), ohne Tiernamen; der Zwischenstand entfällt dann.
+  - *Rangliste:* neue Spalte „Zuletzt“ – das letzte Quiz jedes Tiers im Vergleich zu den Quiz davor (▲, ▼, =).
+  - Welches Tier die G-Fassung bearbeitet, steht in der App (und im Abgleich mit Konto); wer das Tier ist, weiterhin nur auf dem Zuordnungsblatt. Bei sehr wenigen G-Kindern lässt die Verteilung der G-Fassung am Beamer Rückschlüsse auf einzelne Antworten zu.
+- **Import:** Fragen kennen zusätzlich `bonus`, `tag`, `hint` und `g` (siehe `docs/IMPORT.md`). Ältere Dateien bleiben gültig.
+- **Datenstand 5:** Geräte mit einer älteren App-Fassung speichern nichts mehr, bis sie die neue Version geladen haben („Neue Version“) – so gehen die neuen Objekte und Felder nicht verloren.
 
 ## Neu in 2.4.0
 

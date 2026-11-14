@@ -34,6 +34,39 @@ const absentByClass = new Map();
 const absentFor = id => { if (!absentByClass.has(id)) absentByClass.set(id, new Set()); return absentByClass.get(id); };
 const optLabel = (q, i) => q.options[i] ? `${LETTERS[i]} · ${q.options[i]}` : LETTERS[i];
 
+// ---------- Differenzierung (seit 2.5.0): alles abschaltbar, Standard wie bisher ----------
+// second = Zweite Chance (erst Verteilung zeigen, beraten, neu scannen), levels = G- und M-Fassung einer Frage,
+// goal = Klassenziel in Prozent (0 = aus), podium = Podium und Zwischenstand mit den Besten, speak = Vorlesen.
+// Je Frage (immer möglich): bonus = Sternchenfrage (zählt nur, wenn sie richtig ist), tag = Thema, hint = Tipp, g = G-Fassung.
+const DIFF0 = { second: false, levels: false, goal: 0, podium: true, speak: false };
+const diff = () => ({ ...DIFF0, ...(Q().diff || {}) });
+const sdiff = s => ({ ...DIFF0, ...(s?.diff || {}) });           // Einstellungen, mit denen dieses Quiz gestartet wurde
+const onG = (s, id) => !!s.g?.includes(id);                        // Kind arbeitet auf G-Niveau (s.g = Kennungen)
+const split = (s, q) => !!(q.g && s.g?.length);                    // Frage steht in zwei Fassungen am Beamer
+const optsFor = (s, q, id) => (split(s, q) && onG(s, id) ? q.g.options : q.options);
+const keyFor = (s, q, id) => (split(s, q) && onG(s, id) ? q.g.correct : q.correct);   // richtige Antwort für dieses Kind
+const gradedOf = s => s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+// Richtige und gewertete Fragen eines Kindes; Sternchenfragen zählen nur mit, wenn sie richtig sind
+function tally(s, id, qs = gradedOf(s)) {
+  let right = 0, asked = 0;
+  for (const q of qs) { const ok = q.answers[id] !== undefined && q.answers[id] === keyFor(s, q, id); if (ok) right++; if (ok || !q.bonus) asked++; }
+  return { right, asked };
+}
+// Auflösen: Nach einer zweiten Chance behalten Kinder, deren Karte beim zweiten Scannen fehlte, ihre erste Antwort
+function setReveal(x, on) {
+  const q = x.questions[x.index];
+  if (on && q.round === 2 && q.first) for (const [id, v] of Object.entries(q.first)) if (q.answers[id] === undefined) q.answers[id] = v;
+  x.reveal = on;
+}
+const countsOf = (answers, n, keep = () => true) => Array.from({ length: n }, (_, i) => Object.entries(answers).filter(([id, v]) => v === i && keep(id)).length);
+let hintFor = '';
+function speak(text) {
+  if (!('speechSynthesis' in window)) return toast('Dieser Browser kann nicht vorlesen.', { kind: 'warn' });
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text); u.lang = 'de-DE'; u.rate = 0.9;
+  speechSynthesis.speak(u);
+}
+
 let root = null, showNames = false, scanner = null, homeTimer = null, podiumId = null, rankId = null;
 // Nur für die Optik: welche Antworten schon gezeigt wurden (Kachel „springt“ nur beim ersten Mal), welche Auflösung schon animiert wurde, welches Podium schon Konfetti hatte
 const seenAns = new Set(); let seenQ = '', revealAnim = '', confettiFor = '';
@@ -90,30 +123,36 @@ function checkAuto(s) {
   if (Q().autoReveal === false || s.reveal) return;
   const q = s.questions[s.index], pres = present(s);
   if (!pres.length || autoDone.has(q.id) || pres.some(x => q.answers[x.id] === undefined)) return;
+  // Zweite Chance: Nach der ersten Runde entscheidet die Lehrkraft (beraten lassen oder gleich auflösen)
+  if (sdiff(s).second && q.correct !== null && q.round !== 2) return;
   autoDone.add(q.id);
-  setTimeout(() => updateRun(x => { if (x.questions[x.index].id === q.id) x.reveal = true; }), 800);
+  setTimeout(() => updateRun(x => { if (x.questions[x.index].id === q.id) setReveal(x, true); }), 800);
 }
 
 // ======================================================================
 // Podium nach dem Quiz: die besten drei Plätze (Gleichstand teilt sich einen Platz)
 // ======================================================================
 function ranking(s) {
-  const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+  const graded = gradedOf(s);
   if (!graded.length) return { graded: 0, places: [] };
-  const scores = s.students.map(x => ({ name: x.name, card: x.card, score: graded.filter(q => q.answers[x.id] === q.correct).length })).filter(x => x.score > 0);
+  const scores = s.students.map(x => ({ name: x.name, card: x.card, score: tally(s, x.id, graded).right })).filter(x => x.score > 0);
   const levels = [...new Set(scores.map(x => x.score))].sort((a, b) => b - a).slice(0, 3);
   return { graded: graded.length, places: levels.map((score, i) => ({ place: i + 1, score, names: scores.filter(x => x.score === score).sort((a, b) => a.name.localeCompare(b.name, 'de')) })) };
 }
 function drawPodium(s) {
-  const { graded, places } = ranking(s), a = animT('podium|' + s.id);
-  if (a.first && places.length) sound.quizFx('podium');
+  // Mit Podium: die besten drei. Ohne Podium (Differenzierung): nur das gemeinsame Ergebnis der Klasse, keine Namen.
+  const d = sdiff(s), { graded, places } = ranking(s), a = animT('podium|' + s.id), pct = stats(s).pct, show = d.podium && places.length > 0;
+  const hit = d.goal > 0 && pct !== null && pct >= d.goal;
+  if (a.first && (show || pct !== null)) sound.quizFx(show ? 'podium' : hit || !d.goal ? 'reveal' : 'show');
   const step = n => { const p = places[n - 1]; if (!p) return `<div class="pod-col empty"></div>`;
     return `<div class="pod-col p${n}"><div class="pod-names ${p.names.length > 4 ? 'many' : ''}">${p.names.map(x => `<span>${sym(x.card, '1.2em')} ${esc(x.name)}</span>`).join('')}</div>
       <div class="pod-step"><span class="pod-place">${n}</span><span class="pod-score">${p.score} / ${graded} richtig</span></div></div>`; };
+  const goal = d.goal > 0 && pct !== null ? `<p class="pod-goal ${hit ? 'hit' : ''}">${icon('target', 22)} Klassenziel ${d.goal} % · erreicht: <b>${pct} %</b> – ${hit ? 'geschafft!' : 'beim nächsten Mal schaffen wir das.'}</p>` : '';
+  const classBox = pct !== null ? `<div class="pod-class"><b>${pct} %</b><span>aller Antworten waren richtig</span></div>${goal}` : '<p class="qs-empty">Dieses Quiz hatte keine Fragen mit richtiger Antwort.</p>';
   root.innerHTML = `
   <section class="page quiz quiz-podium">
     <div class="run-head">
-      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>Unsere Besten<span class="dot">.</span></h1></div>
+      <div><p class="eyebrow">Kartenquiz · ${esc(s.className)} · ${esc(s.title)}</p><h1>${show ? 'Unsere Besten' : 'Unser Ergebnis'}<span class="dot">.</span></h1></div>
       <div class="tools">
         <button class="icon-btn" data-act="sound" title="Töne im Quiz" aria-label="Töne im Quiz">${icon(sound.quizSound().on ? 'volume' : 'mute')}</button>
         <button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>
@@ -121,16 +160,16 @@ function drawPodium(s) {
         <button class="btn primary sm" data-act="podium-close">${icon('check', 16)} Fertig</button>
       </div>
     </div>
-    <div class="qs pod-card" style="--tp:${a.t}">${places.length ? confetti(s.id) : ''}${places.length ? `<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : '<p class="qs-empty">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>'}</div>
+    <div class="qs pod-card ${show ? '' : 'no-podium'}" style="--tp:${a.t}">${show || hit ? confetti(s.id, show ? 3.5 : 0.3) : ''}${show ? `${goal}<div class="podium">${step(2)}${step(1)}${step(3)}</div>` : d.podium ? '<p class="qs-empty">Für ein Podium braucht es Fragen mit richtiger Antwort und mindestens eine richtige Antwort.</p>' : classBox}</div>
   </section>`;
 }
 
 // Konfetti nur beim ersten Anzeigen eines Podiums (bei „weniger Bewegung“ per CSS ausgeblendet)
-function confetti(id) {
+function confetti(id, delay = 3.5) {
   if (confettiFor === id) return '';
   confettiFor = id;
   const cols = ['#e0533d', '#2f6fd0', '#e3a312', '#7a4fc4', '#3f9a5c', '#f2c14e'];
-  return `<div class="confetti" aria-hidden="true">${Array.from({ length: 70 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};animation-delay:${(3.5 + Math.random() * 1.4).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 1.8).toFixed(2)}s;--dx:${(Math.random() * 160 - 80).toFixed(0)}px;--r:${(Math.random() * 720 - 360).toFixed(0)}deg;width:${6 + Math.round(Math.random() * 6)}px"></i>`).join('')}</div>`;
+  return `<div class="confetti" aria-hidden="true">${Array.from({ length: 70 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${cols[i % cols.length]};animation-delay:${(delay + Math.random() * 1.4).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 1.8).toFixed(2)}s;--dx:${(Math.random() * 160 - 80).toFixed(0)}px;--r:${(Math.random() * 720 - 360).toFixed(0)}deg;width:${6 + Math.round(Math.random() * 6)}px"></i>`).join('')}</div>`;
 }
 
 // ======================================================================
@@ -195,10 +234,14 @@ function drawHome() {
             ${c ? `<div class="tools"><button class="icon-btn sm" data-act="student-add" title="Kind hinzufügen (nächstes Tier)" aria-label="Kind hinzufügen" ${c.count >= CARD_COUNT ? 'disabled' : ''}>${icon('plus', 16)}</button><button class="icon-btn sm" data-act="class-edit" title="Name oder Kinderzahl ändern" aria-label="Klasse bearbeiten">${icon('edit', 16)}</button></div>` : ''}
           </div>
           ${c ? linkNote(c) : ''}
-          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span>${sym(s.card)}<span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button></li>`).join('')}</ul>
+          ${c ? (() => { const off = absentFor(c.id), n = c.students.filter(x => off.has(x.id)).length, lv = diff().levels; return `<ul class="student-list card-list">${c.students.slice().sort((a, b) => a.card - b.card).map(s => `<li class="${off.has(s.id) ? 'off' : ''}"><span class="card-no">${s.card}</span>${sym(s.card)}<span class="name">${esc(s.name)}</span>${off.has(s.id) ? '<small class="muted">fehlt heute</small>' : ''}${lv ? `<button class="lv-btn ${c.g?.includes(s.card) ? 'g' : ''}" data-act="level" data-card="${s.card}" title="Fassung wechseln: ${c.g?.includes(s.card) ? 'bearbeitet G' : 'bearbeitet M'}">${c.g?.includes(s.card) ? 'G' : 'M'}</button>` : ''}<button class="icon-btn xs ${off.has(s.id) ? 'active' : ''}" data-act="student-absent" data-id="${esc(s.id)}" title="${off.has(s.id) ? 'Ist doch da' : 'Fehlt heute'}" aria-pressed="${off.has(s.id)}">${icon(off.has(s.id) ? 'sick' : 'user', 14)}</button></li>`).join('')}</ul>
           <p class="muted small-text">${n ? `<b>${n === 1 ? '1 Kind fehlt' : n + ' Kinder fehlen'} heute</b> – im Quiz ist keine Antwort nötig. ` : ''}„Fehlt heute“ gilt bis zum nächsten Öffnen der App. Jedes Kind hat ein festes Tier (Karte 1 Adler, 2 Biber …) – in allen Klassen gleich. Wer welches Tier ist, steht nur auf deinem Zuordnungsblatt.</p>`; })() : `<p class="muted">Lege eine Klasse an: Name und Anzahl der Kinder genügen.</p><button class="btn primary full" data-act="class-new">${icon('plus')} Neue Klasse</button>`}
           <button class="btn ghost full" data-act="print">${icon('print', 16)} Karten drucken</button>
           <button class="btn ghost full" data-act="print-sheet" style="margin-top:8px">${icon('print', 16)} Zuordnungsblatt drucken</button>
+        </div>
+        <div class="card">
+          <div class="card-head small"><h3>${icon('sliders', 16)} Differenzierung</h3><div class="tools"><button class="btn ghost sm" data-act="diff">Einstellen</button></div></div>
+          <p class="muted small-text">${esc(diffSummary())}</p>
         </div>
         <div class="card">
           <h3>${icon('help', 16)} So geht’s</h3>
@@ -207,6 +250,7 @@ function drawHome() {
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
             <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf sein Tier → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
+            <li>Unter „Differenzierung“ lassen sich bei Bedarf Zweite Chance, G- und M-Fassung, Klassenziel, ein Abschluss ohne Podium und das Vorlesen einschalten.</li>
           </ol>
         </div>
       </aside>
@@ -218,7 +262,8 @@ function questionList(t) {
   if (!t.questions.length) return '<p class="muted">Noch keine Fragen in diesem Satz.</p>';
   return `<ol class="q-list">${t.questions.map((x, i) => `<li>
     ${x.img ? images.imgTag(x.img, 'q-thumb') : ''}<div class="q-main"><b>${esc(x.text) || (x.img ? '<span class="muted">(Bildfrage)</span>' : '<span class="muted">(Frage ohne Text)</span>')}</b>
-      <span class="q-opts">${x.options.map((o, k) => `<span class="l${k} ${x.correct === k ? 'ok' : ''}"><i>${LETTERS[k]}</i>${x.optImgs?.[k] ? ' ' + images.imgTag(x.optImgs[k], 'opt-thumb') : ''}${o ? ' ' + esc(o) : ''}</span>`).join('')}</span></div>
+      <span class="q-opts">${x.options.map((o, k) => `<span class="l${k} ${x.correct === k ? 'ok' : ''}"><i>${LETTERS[k]}</i>${x.optImgs?.[k] ? ' ' + images.imgTag(x.optImgs[k], 'opt-thumb') : ''}${o ? ' ' + esc(o) : ''}</span>`).join('')}</span>
+      ${x.bonus || x.tag || x.hint || x.g ? `<span class="q-marks">${x.bonus ? `<span title="Sternchenfrage: zählt nur, wenn sie richtig ist">${icon('star', 12)} Sternchen</span>` : ''}${x.tag ? `<span title="Thema">${esc(x.tag)}</span>` : ''}${x.hint ? `<span title="${esc(x.hint)}">${icon('bulb', 12)} Tipp</span>` : ''}${x.g ? `<span title="G-Fassung: ${esc(x.g.options.map((o, k) => LETTERS[k] + ' ' + o).join(' · '))}">G-Fassung${diff().levels ? '' : ' (aus)'}</span>` : ''}</span>` : ''}</div>
     <div class="q-tools">
       <button class="icon-btn xs" data-act="q-up" data-i="${i}" ${i ? '' : 'disabled'} title="Nach oben" aria-label="Nach oben">${icon('back', 14)}</button>
       <button class="icon-btn xs" data-act="q-edit" data-i="${i}" title="Bearbeiten" aria-label="Bearbeiten">${icon('edit', 14)}</button>
@@ -229,8 +274,8 @@ function questionList(t) {
 function stats(sess) {
   let right = 0, graded = 0, answered = 0;
   for (const q of sess.questions) {
-    const vals = Object.values(q.answers); answered += vals.length;
-    if (q.correct !== null) { graded += vals.length; right += vals.filter(v => v === q.correct).length; }
+    const ids = Object.keys(q.answers); answered += ids.length;
+    if (q.correct !== null) for (const id of ids) { const ok = q.answers[id] === keyFor(sess, q, id); if (ok) right++; if (ok || !q.bonus) graded++; }
   }
   return { answered, pct: graded ? Math.round(right / graded * 100) : null };
 }
@@ -239,11 +284,25 @@ function stats(sess) {
 // Beamer-Ansicht eines laufenden Quiz
 // ======================================================================
 function drawRun(s) {
-  const q = s.questions[s.index], n = q.options.length;
+  const q = s.questions[s.index];
   const byStudent = q.answers, pres = present(s), answered = pres.filter(x => byStudent[x.id] !== undefined).length;
-  const counts = q.options.map((_, i) => Object.values(byStudent).filter(v => v === i).length);
-  const votes = counts.reduce((a, b) => a + b, 0), pct = i => votes ? Math.round(counts[i] / votes * 100) : 0;
   const full = pres.length > 0 && answered === pres.length;
+  // Differenzierung: zwei Fassungen (M und G) nebeneinander, zweite Chance mit der Verteilung der ersten Runde
+  const d = sdiff(s), two = split(s, q), second = q.round === 2, canSecond = d.second && q.correct !== null && !second && !s.reveal;
+  const shown = s.reveal ? byStudent : second ? q.first || {} : null;   // welche Antworten als Verteilung zu sehen sind
+  const tiles = (o, key, keep, cls = '') => {
+    const counts = shown ? countsOf(shown, o.options.length, keep) : [], votes = counts.reduce((a, b) => a + b, 0), pct = i => (votes ? Math.round(counts[i] / votes * 100) : 0);
+    return `<div class="qs-opts n${o.options.length} ${o.optImgs?.some(Boolean) ? 'with-img' : ''} ${shown && !s.reveal ? 'static' : ''} ${cls}">${o.options.map((t, i) => `
+        <div class="qs-opt l${i} ${s.reveal && key === i ? 'correct' : ''} ${s.reveal && key !== null && key !== i ? 'wrong' : ''}" style="--d:${(0.35 + i * 0.12).toFixed(2)}s">
+          ${shape(i)}${o.optImgs?.[i] ? `<span class="qs-opt-img">${images.imgTag(o.optImgs[i])}</span>` : ''}<span class="qs-text">${esc(t)}</span>
+          ${shown ? `<span class="qs-stat"><b>${counts[i]}</b><small>${pct(i)} %</small></span><span class="qs-fill" style="--w:${pct(i)}%"></span>` : ''}
+          ${s.reveal && key === i ? `<span class="qs-ok" title="Richtige Antwort">${icon('check', 22)}</span>` : ''}
+        </div>`).join('')}</div>`;
+  };
+  const optsHtml = two ? `<div class="qs-lv"><div class="qs-lvcol"><p class="qs-lvtag">M</p>${tiles(q, q.correct, id => !onG(s, id))}</div>
+        <div class="qs-lvcol"><p class="qs-lvtag g">G</p>${q.g.text ? `<p class="qs-lvq">${esc(q.g.text)}</p>` : ''}${tiles(q.g, q.g.correct, id => onG(s, id))}</div></div>` : tiles(q, q.correct);
+  const badges = `${q.bonus ? `<span class="qs-badge star">${icon('star', 15)} Sternchenfrage – zählt nur, wenn sie richtig ist</span>` : ''}${second && !s.reveal ? `<span class="qs-badge">${icon('repeat', 15)} Zweite Chance – berate dich mit deinem Nachbarn, dann Karten noch einmal zeigen</span>` : ''}`;
+  const hint = q.hint && hintFor === q.id && !s.reveal ? `<p class="qs-hint">${icon('bulb', 20)} ${esc(q.hint)}</p>` : '';
   const fs = `<button class="icon-btn" data-act="present" title="Vollbild" aria-label="Vollbild">${icon(document.body.classList.contains('presenting') ? 'shrink' : 'expand')}</button>`;
   const snd = `<button class="icon-btn" data-act="sound" title="Töne im Quiz" aria-label="Töne im Quiz">${icon(sound.quizSound().on ? 'volume' : 'mute')}</button>`;
   const phone = account.loggedIn() ? (Date.now() - live.phoneAt < 8000 ? `${icon('check', 14)} Handy verbunden` : `${icon('camera', 14)} Handy: auf dem Handy mit demselben Konto anmelden → Quiz → „Karten scannen“`) : `${icon('camera', 14)} Ohne Konto: auf diesem Gerät scannen oder das Quiz auf dem Handy starten`;
@@ -287,12 +346,14 @@ function drawRun(s) {
   if (board) { brd = animT('board|' + q.id); if (brd.first) sound.quizFx('board'); } else animAt.delete('board|' + q.id);
   sound.quizMusic(!s.reveal && !full);
   const ring = pres.length ? answered / pres.length * 100 : 0;
-  const right = s.reveal && q.correct !== null && answered ? Math.round(pres.filter(x => byStudent[x.id] === q.correct).length / answered * 100) : null;
+  const right = s.reveal && q.correct !== null && answered ? Math.round(pres.filter(x => byStudent[x.id] !== undefined && byStudent[x.id] === keyFor(s, q, x.id)).length / answered * 100) : null;
+  // Zweite Chance: Wie viele lagen in der ersten Runde richtig? (erst nach dem Auflösen zu sehen)
+  const firstN = Object.keys(q.first || {}).length, firstRight = s.reveal && firstN ? Math.round(Object.entries(q.first).filter(([id, v]) => v === keyFor(s, q, id)).length / firstN * 100) : null;
 
   // Zwischenstand: die besten fünf nach den bisher aufgelösten Fragen
   const boardHtml = () => {
     const graded = s.questions.slice(0, s.index + 1).filter(x => x.correct !== null);
-    const rows = pres.map(x => ({ x, score: graded.filter(g => g.answers[x.id] === g.correct).length, plus: q.correct !== null && byStudent[x.id] === q.correct }))
+    const rows = pres.map(x => ({ x, score: tally(s, x.id, graded).right, plus: q.correct !== null && byStudent[x.id] !== undefined && byStudent[x.id] === keyFor(s, q, x.id) }))
       .filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.x.name.localeCompare(b.x.name, 'de'));
     const top = rows.slice(0, 5), more = rows.filter(r => r.score === top[top.length - 1]?.score).length - top.filter(r => r.score === top[top.length - 1]?.score).length;
     let place = 0, last = -1;
@@ -315,25 +376,23 @@ function drawRun(s) {
     </div>
     <div class="qs ${s.reveal ? 'revealed' : ''} ${board ? 'boarding' : ''}" style="--ti:${intro.t};--tr:${rev ? rev.t : '0ms'};--tb:${brd ? brd.t : '0ms'}">
       <div class="qs-head">
-        <div class="qs-q">${q.text || !q.img ? `<p>${esc(q.text) || '<span class="qs-oral">Frage mündlich oder an der Tafel</span>'}</p>` : ''}${q.img && !board ? `<div class="qs-img">${images.imgTag(q.img)}</div>` : ''}</div>
+        <div class="qs-q">${badges ? `<div class="qs-badges">${badges}</div>` : ''}${q.text || !q.img ? `<p>${esc(q.text) || '<span class="qs-oral">Frage mündlich oder an der Tafel</span>'}</p>` : ''}${q.img && !board ? `<div class="qs-img">${images.imgTag(q.img)}</div>` : ''}${hint}</div>
         <div class="qs-count ${full ? 'full' : ''}" title="${answered} von ${pres.length} haben geantwortet">
           <svg viewBox="0 0 40 40" aria-hidden="true"><circle class="r-bg" cx="20" cy="20" r="17"/><circle class="r-fg" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="${ring.toFixed(1)} 100"/></svg>
           <span><b>${answered}</b><small>von ${pres.length}</small></span>
         </div>
       </div>
-      ${board ? boardHtml() : `<div class="qs-opts n${n} ${q.optImgs?.some(Boolean) ? 'with-img' : ''}">${q.options.map((o, i) => `
-        <div class="qs-opt l${i} ${s.reveal && q.correct === i ? 'correct' : ''} ${s.reveal && q.correct !== null && q.correct !== i ? 'wrong' : ''}" style="--d:${(0.35 + i * 0.12).toFixed(2)}s">
-          ${shape(i)}${q.optImgs?.[i] ? `<span class="qs-opt-img">${images.imgTag(q.optImgs[i])}</span>` : ''}<span class="qs-text">${esc(o)}</span>
-          ${s.reveal ? `<span class="qs-stat"><b>${counts[i]}</b><small>${pct(i)} %</small></span><span class="qs-fill" style="--w:${pct(i)}%"></span>` : ''}
-          ${s.reveal && q.correct === i ? `<span class="qs-ok" title="Richtige Antwort">${icon('check', 22)}</span>` : ''}
-        </div>`).join('')}</div>`}
+      ${board ? boardHtml() : optsHtml}
       <div class="qs-foot">
-        <div class="qs-info">${right !== null ? `<span class="qs-right"><b>${right} %</b> richtig</span>` : s.reveal ? '' : full ? '<span class="qs-wait done">Alle haben geantwortet!</span>' : '<span class="qs-wait">Karten hochhalten …</span>'}</div>
+        <div class="qs-info">${right !== null ? `<span class="qs-right"><b>${right} %</b> richtig${firstRight !== null ? ` <small>· in der ersten Runde ${firstRight} %</small>` : ''}</span>` : s.reveal ? '' : full ? '<span class="qs-wait done">Alle haben geantwortet!</span>' : '<span class="qs-wait">Karten hochhalten …</span>'}</div>
         <div class="tools">
           ${q.correct === null ? `<label class="run-correct no-present">Richtig: <select class="select sm" data-act="set-correct"><option value="">–</option>${q.options.map((_, i) => `<option value="${i}">${LETTERS[i]}</option>`).join('')}</select></label>` : ''}
+          ${d.speak && (q.text || q.options.some(Boolean)) ? `<button class="btn ghost" data-act="speak" title="Frage und Antworten vorlesen">${icon('volume', 16)} Vorlesen</button>` : ''}
+          ${q.hint && !s.reveal ? `<button class="btn ghost" data-act="hint">${icon('bulb', 16)} ${hintFor === q.id ? 'Tipp ausblenden' : 'Tipp'}</button>` : ''}
           <button class="btn ghost" data-act="prev" ${s.index ? '' : 'disabled'}>${icon('back', 16)} Zurück</button>
-          <button class="btn ${s.reveal ? 'ghost' : 'primary'}" data-act="reveal">${icon('chart', 16)} ${s.reveal ? 'Verbergen' : 'Auflösen'}</button>
-          ${s.reveal ? `<button class="btn ghost" data-act="board">${icon('trophy', 16)} ${board ? 'Antworten' : 'Zwischenstand'}</button>` : ''}
+          ${canSecond ? `<button class="btn ${full ? 'primary' : 'ghost'}" data-act="second" ${answered ? '' : 'disabled'} title="Zeigt die Verteilung ohne Lösung; die Kinder beraten sich und zeigen ihre Karten noch einmal">${icon('repeat', 16)} Zweite Chance</button>` : ''}
+          <button class="btn ${s.reveal || (canSecond && full) ? 'ghost' : 'primary'}" data-act="reveal">${icon('chart', 16)} ${s.reveal ? 'Verbergen' : 'Auflösen'}</button>
+          ${s.reveal && d.podium ? `<button class="btn ghost" data-act="board">${icon('trophy', 16)} ${board ? 'Antworten' : 'Zwischenstand'}</button>` : ''}
           ${s.index < s.questions.length - 1 ? `<button class="btn ${s.reveal ? 'primary' : 'ghost'}" data-act="next">Weiter ${icon('forward', 16)}</button>` : `<button class="btn ${s.reveal ? 'primary' : 'ghost'}" data-act="end">${icon('check', 16)} Fertig</button>`}
         </div>
       </div>
@@ -345,7 +404,7 @@ function drawRun(s) {
       <div class="tiles">${s.students.slice().sort((a, b) => a.card - b.card).map(x => {
         if (s.absent?.includes(x.id)) return `<button class="tile absent" data-act="tile" data-id="${esc(x.id)}" title="Fehlt heute – antippen zum Ändern"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span><small>fehlt</small></button>`;
         const a = byStudent[x.id], has = a !== undefined, open = s.reveal && showNames && has;
-        const cl = !has ? '' : open && q.correct !== null ? (a === q.correct ? 'right' : 'miss') : 'done';
+        const cl = !has ? '' : open && q.correct !== null ? (a === keyFor(s, q, x.id) ? 'right' : 'miss') : 'done';
         return `<button class="tile ${cl} ${popped.has(x.id) ? 'pop' : ''}" data-act="tile" data-id="${esc(x.id)}" title="Antwort von Hand setzen"><span class="t-no">${x.card}</span>${sym(x.card)}<span class="t-name">${esc(x.name)}</span>${open ? `<b class="t-ans">${LETTERS[a]}</b>` : has ? icon('check', 14) : ''}</button>`;
       }).join('')}</div>
       <p class="hint no-present">${phone}${live.error ? ` · <span class="warn-text">${esc(live.error)}</span>` : ''}</p>
@@ -417,7 +476,14 @@ function onClick(e) {
     // laufendes Quiz
     case 'prev': return go(-1);
     case 'next': return go(1);
-    case 'reveal': boardFor = ''; return updateRun(s => { s.reveal = !s.reveal; });
+    case 'reveal': boardFor = ''; return updateRun(s => setReveal(s, !s.reveal));
+    // Zweite Chance: erste Antworten merken, Frage bekommt eine neue Kennung (so beginnen Scannen und Handy-Abgleich frisch)
+    case 'second': hintFor = ''; return updateRun(s => { const q = s.questions[s.index]; if (!Object.keys(q.answers).length) return; q.first = { ...q.answers }; q.answers = {}; q.round = 2; q.id = uid(); s.reveal = false; });
+    case 'hint': { const s = running(); if (!s) return; const id = s.questions[s.index].id; hintFor = hintFor === id ? '' : id; return draw(); }
+    case 'speak': { const s = running(); if (!s) return; const q = s.questions[s.index], say = o => o.options.map((t, i) => (t ? `${LETTERS[i]}: ${t}.` : '')).join(' ');
+      return speak(split(s, q) ? `${q.text}. M-Fassung. ${say(q)} G-Fassung. ${q.g.text ? q.g.text + '. ' : ''}${say(q.g)}` : `${q.text}. ${say(q)}`); }
+    case 'diff': return diffDialog();
+    case 'level': { const c = cls(), card = Number(b.dataset.card); if (!c) return; return store.update(s => { const k = s.quiz.classes.find(x => x.id === c.id); if (!k) return; const g = new Set(k.g || []); g.has(card) ? g.delete(card) : g.add(card); k.g = [...g].sort((x, y) => x - y); }); }
     case 'begin': { const s = running(); if (s) begun.add(s.id); sound.quizFx('go'); return draw(); }
     case 'board': { const s = running(); if (!s) return; const id = s.questions[s.index].id; boardFor = boardFor === id ? '' : id; return draw(); }
     case 'sound': return soundDialog();
@@ -431,7 +497,7 @@ function onClick(e) {
 }
 
 function updateRun(fn) { store.update(st => { const s = st.quiz.sessions.find(x => !x.done && x.device === DEVICE); if (s) fn(s); }); }
-function go(d) { updateRun(s => { const n = Math.max(0, Math.min(s.questions.length - 1, s.index + d)); if (n !== s.index) { s.index = n; s.reveal = false; } }); }
+function go(d) { hintFor = ''; window.speechSynthesis?.cancel(); updateRun(s => { const n = Math.max(0, Math.min(s.questions.length - 1, s.index + d)); if (n !== s.index) { s.index = n; s.reveal = false; } }); }
 
 function start(quick) {
   const c = cls(), t = qset(); if (!c) return;
@@ -447,6 +513,7 @@ function start(quick) {
   store.update(s => {
     if (old) s.quiz.sessions.find(x => x.id === old.id).done = true;
     s.quiz.sessions.push({ id: uid(), device: DEVICE, classId: c.id, className: c.name, setId: quick ? '' : t.id, title: quick ? 'Schnellstart' : t.title, date: todayISO(), at: Date.now(), index: 0, reveal: false, done: false, absent: c.students.filter(x => absentFor(c.id).has(x.id)).map(x => x.id),
+      diff: diff(), g: diff().levels ? c.students.filter(x => c.g?.includes(x.card)).map(x => x.id) : [],
       students: c.students.map(x => ({ id: x.id, name: x.name, card: x.card })), questions: questions.map(x => ({ ...structuredClone(x), id: uid(), answers: {} })) });
   });
   live.applied.clear(); live.lastCmd = null; live.lastControl = '';
@@ -458,7 +525,7 @@ async function endRun() {
   const st = stats(s);
   if (!(await new Promise(res => { let ok = false; const d = dialog({ title: 'Quiz beenden', submit: 'Beenden', body: `<p>${st.answered ? `Die Ergebnisse (${st.answered} Antworten) werden unter „Ergebnisse“ gespeichert.` : 'Es wurden noch keine Antworten erfasst. Das Quiz wird ohne Ergebnis beendet.'}</p>`, onSubmit: () => { ok = true; res(true); } }); d.el.addEventListener('close', () => { if (!ok) res(false); }); }))) return;
   scanner?.close();
-  const showPodium = st.answered && ranking(s).places.length;
+  const showPodium = st.answered && (sdiff(s).podium ? ranking(s).places.length : st.pct !== null);
   if (showPodium) podiumId = s.id;
   else if (document.body.classList.contains('presenting')) toggleFullscreen();
   store.update(x => {
@@ -474,10 +541,10 @@ async function endRun() {
 
 function tileDialog(studentId) {
   const s = running(); if (!s) return;
-  const stu = s.students.find(x => x.id === studentId), q = s.questions[s.index], cur = q.answers[studentId];
+  const stu = s.students.find(x => x.id === studentId), q = s.questions[s.index], cur = q.answers[studentId], mine = { options: optsFor(s, q, studentId) };
   const d = dialog({ title: `${stu.name} (Karte ${stu.card})`, submit: null, cancel: 'Schließen', body: `
     <p class="muted small-text">Antwort von Hand setzen, z. B. wenn die Karte fehlt.</p>
-    <div class="answer-pick">${q.options.map((o, i) => `<button type="button" class="btn ${cur === i ? 'primary' : 'ghost'}" data-a="${i}">${esc(optLabel(q, i))}</button>`).join('')}
+    <div class="answer-pick">${mine.options.map((o, i) => `<button type="button" class="btn ${cur === i ? 'primary' : 'ghost'}" data-a="${i}">${esc(optLabel(mine, i))}</button>`).join('')}
     <button type="button" class="btn ghost" data-a="-1">Keine Antwort</button>
     <button type="button" class="btn ghost" data-a="absent">${s.absent?.includes(studentId) ? 'Ist doch da' : 'Fehlt heute (zählt nicht mit)'}</button></div>`,
     onOpen: (el, close) => el.querySelectorAll('[data-a]').forEach(btn => btn.onclick = () => {
@@ -506,7 +573,7 @@ function localProvider() {
       return { sessionId: s.id, title: s.className, index: s.index, total: s.questions.length, text: q.text, options: q.options, reveal: s.reveal, roster: present(s).map(x => ({ card: x.card, name: x.name })), answers: byCard };
     },
     answer(card, idx) { updateRun(s => { const stu = s.students.find(x => x.card === card); if (stu) s.questions[s.index].answers[stu.id] = idx; }); },
-    command(c) { if (c === 'reveal') updateRun(s => { s.reveal = !s.reveal; }); else go(c === 'next' ? 1 : -1); },
+    command(c) { if (c === 'reveal') updateRun(s => setReveal(s, !s.reveal)); else go(c === 'next' ? 1 : -1); },
     subscribe(fn) { return store.subscribe(fn); },
   };
 }
@@ -610,7 +677,7 @@ function applyScans(s, p) {
   const cmd = p.cmd && p.cmd.id !== live.lastCmd ? p.cmd : null;
   if (cmd) live.lastCmd = cmd.id;
   if (changes.length) updateRun(x => { for (const [qid, card, idx] of changes) { const q = x.questions.find(y => y.id === qid), stu = x.students.find(y => y.card === card); if (q && stu && idx >= 0 && idx < q.options.length) q.answers[stu.id] = idx; } });
-  if (cmd) { if (cmd.type === 'reveal') updateRun(x => { x.reveal = !x.reveal; }); else if (cmd.type === 'next' || cmd.type === 'prev') go(cmd.type === 'next' ? 1 : -1); }
+  if (cmd) { if (cmd.type === 'reveal') updateRun(x => setReveal(x, !x.reveal)); else if (cmd.type === 'next' || cmd.type === 'prev') go(cmd.type === 'next' ? 1 : -1); }
   if (!changes.length && !cmd && wasConnected !== (Date.now() - live.phoneAt < 8000)) draw();
 }
 
@@ -693,18 +760,21 @@ function classEditDialog(c) {
 const sessTime = x => x.at || Date.parse(`${x.date}T00:00:00`) || 0;
 const rankSessions = c => Q().sessions.filter(x => x.done && x.classId === c.id && sessTime(x) >= (c.resetAt || 0));
 function classRanking(c) {
-  const ses = rankSessions(c), rows = new Map();
-  for (let n = 1; n <= c.count; n++) rows.set(n, { card: n, name: ANIMALS[n - 1], quizzes: 0, right: 0, asked: 0 });
+  const ses = rankSessions(c).slice().sort((a, b) => sessTime(a) - sessTime(b)), rows = new Map();
+  for (let n = 1; n <= c.count; n++) rows.set(n, { card: n, name: ANIMALS[n - 1], quizzes: 0, right: 0, asked: 0, last: null, before: [0, 0] });
   for (const x of ses) {
-    const graded = x.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+    const graded = gradedOf(x);
     if (!graded.length) continue;
     for (const stu of x.students) {
       const r = rows.get(stu.card); if (!r) continue;
       if (x.absent?.includes(stu.id) && !graded.some(q => q.answers[stu.id] !== undefined)) continue;
-      r.quizzes++; r.asked += graded.length; r.right += graded.filter(q => q.answers[stu.id] === q.correct).length;
+      const t = tally(x, stu.id, graded);
+      // Eigener Fortschritt: letztes Quiz im Vergleich zu allen davor
+      r.before = [r.right, r.asked]; r.last = t.asked ? t.right / t.asked : null;
+      r.quizzes++; r.asked += t.asked; r.right += t.right;
     }
   }
-  const list = [...rows.values()].map(r => ({ ...r, pct: r.asked ? r.right / r.asked : null }));
+  const list = [...rows.values()].map(r => ({ ...r, pct: r.asked ? r.right / r.asked : null, trend: r.last === null || !r.before[1] ? 0 : Math.sign(Math.round((r.last - r.before[0] / r.before[1]) * 100)) }));
   list.sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || b.right - a.right || a.card - b.card);
   let place = 0, prev = null;
   list.forEach((r, i) => { const key = r.pct === null ? null : `${r.pct}|${r.right}`; if (key === null) r.place = null; else { if (key !== prev) place = i + 1; prev = key; r.place = place; } });
@@ -713,8 +783,8 @@ function classRanking(c) {
 const pctText = r => r.pct === null ? '–' : `${Math.round(r.pct * 100)} %`;
 function rankTable(c, limit = 0) {
   const { list } = classRanking(c), rows = limit ? list.filter(r => r.place !== null).slice(0, limit) : list;
-  return `<table class="table-std rank-table"><thead><tr><th>Platz</th><th>Tier</th><th>Richtig</th><th>Antworten</th><th>Quiz</th></tr></thead><tbody>${rows.map(r => `
-    <tr class="${r.place === 1 ? 'gold' : r.place === 2 ? 'silver' : r.place === 3 ? 'bronze' : ''} ${r.place === null ? 'none' : ''}"><td class="place">${r.place ?? '–'}</td><th>${sym(r.card)} <span>${esc(r.name)}</span> <small class="muted">${r.card}</small></th><td class="pct">${pctText(r)}</td><td>${r.asked ? `${r.right} / ${r.asked}` : '–'}</td><td>${r.quizzes}</td></tr>`).join('')}</tbody></table>`;
+  return `<table class="table-std rank-table"><thead><tr><th>Platz</th><th>Tier</th><th>Richtig</th><th>Antworten</th><th>Quiz</th><th title="Letztes Quiz im Vergleich zu den Quiz davor">Zuletzt</th></tr></thead><tbody>${rows.map(r => `
+    <tr class="${r.place === 1 ? 'gold' : r.place === 2 ? 'silver' : r.place === 3 ? 'bronze' : ''} ${r.place === null ? 'none' : ''}"><td class="place">${r.place ?? '–'}</td><th>${sym(r.card)} <span>${esc(r.name)}</span> <small class="muted">${r.card}</small></th><td class="pct">${pctText(r)}</td><td>${r.asked ? `${r.right} / ${r.asked}` : '–'}</td><td>${r.quizzes}</td><td class="trend t${r.trend}">${r.last === null ? '–' : `${r.trend > 0 ? '▲' : r.trend < 0 ? '▼' : '='} ${Math.round(r.last * 100)} %`}</td></tr>`).join('')}</tbody></table>`;
 }
 function rankCard(c) {
   const { sessions, list } = classRanking(c), any = list.some(r => r.place !== null);
@@ -743,7 +813,7 @@ function drawRanking(c) {
 function rankCsv(c) {
   if (!c) return;
   const { list } = classRanking(c);
-  const lines = [['Platz', 'Karte', 'Tier', 'Anteil richtig', 'Richtig', 'Antworten', 'Quiz'], ...list.map(r => [r.place ?? '', r.card, r.name, r.pct === null ? '' : Math.round(r.pct * 100) + ' %', r.right, r.asked, r.quizzes])];
+  const lines = [['Platz', 'Karte', 'Tier', 'Anteil richtig', 'Richtig', 'Antworten', 'Quiz', 'Letztes Quiz'], ...list.map(r => [r.place ?? '', r.card, r.name, r.pct === null ? '' : Math.round(r.pct * 100) + ' %', r.right, r.asked, r.quizzes, r.last === null ? '' : Math.round(r.last * 100) + ' %'])];
   downloadFile(`Rangliste-${c.name}-${todayISO()}.csv`.replace(/[\\/:*?"<>|]/g, '_'), '﻿' + lines.map(l => l.join(';')).join('\r\n'), 'text/csv;charset=utf-8');
 }
 async function rankReset(c) {
@@ -795,7 +865,8 @@ function setDialog(t) {
 const SETS_KIND = 'quiz-sets';
 function exportSets(sets) {
   return JSON.stringify({ app: 'KlassenKompass', kind: SETS_KIND, v: 1, sets: sets.map(t => ({ title: t.title,
-    questions: t.questions.map(x => ({ text: x.text, options: x.options, correct: x.correct === null ? null : LETTERS[x.correct] })) })) }, null, 2);
+    questions: t.questions.map(x => ({ text: x.text, options: x.options, correct: x.correct === null ? null : LETTERS[x.correct], ...(x.bonus ? { bonus: true } : {}), ...(x.tag ? { tag: x.tag } : {}), ...(x.hint ? { hint: x.hint } : {}),
+      ...(x.g ? { g: { ...(x.g.text ? { text: x.g.text } : {}), options: x.g.options, correct: x.g.correct === null ? null : LETTERS[x.g.correct] } } : {}) })) })) }, null, 2);
 }
 // Fragensätze lesen: js/importformat.js (parseSets bleibt hier erreichbar). Importiert wird im gemeinsamen Dialog (js/importer.js).
 export { parseSets } from './importformat.js';
@@ -835,6 +906,15 @@ function questionDialog(t, index = -1) {
     <label class="field">Antwortart<select name="type" class="select">${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
     <p class="eyebrow">Antworten · Kreis = richtige Antwort · Bild statt oder zusätzlich zum Text möglich</p>
     <div data-opts>${optHtml()}</div>
+    <details class="q-diff" ${old?.bonus || old?.tag || old?.hint || old?.g ? 'open' : ''}><summary>Differenzierung (optional)</summary>
+      <label class="check"><input type="checkbox" name="bonus" ${old?.bonus ? 'checked' : ''}> Sternchenfrage – zählt nur, wenn sie richtig beantwortet wird</label>
+      <div class="two"><label class="field">Thema <small class="muted">(für die Auswertung)</small><input name="tag" class="input" maxlength="40" list="q-tags" value="${esc(old?.tag || '')}" placeholder="z. B. Messen"><datalist id="q-tags">${[...new Set(t.questions.map(x => x.tag).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist></label>
+      <label class="field">Tipp <small class="muted">(im Quiz einblendbar)</small><input name="hint" class="input" maxlength="160" value="${esc(old?.hint || '')}" placeholder="z. B. Denk an die Sägerichtung."></label></div>
+      <p class="eyebrow">G-Fassung · zweite, leichtere Fassung derselben Frage${diff().levels ? '' : ' – wird erst gezeigt, wenn „G- und M-Fassung“ eingeschaltet ist'}</p>
+      <label class="field">Fragetext G <small class="muted">(leer = gleicher Text)</small><input name="gtext" class="input" maxlength="400" value="${esc(old?.g?.text || '')}"></label>
+      ${[0, 1, 2, 3].map(i => `<div class="opt-row"><label class="opt-correct" title="Richtige Antwort der G-Fassung"><input type="radio" name="gcorrect" value="${i}" ${old?.g?.correct === i ? 'checked' : ''}><span>${LETTERS[i]}</span></label><input name="g${i}" class="input" maxlength="120" value="${esc(old?.g?.options[i] || '')}" placeholder="${i < 2 ? `Antwort ${LETTERS[i]}` : `Antwort ${LETTERS[i]} (optional)`}"></div>`).join('')}
+      <p class="muted small-text">Die G-Fassung braucht 2 bis 4 Antworten (nicht mehr als die Frage oben) und eine richtige Antwort. Leer lassen = keine G-Fassung. Die Antworten oben sind die M-Fassung.</p>
+    </details>
     ${old ? '' : '<label class="check"><input type="checkbox" name="more" checked> Danach gleich die nächste Frage anlegen</label>'}`,
     onOpen: el => {
       const sel = el.querySelector('[name=type]'), wrap = el.querySelector('[data-opts]'), qwrap = el.querySelector('[data-qslot]');
@@ -870,6 +950,19 @@ function questionDialog(t, index = -1) {
       if (qImg) q.img = qImg;
       if (oi.some(Boolean)) q.optImgs = oi;
       if (!q.text && !q.img && options.every(o => !o) && !oi.some(Boolean)) throw new Error('Bitte eine Frage, ein Bild oder Antworten eintragen.');
+      if (fd.get('bonus') === 'on') q.bonus = true;
+      const tag = String(fd.get('tag') || '').trim().slice(0, 40), hint = String(fd.get('hint') || '').trim().slice(0, 160);
+      if (tag) q.tag = tag; if (hint) q.hint = hint;
+      // G-Fassung: Antworten lückenlos von A an
+      const gAll = [0, 1, 2, 3].map(i => String(fd.get('g' + i) || '').trim()), gN = gAll.findLastIndex(Boolean) + 1;
+      if (gN) {
+        const gc = fd.get('gcorrect'), g = { text: String(fd.get('gtext') || '').trim().slice(0, 400), options: gAll.slice(0, gN), correct: gc === null || gc === '' ? null : Number(gc) };
+        if (gN < 2 || g.options.some(o => !o)) throw new Error('G-Fassung: Bitte mindestens die Antworten A und B ausfüllen, ohne Lücke.');
+        if (gN > n) throw new Error(`G-Fassung: höchstens ${n} Antworten – so viele wie die Frage oben (sonst passt die Karte nicht).`);
+        if (q.correct === null) throw new Error('G-Fassung: Eine Umfrage ohne richtige Antwort braucht keine zweite Fassung.');
+        if (g.correct === null || g.correct >= gN) throw new Error('G-Fassung: Bitte die richtige Antwort markieren.');
+        q.g = g;
+      }
       store.update(s => { const set = s.quiz.sets.find(x => x.id === t.id); if (old) set.questions[index] = q; else set.questions.push(q); });
       if (!old && fd.get('more') === 'on') setTimeout(() => questionDialog(qset()), 50);
     } });
@@ -940,19 +1033,29 @@ function printCards(cards, per) {
 // ======================================================================
 function resultDialog(id) {
   const s = Q().sessions.find(x => x.id === id); if (!s) return;
-  const st = stats(s), graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
+  const st = stats(s), graded = gradedOf(s), d = sdiff(s);
   const rows = s.students.slice().sort((a, b) => a.card - b.card).map(stu => {
-    const right = graded.filter(q => q.answers[stu.id] === q.correct).length;
+    const { right, asked } = tally(s, stu.id, graded);
     if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) return `<tr class="absent"><th>${sym(stu.card)} ${esc(stu.name)} <small class="muted">${stu.card}</small></th><td class="none" colspan="${s.questions.length + 1}">fehlte</td></tr>`;
-    return `<tr><th>${sym(stu.card)} ${esc(stu.name)} <small class="muted">${stu.card}</small></th>${s.questions.map(q => { const a = q.answers[stu.id]; return `<td class="${a === undefined ? 'none' : q.correct === null ? '' : a === q.correct ? 'right' : 'miss'}">${a === undefined ? '–' : LETTERS[a]}</td>`; }).join('')}<td class="sum">${graded.length ? `${right}/${graded.length}` : '–'}</td></tr>`;
+    return `<tr><th>${sym(stu.card)} ${esc(stu.name)} <small class="muted">${stu.card}</small></th>${s.questions.map(q => { const a = q.answers[stu.id]; return `<td class="${a === undefined ? 'none' : q.correct === null ? '' : a === keyFor(s, q, stu.id) ? 'right' : 'miss'}">${a === undefined ? '–' : LETTERS[a]}</td>`; }).join('')}<td class="sum">${graded.length ? `${right}/${asked}` : '–'}</td></tr>`;
   }).join('');
-  const qpct = q => { const v = Object.values(q.answers); return q.correct === null || !v.length ? '–' : Math.round(v.filter(x => x === q.correct).length / v.length * 100) + ' %'; };
+  const share = (q, map) => { const e = Object.entries(map || {}); return q.correct === null || !e.length ? null : Math.round(e.filter(([id, v]) => v === keyFor(s, q, id)).length / e.length * 100); };
+  const qpct = q => { const v = share(q, q.answers); return v === null ? '–' : v + ' %'; };
+  // Nach Thema: Anteil richtig je Thema und die Tiere, die dort höchstens die Hälfte richtig hatten
+  const tags = [...new Set(graded.map(q => q.tag).filter(Boolean))];
+  const tagRows = tags.map(tag => {
+    const qs = graded.filter(q => q.tag === tag); let right = 0, all = 0; const weak = [];
+    for (const stu of s.students) { const t = tally(s, stu.id, qs.filter(q => q.answers[stu.id] !== undefined)); if (!t.asked) continue; right += t.right; all += t.asked; if (t.right * 2 <= t.asked) weak.push(stu); }
+    return `<tr><th>${esc(tag)}</th><td>${qs.length}</td><td class="pct">${all ? Math.round(right / all * 100) + ' %' : '–'}</td><td class="weak">${weak.sort((a, b) => a.card - b.card).map(x => `<span>${sym(x.card)} ${esc(x.name)}</span>`).join('') || '–'}</td></tr>`;
+  }).join('');
   dialog({ title: `${s.title} · ${s.className}`, submit: null, cancel: 'Schließen', wide: true, body: `
     <p class="muted">${esc(displayDate(s.date))} · ${s.questions.length} Frage(n) · ${st.answered} Antworten${st.pct !== null ? ` · <b>${st.pct} % richtig</b>` : ''}</p>
-    <ol class="result-qs">${s.questions.map((q, i) => `<li>${q.img ? images.imgTag(q.img, 'opt-thumb') + ' ' : ''}<b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]} · ${qpct(q)}` : 'ohne richtige Antwort'}</span>
+    <ol class="result-qs">${s.questions.map((q, i) => `<li>${q.img ? images.imgTag(q.img, 'opt-thumb') + ' ' : ''}<b>${esc(q.text) || `Frage ${i + 1}`}</b> <span class="muted">${q.correct !== null ? `richtig: ${LETTERS[q.correct]}${split(s, q) ? ` (G: ${LETTERS[q.g.correct]})` : ''} · ${qpct(q)}${q.first ? ` · erste Runde ${share(q, q.first)} %` : ''}${q.bonus ? ' · Sternchenfrage' : ''}${q.tag ? ' · ' + esc(q.tag) : ''}` : 'ohne richtige Antwort'}</span>
       <span class="q-dist">${q.options.map((o, k) => `<span class="${q.correct === k ? 'ok' : ''}">${LETTERS[k]}: ${Object.values(q.answers).filter(v => v === k).length}</span>`).join('')}</span></li>`).join('')}</ol>
-    <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Tier</th>${s.questions.map((_, i) => `<th>F${i + 1}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="tools">${ranking(s).places.length ? `<button type="button" class="btn ghost sm" data-m="podium">${icon('trophy', 15)} Podium zeigen</button>` : ''}<button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
+    ${tagRows ? `<h3 class="result-h">${icon('target', 16)} Nach Thema</h3><div class="table-scroll"><table class="table-std tag-table"><thead><tr><th>Thema</th><th>Fragen</th><th>Richtig</th><th>Braucht hier noch Hilfe</th></tr></thead><tbody>${tagRows}</tbody></table></div>` : ''}
+    <div class="table-scroll"><table class="table-std result-table"><thead><tr><th>Tier</th>${s.questions.map((q, i) => `<th>F${i + 1}${q.bonus ? '*' : ''}</th>`).join('')}<th>Richtig</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${s.g?.length ? `<p class="muted small-text">${s.g.length === 1 ? '1 Kind hat' : s.g.length + ' Kinder haben'} die G-Fassung bearbeitet; gewertet wird jeweils gegen die eigene Fassung.</p>` : ''}
+    <div class="tools">${(d.podium ? ranking(s).places.length : st.pct !== null) ? `<button type="button" class="btn ghost sm" data-m="podium">${icon('trophy', 15)} ${d.podium ? 'Podium zeigen' : 'Ergebnis zeigen'}</button>` : ''}<button type="button" class="btn ghost sm" data-m="csv">${icon('download', 15)} Als Tabelle (CSV)</button><button type="button" class="btn ghost sm danger-text" data-m="del">${icon('trash', 15)} Ergebnis löschen</button></div>`,
     onOpen: (el, close) => {
       images.hydrate(el);
       el.querySelector('[data-m=podium]')?.addEventListener('click', () => { close(); podiumId = id; draw(); scrollTo(0, 0); });
@@ -962,10 +1065,35 @@ function resultDialog(id) {
 }
 function csv(s) {
   const cell = v => { const t = String(v ?? ''); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  const graded = s.questions.filter(q => q.correct !== null && Object.keys(q.answers).length);
-  const lines = [['Tier', 'Karte', ...s.questions.map((q, i) => `F${i + 1}${q.text ? ': ' + q.text : ''}`), 'Richtig', 'Bewertete Fragen']];
-  lines.push(['Richtige Antwort', '', ...s.questions.map(q => q.correct === null ? '' : LETTERS[q.correct]), '', '']);
-  for (const stu of s.students.slice().sort((a, b) => a.card - b.card)) if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) lines.push([stu.name, stu.card, 'fehlte', ...s.questions.slice(1).map(() => ''), '', '']);
-  else lines.push([stu.name, stu.card, ...s.questions.map(q => q.answers[stu.id] === undefined ? '' : LETTERS[q.answers[stu.id]]), graded.filter(q => q.answers[stu.id] === q.correct).length, graded.length]);
-  return '﻿' + lines.map(l => l.map(cell).join(';')).join('\r\n');
+  const graded = gradedOf(s), levels = !!s.g?.length;
+  const lines = [['Tier', 'Karte', ...(levels ? ['Fassung'] : []), ...s.questions.map((q, i) => `F${i + 1}${q.bonus ? '*' : ''}${q.text ? ': ' + q.text : ''}`), 'Richtig', 'Bewertete Fragen']];
+  if (s.questions.some(q => q.tag)) lines.push(['Thema', '', ...(levels ? [''] : []), ...s.questions.map(q => q.tag || ''), '', '']);
+  lines.push(['Richtige Antwort', '', ...(levels ? ['M'] : []), ...s.questions.map(q => q.correct === null ? '' : LETTERS[q.correct]), '', '']);
+  if (levels) lines.push(['Richtige Antwort', '', 'G', ...s.questions.map(q => q.correct === null ? '' : LETTERS[q.g ? q.g.correct : q.correct]), '', '']);
+  for (const stu of s.students.slice().sort((a, b) => a.card - b.card)) {
+    const lv = levels ? [onG(s, stu.id) ? 'G' : 'M'] : [];
+    if (s.absent?.includes(stu.id) && !s.questions.some(q => q.answers[stu.id] !== undefined)) lines.push([stu.name, stu.card, ...lv, 'fehlte', ...s.questions.slice(1).map(() => ''), '', '']);
+    else { const t = tally(s, stu.id, graded); lines.push([stu.name, stu.card, ...lv, ...s.questions.map(q => q.answers[stu.id] === undefined ? '' : LETTERS[q.answers[stu.id]]), t.right, t.asked]); }
+  }
+  return '\ufeff' + lines.map(l => l.map(cell).join(';')).join('\r\n');
+}
+
+// ======================================================================
+// Differenzierung einstellen (gilt für alle Klassen; jedes Quiz merkt sich die Einstellung, mit der es gestartet wurde)
+// ======================================================================
+function diffSummary() {
+  const d = diff(), on = [d.second && 'Zweite Chance', d.levels && 'G- und M-Fassung', d.goal > 0 && `Klassenziel ${d.goal} %`, !d.podium && 'ohne Podium', d.speak && 'Vorlesen'].filter(Boolean);
+  return on.length ? on.join(' · ') : 'Alles aus – das Quiz läuft wie gewohnt.';
+}
+function diffDialog() {
+  const d = diff();
+  dialog({ title: 'Differenzierung im Quiz', submit: 'Speichern', body: `
+    <p class="muted small-text">Alles ist freiwillig und einzeln schaltbar. Ausgeschaltet läuft das Quiz wie bisher.</p>
+    <label class="check"><input type="checkbox" name="second" ${d.second ? 'checked' : ''}> <span><b>Zweite Chance</b> – nach dem ersten Scannen zeigt „Zweite Chance“ nur die Verteilung, die Kinder beraten sich mit dem Nachbarn und zeigen ihre Karten noch einmal. Gewertet wird die zweite Antwort.</span></label>
+    <label class="check"><input type="checkbox" name="levels" ${d.levels ? 'checked' : ''}> <span><b>G- und M-Fassung</b> – Fragen mit G-Fassung stehen in zwei Fassungen nebeneinander. Bei „Klasse &amp; Karten“ legst du fest, welches Tier G bearbeitet; alle anderen bearbeiten M.</span></label>
+    <label class="check"><input type="checkbox" name="podium" ${d.podium ? 'checked' : ''}> <span><b>Podium und Zwischenstand mit den Besten</b> – ausgeschaltet erscheint am Ende nur das gemeinsame Ergebnis der Klasse, ohne Tiernamen.</span></label>
+    <label class="field">Klassenziel in Prozent <small class="muted">(0 = kein Ziel)</small><input class="input" type="number" name="goal" min="0" max="100" step="5" value="${d.goal}"></label>
+    <label class="check"><input type="checkbox" name="speak" ${d.speak ? 'checked' : ''}> <span><b>Vorlesen</b> – ein Knopf im Quiz liest Frage und Antworten vor (Stimme des Geräts).</span></label>
+    <p class="muted small-text">Je Frage, im Fenster der Frage unter „Differenzierung“: <b>Sternchenfrage</b> (zählt nur, wenn sie richtig ist), <b>Thema</b> (die Auswertung zeigt je Thema, wer noch Hilfe braucht), <b>Tipp</b> und die <b>G-Fassung</b>. Welches Tier G bearbeitet, steht nur in der App; wer das Tier ist, weiterhin nur auf deinem Zuordnungsblatt.</p>`,
+    onSubmit: fd => store.update(s => { s.quiz.diff = { second: fd.get('second') === 'on', levels: fd.get('levels') === 'on', podium: fd.get('podium') === 'on', goal: Math.max(0, Math.min(100, Math.round(Number(fd.get('goal')) || 0))), speak: fd.get('speak') === 'on' }; }) });
 }

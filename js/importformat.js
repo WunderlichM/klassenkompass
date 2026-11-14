@@ -30,20 +30,38 @@ export function normSets(list) {
   if (!Array.isArray(list) || !list.length) throw new Error('Es wurde kein Fragensatz gefunden.');
   return list.slice(0, 50).map((t, k) => {
     const title = txt(t?.title ?? t?.name, 80) || 'Importierter Fragensatz', where = i => `Fragensatz ${k + 1} („${title}“), Frage ${i + 1}`;
-    const questions = (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map((x, i) => {
+    // Antworten und richtige Antwort einer Fassung lesen (Frage selbst oder ihre G-Fassung)
+    const answers = (x, at) => {
       let c = x?.correct ?? x?.answer;
       let options = (Array.isArray(x?.options) ? x.options : Array.isArray(x?.answers) ? x.answers : []).map(o => txt(o, 120)).filter(Boolean).slice(0, 4);
       if (!options.length && typeof c === 'boolean') options = ['Richtig', 'Falsch'];
-      if (options.length < 2) throw new Error(`${where(i)}: Es braucht 2 bis 4 Antworten in „options“.`);
+      if (options.length < 2) throw new Error(`${at}: Es braucht 2 bis 4 Antworten in „options“.`);
       if (typeof c === 'boolean') c = c ? 0 : 1;
       else if (typeof c === 'string') {
         const s = c.trim(), byText = options.findIndex(o => o.toLowerCase() === s.toLowerCase());
         c = s === '' ? null : byText >= 0 ? byText : s.length === 1 ? LETTERS.indexOf(s.toUpperCase()) : -1;
       }
-      if (c !== null && c !== undefined && !(Number.isInteger(c) && c >= 0 && c < options.length)) throw new Error(`${where(i)}: „correct“ passt nicht zu den Antworten (erlaubt: A–${LETTERS[options.length - 1]}, der Antworttext oder null für eine Umfrage).`);
+      if (c !== null && c !== undefined && !(Number.isInteger(c) && c >= 0 && c < options.length)) throw new Error(`${at}: „correct“ passt nicht zu den Antworten (erlaubt: A–${LETTERS[options.length - 1]}, der Antworttext oder null für eine Umfrage).`);
+      return { options, correct: c ?? null };
+    };
+    const questions = (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map((x, i) => {
+      const { options, correct } = answers(x, where(i));
       const text = txt(x?.text ?? x?.q ?? x?.question, 400);
       if (!text) throw new Error(`${where(i)}: Der Fragetext („text“) fehlt.`);
-      return { id: uid(), text, options, correct: c ?? null };
+      const q = { id: uid(), text, options, correct };
+      // Differenzierung (seit 2.5.0, alles optional): bonus = Sternchenfrage, tag = Thema, hint = Tipp, g = G-Fassung
+      if (x?.bonus === true) { if (correct === null) throw new Error(`${where(i)}: „bonus“ geht nur bei Fragen mit richtiger Antwort.`); q.bonus = true; }
+      const tag = txt(x?.tag ?? x?.topic ?? x?.thema, 40), hint = txt(x?.hint ?? x?.tipp, 160);
+      if (tag) q.tag = tag; if (hint) q.hint = hint;
+      const gv = x?.g ?? x?.G;
+      if (gv !== undefined && gv !== null) {
+        if (typeof gv !== 'object') throw new Error(`${where(i)}: „g“ muss eine Fassung mit „options“ und „correct“ sein.`);
+        const g = answers(gv, `${where(i)}, G-Fassung`);
+        if (correct === null || g.correct === null) throw new Error(`${where(i)}: Eine G-Fassung braucht in beiden Fassungen eine richtige Antwort.`);
+        if (g.options.length > options.length) throw new Error(`${where(i)}: Die G-Fassung darf höchstens so viele Antworten haben wie die Frage (${options.length}).`);
+        q.g = { text: txt(gv.text ?? gv.q ?? gv.question, 400), ...g };
+      }
+      return q;
     });
     if (!questions.length) throw new Error(`Fragensatz ${k + 1} („${title}“) enthält keine Fragen.`);
     return { id: uid(), title, questions, className: t?.allClasses === true ? '*' : txt(t?.class ?? t?.className, 60) };
@@ -141,7 +159,8 @@ export const FORMAT_HELP = `KlassenKompass-Import (eine JSON-Datei, alle Teile o
                 "students": ["Anna", "Ben, 7b", "Cem"] } ],
   "sets": [ { "title": "Werkzeugkunde", "class": "7ab Technik",
               "questions": [
-                { "text": "Womit sägt man Holz quer zur Faser?", "options": ["Feinsäge", "Feile", "Raspel", "Zange"], "correct": "A" },
+                { "text": "Womit sägt man Holz quer zur Faser?", "options": ["Feinsäge", "Feile", "Raspel", "Zange"], "correct": "A",
+                  "tag": "Werkzeuge", "hint": "Sie hat feine Zähne.", "g": { "options": ["Feinsäge", "Hammer"], "correct": "A" } },
                 { "text": "Beim Bohren trägt man eine Schutzbrille.", "correct": true },
                 { "text": "Was hat dir heute geholfen?", "options": ["Video", "Hilfeheft", "Partner"], "correct": null } ] } ],
   "plans": [ { "title": "Völkerball", "topic": "Völkerball", "lesson": "2026.11.18 · Klasse 6 · Werfen", "phase": 1,
@@ -154,5 +173,6 @@ export const FORMAT_HELP = `KlassenKompass-Import (eine JSON-Datei, alle Teile o
 Regeln:
 - groups: nur Vornamen; "Vorname, Klasse" ist möglich; "quiz": true legt eine Quiz-Klasse mit gleicher Kinderzahl an. Gibt es die Lerngruppe schon (gleicher Name), kommen nur fehlende Kinder dazu.
 - sets: 2 bis 4 Antworten je Frage, höchstens 100 Fragen; "correct" = Buchstabe A–D, der Antworttext, true/false (Richtig/Falsch) oder null (Umfrage). "class" = Name der Quiz-Klasse, "allClasses": true = für alle Klassen.
+- sets, Differenzierung (alles optional): "bonus": true = Sternchenfrage (zählt nur, wenn sie richtig ist); "tag" = Thema für die Auswertung; "hint" = Tipp zum Einblenden; "g" = leichtere G-Fassung derselben Frage mit eigenen "options" (höchstens so viele wie die Frage), eigenem "correct" und optional eigenem "text".
 - plans: Maße in Metern auf dem Hallenboden (x 0–27 von links, y 0–15 von vorn nach hinten); kind = zone, gear, cone, kid, teacher, ball, cross, tag, text, arrow, path; lines = basketball, handball, volleyball, badminton, fussball. Alle Geräte: node tools/hallplan.mjs --list
 - Prüfen vor dem Import: node tools/import-check.mjs datei.json`;

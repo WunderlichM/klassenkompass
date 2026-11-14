@@ -57,6 +57,18 @@ Reihenfolge beim Import: erst Lerngruppen, dann Fragensätze, dann Hallenpläne 
 | `questions[].text` | Fragetext (bis 400 Zeichen). |
 | `questions[].options` | 2 bis 4 Antworten (je bis 120 Zeichen). Fehlen sie und ist `correct` `true`/`false`, entsteht Richtig/Falsch. |
 | `questions[].correct` | Buchstabe `"A"`–`"D"`, Zahl ab 0, der genaue Antworttext, `true`/`false` oder `null` (Umfrage ohne richtige Antwort). |
+| `questions[].bonus` | Optional (seit 2.5.0). `true`: Sternchenfrage – sie zählt nur, wenn sie richtig beantwortet wird. Nur bei Fragen mit richtiger Antwort. |
+| `questions[].tag` | Optional (seit 2.5.0). Thema der Frage (bis 40 Zeichen), z. B. `"Messen"`. Die Ergebnisansicht wertet je Thema aus. |
+| `questions[].hint` | Optional (seit 2.5.0). Tipp (bis 160 Zeichen), den die Lehrkraft im Quiz einblenden kann. |
+| `questions[].g` | Optional (seit 2.5.0). G-Fassung derselben Frage: `{ "text"?, "options", "correct" }`. `options`: 2 bis 4 Antworten, höchstens so viele wie die Frage; `correct` wie oben, aber nicht `null`; `text` nur, wenn die G-Fassung anders formuliert ist. Gezeigt wird sie erst, wenn im Quiz unter „Differenzierung“ die G- und M-Fassung eingeschaltet ist. |
+
+Beispiel mit Differenzierung:
+
+```json
+{ "text": "Wie lang ist das Werkstück im Bild?", "options": ["12 cm", "120 cm", "1,2 cm", "12 mm"], "correct": "A",
+  "tag": "Messen", "hint": "Lies die Einheit am Lineal ab.",
+  "g": { "text": "Ist das Werkstück im Bild 12 cm lang?", "options": ["Ja", "Nein"], "correct": "A" } }
+```
 
 Bilder sind nicht Teil der Datei. Für gute Fragen gelten die Quizregeln aus `KWS/AGENTS.md` Abschnitt 10 (wenige Fragen, genau eine eindeutig richtige Antwort).
 

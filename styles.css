@@ -1319,3 +1319,38 @@ li.drag-ghost, .hall-lib-item.drag-ghost { display: flex; align-items: center; j
 dialog.import-dlg form.drag { outline: 3px dashed var(--accent); outline-offset: -8px; }
 @media (hover: none) { .imp-hint { display: none; } }
 @media screen { [data-theme="dark"] .imp-ok { color: #6cc48a; } [data-theme="dark"] .imp-err { color: #ee6f6f; } }
+
+/* Quiz: Differenzierung (seit 2.5.0) */
+.check > span { flex: 1; min-width: 0; }
+.q-marks { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; }
+.q-marks span { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
+.q-diff { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.q-diff summary { cursor: pointer; font-weight: 600; } .q-diff[open] summary { margin-bottom: 8px; }
+.lv-btn { flex: none; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 12px; font-weight: 800; color: var(--muted); padding: 0; }
+.lv-btn.g { background: #e3a312; border-color: transparent; color: #fff; }
+.qs-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.qs-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; background: #efe9f8; color: #4b2f86; font-size: clamp(13px, 1.2vw, 19px); font-weight: 700; }
+.qs-badge.star { background: #fdf1cf; color: #8a5a00; }
+.qs-hint { margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: center; padding: 8px 16px; border-radius: 12px; background: #fdf1cf; color: #6f4a00; font-size: clamp(16px, 1.7vw, 28px) !important; font-weight: 600 !important; }
+.qs-opts.static .qs-stat, .qs-opts.static .qs-fill { animation: none; }
+.qs-lv { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(12px, 1.6vw, 26px); align-items: start; }
+.qs-lv .qs-opts, .qs-lv .qs-opts.n3 { grid-template-columns: 1fr; gap: clamp(8px, .9vw, 14px); }
+.qs-lv .qs-opt { min-height: clamp(58px, 8vh, 100px); font-size: clamp(16px, 1.7vw, 27px); }
+.qs-lv .qs-shape { width: clamp(38px, 3.6vw, 60px); }
+.qs-lvcol { display: flex; flex-direction: column; gap: clamp(8px, .9vw, 14px); min-width: 0; }
+.qs-lvtag { margin: 0; align-self: flex-start; padding: 2px 16px; border-radius: 99px; background: #fff; color: #3a1f66; font-weight: 850; font-size: clamp(16px, 1.6vw, 26px); box-shadow: 0 4px 0 rgba(0,0,0,.22); }
+.qs-lvtag.g { background: #f2c14e; color: #4a3200; }
+.qs-lvq { margin: 0; background: rgba(255,255,255,.14); border-radius: 12px; padding: 8px 14px; font-size: clamp(16px, 1.7vw, 27px); font-weight: 700; line-height: 1.2; }
+body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-size: clamp(19px, 2vw, 36px); }
+.qs-right small { font-size: .8em; opacity: .85; font-weight: 600; }
+.qs.pod-card.no-podium { padding-bottom: 34px; text-align: center; }
+.pod-class { display: grid; justify-items: center; gap: 4px; margin: clamp(20px, 5vh, 70px) 0 clamp(12px, 2vh, 26px); animation: qs-pop .7s cubic-bezier(.3,1.5,.5,1) both; }
+.pod-class b { font-size: clamp(72px, 14vw, 220px); font-weight: 850; line-height: 1; letter-spacing: -.03em; }
+.pod-class span { font-size: clamp(17px, 1.9vw, 30px); font-weight: 650; opacity: .9; }
+.pod-goal { display: inline-flex; align-items: center; gap: 10px; margin: 0 auto 18px; padding: 8px 20px; border-radius: 99px; background: rgba(255,255,255,.16); font-size: clamp(16px, 1.6vw, 26px); font-weight: 650; }
+.pod-goal.hit { background: #46c878; color: #06361a; } .pod-goal b { font-weight: 850; }
+.qs.pod-card:not(.no-podium) .pod-goal { display: flex; width: fit-content; }
+.rank-table .trend { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); } .rank-table .trend.t1 { color: #2c7a46; } .rank-table .trend.t-1 { color: #b5562b; }
+.result-h { display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; font-size: 15px; }
+.tag-table { margin-bottom: 14px; } .tag-table .weak span { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; white-space: nowrap; }
+@media (max-width: 760px) { .qs-lv { grid-template-columns: 1fr; } }

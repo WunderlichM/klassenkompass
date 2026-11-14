@@ -270,7 +270,9 @@ function normQuiz(q) {
     const old = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id).map(s => ({ id: String(s.id), card: int(s.card, 1, CARD_MAX, 0) })).filter(s => s.card);
     const count = int(c?.count, 1, CARD_MAX, 0) || Math.max(0, ...old.map(s => s.card)) || 16;
     const resetAt = Number.isFinite(Number(c?.resetAt)) && Number(c.resetAt) > 0 ? Number(c.resetAt) : 0;
-    return { id, name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, count, resetAt, students: quizStudents(id, count, old) };
+    // G-Niveau (seit 2.5.0, optional): Kartennummern der Kinder, die die G-Fassung bearbeiten
+    const g = [...new Set((Array.isArray(c?.g) ? c.g : []).map(v => int(v, 1, CARD_MAX, 0)).filter(v => v && v <= count))];
+    return { id, name: str(c?.name, 60) || 'Klasse', demo: !!c?.demo, count, resetAt, students: quizStudents(id, count, old), ...(g.length ? { g } : {}) };
   });
   // Frühere „Decknamen“-Ansicht (1.14–1.16): ihre Ergebnisse bekommen eine eigene Klasse „Lerngruppe“
   if (Array.isArray(q.sessions) && q.sessions.some(x => x?.classId === 'alias') && !classes.some(c => c.id === 'alias')) {
@@ -284,8 +286,14 @@ function normQuiz(q) {
     // Bilder: nur Kennungen (die Bilder selbst liegen in IndexedDB, siehe images.js)
     const imgId = v => (typeof v === 'string' && IMG_RE.test(v) ? v : '');
     const img = imgId(x?.img), optImgs = options.map((_, i) => imgId(x?.optImgs?.[i]));
-    return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct, ...(img ? { img } : {}), ...(optImgs.some(Boolean) ? { optImgs } : {}) };
+    // Differenzierung (seit 2.5.0, alles optional): Sternchenfrage, Thema, Tipp und G-Fassung
+    const go = correct !== null && Array.isArray(x?.g?.options) ? x.g.options.map(o => str(o, 120)).filter(Boolean).slice(0, options.length) : [];
+    const g = go.length >= 2 && Number.isInteger(x.g.correct) && x.g.correct >= 0 && x.g.correct < go.length ? { text: str(x.g.text, 400), options: go, correct: x.g.correct } : null;
+    return { id: String(x?.id || uid()), text: str(x?.text, 400), options, correct, ...(img ? { img } : {}), ...(optImgs.some(Boolean) ? { optImgs } : {}),
+      ...(x?.bonus === true && correct !== null ? { bonus: true } : {}), ...(str(x?.tag, 40) ? { tag: str(x.tag, 40) } : {}), ...(str(x?.hint, 160) ? { hint: str(x.hint, 160) } : {}), ...(g ? { g } : {}) };
   };
+  const ansMap = v => Object.fromEntries(Object.entries(v || {}).filter(([, a]) => Number.isInteger(a) && a >= 0 && a < 4));
+  const normDiff = v => ({ second: !!v?.second, levels: !!v?.levels, goal: int(v?.goal, 0, 100, 0), podium: v?.podium !== false, speak: !!v?.speak });
   // Seit 1.20.0 gehört jeder Fragensatz zu einer Klasse (classId), bewusst zu allen ('*') oder – ältere Sätze und Sätze
   // gelöschter Klassen – noch zu keiner (''). Sätze ohne Klasse lassen sich erst nach dem Zuordnen starten.
   const setClass = v => (v === '*' ? '*' : classes.some(c => c.id === v) ? String(v) : '');
@@ -296,9 +304,11 @@ function normQuiz(q) {
     at: Number.isFinite(Number(x?.at)) && Number(x.at) > 0 ? Number(x.at) : 0,
     students: (Array.isArray(x?.students) ? x.students : []).map(s => { const card = int(s?.card, 1, CARD_MAX, 0); return { id: String(s?.id), name: card ? animalName(card) : str(s?.name, 40), card }; }),
     absent: (Array.isArray(x?.absent) ? x.absent : []).map(String),
-    questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y),
-      answers: Object.fromEntries(Object.entries(y?.answers || {}).filter(([, v]) => Number.isInteger(v) && v >= 0 && v < 4)) })) }));
-  return { classes, sets, sessions, autoReveal: q.autoReveal !== false,
+    // Differenzierung dieses Quiz: Einstellungen beim Start, Kinder mit G-Fassung, erste Runde vor einer zweiten Chance
+    ...(x?.diff ? { diff: normDiff(x.diff) } : {}), ...(Array.isArray(x?.g) && x.g.length ? { g: x.g.map(String) } : {}),
+    questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y), answers: ansMap(y?.answers),
+      ...(y?.first && typeof y.first === 'object' ? { first: ansMap(y.first), round: 2 } : {}) })) }));
+  return { classes, sets, sessions, autoReveal: q.autoReveal !== false, diff: normDiff(q.diff),
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }
