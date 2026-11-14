@@ -83,7 +83,9 @@ export function sortPlans(list) {
   return [...list].sort((a, b) => t(a) - t(b) || (a.topic || '').localeCompare(b.topic || '', 'de') || (a.lesson || a.title).localeCompare(b.lesson || b.title, 'de') || (a.phase || 0) - (b.phase || 0) || a.title.localeCompare(b.title, 'de'));
 }
 // Pläne derselben Stunde, nach Phase
-export const lessonPlans = p => (p?.lesson ? sp().halls.filter(x => x.lesson === p.lesson && (x.topic || '') === (p.topic || '')).sort((a, b) => a.phase - b.phase) : []);
+// Pläne derselben Stunde (seit 2.3.0 über alle Themen hinweg) in der Reihenfolge der Phasen
+export const lessonPlans = p => (p?.lesson ? sp().halls.filter(x => x.lesson === p.lesson).sort((a, b) => a.phase - b.phase) : []);
+export const nextPhase = lesson => Math.max(0, ...sp().halls.filter(x => x.lesson === lesson).map(x => x.phase || 0)) + 1;
 export function openPlan(id) { sel = []; store.update(s => { s.sport.activeHall = id; }); }
 
 // ---------- Editor ----------
@@ -520,9 +522,10 @@ const lessons = () => [...new Set(sp().halls.map(h => h.lesson).filter(Boolean))
 const datalist = (id, list) => `<datalist id="${id}">${list.map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
 const checkLimit = (n = 1) => { if (sp().halls.filter(h => !h.demo).length + n > store.HALL_MAX) throw new Error(`Es sind höchstens ${store.HALL_MAX} Hallenpläne möglich. Bitte zuerst alte Pläne löschen.`); };
 
-export function newPlanDialog(topic = '') {
+export function newPlanDialog(topic = '', lesson = '') {
   dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen" required></label>
+    ${lesson ? `<p class="small-text">Stunde: <b>${esc(lesson)}</b> – wird dort als nächste Phase angelegt.</p>` : ''}
     ${topicField(topic, '– ordnet die Sammlung')}
     <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
     <p class="muted small-text">Halle 27 m × 15 m, Geräte maßstäblich (Kleingeräte etwas größer). Die Lehrkraft steht schon vorn an der Mittellinie. Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
@@ -530,7 +533,7 @@ export function newPlanDialog(topic = '') {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       checkLimit();
       const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
-      const p = { id: uid(), title: t, topic: readTopic(fd), lesson: '', phase: 0, floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []), teacherItem()] };
+      const p = { id: uid(), title: t, topic: readTopic(fd), lesson, phase: lesson ? nextPhase(lesson) : 0, floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []), teacherItem()] };
       sel = []; store.update(s => { addTopic(s, p.topic); s.sport.halls.push(p); s.sport.activeHall = p.id; });
     }, onOpen: topicOpen });
 }
@@ -540,7 +543,7 @@ function propsDialog(p) {
   dialog({ title: 'Eigenschaften', submit: 'Speichern', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" value="${esc(p.title)}" required></label>
     ${topicField(p.topic || '')}
-    <div class="two"><label class="field">Stunde <small class="muted">(optional)</small><input name="lesson" class="input" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 Völkerball">${datalist('h-lessons', lessons())}</label>
+    <div class="two"><label class="field">Stunde <small class="muted">(optional)</small><input name="lesson" class="input" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 · Klasse 6 · Werfen und Völkerball">${datalist('h-lessons', lessons())}</label>
     <label class="field">Phase<input name="phase" type="number" class="input" min="1" max="20" value="${p.phase || 1}"></label></div>
     <p class="muted small-text">Pläne mit derselben Stunde stehen in der Sammlung zusammen und lassen sich oben mit den Pfeilen nacheinander zeigen (z. B. Erwärmung, Übung, Spiel).</p>`,
     onSubmit: fd => {

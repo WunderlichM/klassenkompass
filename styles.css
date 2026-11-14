@@ -1132,6 +1132,8 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .hall-lib-item:hover { background: var(--soft); }
 .hall-lib-item.on { background: var(--accent-soft); color: var(--accent-dark); font-weight: 650; }
 .hall-lib-item .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hall-lib-item .tp { margin-left: auto; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.hall-mode { display: flex; margin: 8px 0 6px; } .hall-mode button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; }
 .hall-lib-item .ph { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--accent); color: #fff; }
 .hall-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hall-phase { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 10px; }

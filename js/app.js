@@ -14,7 +14,7 @@ import * as theme from './theme.js';
 import * as lock from './lock.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.2.0';
+export const VERSION = '2.3.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
