@@ -2,13 +2,14 @@
 import * as store from './store.js';
 import { SCREEN_H, SCREEN_W, SCREEN_W_WIDE } from './store.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen, downloadFile, todayISO } from './ui.js';
 import { qrSvg } from './qr.js';
 import * as hall from './hall.js';
 import { petIndex, petSvg, petText } from './hatch.js';
-import { play, scheduleAlarm, ALARM_SECONDS, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
+import { play, scheduleEnd, endToneSeconds, endToneId, previewEnd, stopPreview, END_TONES, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
+import * as extra from './widgets.js';
 
-const MAX_WIDGETS = 30, MAX_RESULTS = 200;
+const MAX_WIDGETS = 30, MAX_RESULTS = 200, MAX_LAYOUTS = 12;
 const ADD = [
   { kind: 'digital', label: 'Digitaler Timer', ic: 'clock' },
   { kind: 'circle', label: 'Kreistimer', ic: 'reset' },
@@ -19,8 +20,12 @@ const ADD = [
   { kind: 'interval', label: 'Intervalltimer', ic: 'repeat' },
   { kind: 'hall', label: 'Hallenplan', ic: 'hall' },
 ];
-const MIN = { hall: [260, 200], qr: [220, 300], stopwatch: [280, 210], people: [300, 380], interval: [300, 370], circle: [240, 320], egg: [240, 320], digital: [280, 210] };
+const MIN = { ...extra.MIN, hall: [260, 200], qr: [220, 300], stopwatch: [280, 210], people: [300, 380], interval: [300, 370], circle: [240, 320], egg: [240, 320], digital: [280, 210] };
 const minFor = w => MIN[w.type === 'timer' ? w.style : w.type === 'stopwatch' && w.mode === 'people' ? 'people' : w.type] || [220, 200];
+// Objekte mit Countdown (Timer, Anzeigetafel mit Spielzeit) und mit Phasen (Intervalltimer, Stationen)
+const isTimer = w => w.type === 'timer' || (w.type === 'score' && w.timed);
+const isPhased = w => w.type === 'interval' || w.type === 'stations';
+const allAdd = [...ADD, ...extra.ADD];
 
 let root = null, raf = 0, selected = null, scale = 1, muted = false;
 const alarms = new Map(); // eingeplante Endtöne je Timer: Schlüssel id:endsAt → Wiedergabe
@@ -67,12 +72,13 @@ function draw() {
     </div>
     <div class="stage-wrap" id="stage-wrap">
       <div class="stage" id="stage" style="width:${W()}px;height:${SCREEN_H}px">${s.widgets.map(widgetHtml).join('')}
-        ${s.widgets.length ? '' : '<div class="stage-empty">Füge unten einen Timer, eine Stoppuhr oder einen QR-Code hinzu.</div>'}</div>
+        ${s.widgets.length ? '' : '<div class="stage-empty">Füge unten ein Objekt hinzu, z. B. einen Timer, die Zufallsauswahl oder eine Auftragskarte.</div>'}</div>
     </div>
     <div class="dock no-present">
-      <div class="add-row">${ADD.map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>
+      ${[ADD, extra.ADD].map(row => `<div class="add-row">${row.map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>`).join('')}
       <div class="dock-row">
         <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte groß untereinander; „Große Ansicht“ füllt den ganzen Bildschirm. Die freie Anordnung zeigen PC und Tablet.</span>
+        <button class="btn ghost sm" data-act="layouts" title="Anordnungen speichern und wieder laden, z. B. Ankommen, Arbeitsphase, Aufräumen">${icon('layers', 15)} Vorlagen${s.layouts?.length ? ` <span class="badge">${s.layouts.length}</span>` : ''}</button>
         <span class="swatches" role="group" aria-label="Hintergrund">${['mint', 'paper', 'night'].map(b => `<button class="swatch sw-${b} ${s.background === b ? 'on' : ''}" data-act="bg" data-bg="${b}" title="${{ mint: 'Mint', paper: 'Papier', night: 'Nacht' }[b]}"></button>`).join('')}</span>
         <label class="small-text" title="Gilt nur für dieses Gerät. Das Format (16:9 oder 21:9) passt sich dem Bildschirm automatisch an.">Ansicht <select class="select sm" id="zoom">${[['auto', 'Automatisch'], ['fit', 'Alles anzeigen'], ['0.5', '50 %'], ['0.75', '75 %'], ['1', '100 %'], ['1.25', '125 %'], ['1.5', '150 %']].map(([v, l]) => `<option value="${v}" ${zoom === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
@@ -152,7 +158,7 @@ function widgetHtml(w) {
       ${ctrl(w, running)}
       <form class="sw-record" data-record="${esc(w.id)}"><input class="input sm" name="name" placeholder="Vorname oder Startnummer (optional)" maxlength="40"><button class="btn primary sm" ${running ? '' : 'disabled'}>Zeit speichern</button></form>
       <ol class="results">${w.results.map((r, i) => `<li><span class="rank">${i + 1}.</span><button class="link" data-act="rename-result" data-rid="${esc(r.id)}">${esc(r.name)}</button><span class="rt">${swText(r.elapsedMs)}</span><button class="icon-btn xs" data-act="del-result" data-rid="${esc(r.id)}" aria-label="Messung entfernen">${icon('x', 13)}</button></li>`).join('')}</ol>
-      ${w.results.length ? `<button class="link small-text" data-act="clear-results">Liste leeren</button>` : ''}`, 'stopwatch people');
+      ${w.results.length ? `<p class="sw-links"><button class="link small-text" data-act="csv-results">${icon('download', 13)} Als Tabelle (CSV)</button><button class="link small-text" data-act="clear-results">Liste leeren</button></p>` : ''}`, 'stopwatch people');
     return frame(w, `<div class="time big" data-live="sw"></div>${ctrl(w, running)}`, 'stopwatch');
   }
   if (w.type === 'interval') {
@@ -164,6 +170,7 @@ function widgetHtml(w) {
     return frame(w, p ? `<div class="hall-mini">${hall.boardSvg(p, { crop: true })}</div>`
       : `<div class="hall-pick"><p class="muted small-text">${w.planId ? 'Dieser Hallenplan wurde gelöscht.' : 'Welcher Hallenplan soll hier stehen?'}</p><button class="btn primary sm" data-act="settings">${icon('hall', 15)} Hallenplan wählen</button><p class="muted small-text">Hallenpläne zeichnest du im Bereich Hallenpläne.</p></div>`, 'hall');
   }
+  if (extra.TYPES.includes(w.type)) { const [inner, cls] = extra.html(w, { ctrl }); return frame(w, inner, cls); }
   return '';
 }
 
@@ -187,18 +194,21 @@ function setCracks(g, p) {
   }
 }
 
-// Endtöne: für jeden laufenden Timer mit Ton im Voraus einplanen, bei Pause, Zurücksetzen, Ton aus oder Entfernen sofort stoppen
+// Endtöne: für jeden laufenden Timer mit Ton im Voraus einplanen, bei Pause, Zurücksetzen, Ton aus oder Entfernen sofort stoppen.
+// Dazu der Vorwarnton (leise, einstellbar) – ebenfalls im Voraus, damit er auch im Hintergrund erklingt.
+const toneOf = w => ({ tone: endToneId(w.tone), volume: (w.volume ?? 90) / 100, repeats: w.repeats ?? 2 });
 function syncAlarms(now) {
   const want = new Map();
   for (const w of scr().widgets) {
-    if (w.type !== 'timer' || w.endsAt === null || !w.sound || muted) continue;
-    if (now - w.endsAt > ALARM_SECONDS * 1000) continue; // längst abgelaufen (z. B. nach dem Neuladen)
-    want.set(w.id + ':' + w.endsAt, w.endsAt);
+    if (!isTimer(w) || w.endsAt === null || !w.sound || muted) continue;
+    const opt = toneOf(w), warnMs = (Number(w.warn) || 0) * 1000;
+    if (now - w.endsAt <= endToneSeconds(opt.tone, opt.repeats) * 1000) want.set(w.id + ':' + w.endsAt + ':' + opt.tone + opt.volume + opt.repeats, { at: w.endsAt, opt }); // sonst längst abgelaufen (z. B. nach dem Neuladen)
+    if (warnMs && w.durationMs > warnMs + 5000 && w.endsAt - warnMs > now - 800) want.set(w.id + ':' + w.endsAt + ':warn' + warnMs, { at: w.endsAt - warnMs, opt: { tone: 'warn', volume: opt.volume * 0.7, repeats: 1 } });
   }
   for (const [key, a] of alarms) if (!want.has(key)) { a?.stop(); alarms.delete(key); }
-  for (const [key, endsAt] of want) {
+  for (const [key, { at, opt }] of want) {
     if (alarms.has(key)) continue;
-    const late = Math.max(0, now - endsAt) / 1000, a = scheduleAlarm((endsAt - now) / 1000, Math.max(1, Math.ceil(ALARM_SECONDS - late)));
+    const a = scheduleEnd((at - now) / 1000, opt);
     if (a) alarms.set(key, a); // sonst (Ton noch gesperrt) beim nächsten Bild erneut versuchen
   }
 }
@@ -237,9 +247,9 @@ function tick() {
 // ---------- Bildschirm anlassen, solange etwas läuft (Screen Wake Lock) ----------
 let wakeLock = null, wakePending = false, wakeRetryAt = 0;
 function anyRunning(now) {
-  return scr().widgets.some(w => w.type === 'timer' ? w.endsAt !== null && w.endsAt > now
-    : w.type === 'interval' ? w.startedAt !== null && ivState(w, now).stage !== 'finished'
-    : w.type === 'stopwatch' ? w.startedAt !== null : false);
+  return scr().widgets.some(w => isTimer(w) ? w.endsAt !== null && w.endsAt > now
+    : isPhased(w) ? w.startedAt !== null && ivState(w, now).stage !== 'finished'
+    : w.type === 'stopwatch' ? w.startedAt !== null : extra.wantsFrame(w));
 }
 // Läuft gerade etwas? (für die automatische App-Sperre)
 export const busy = () => anyRunning(Date.now());
@@ -257,7 +267,13 @@ function updateLive(now, withSound) {
   for (const w of scr().widgets) {
     const el = root.querySelector(`[data-wid="${CSS.escape(w.id)}"]`); if (!el) continue;
     const q = k => el.querySelector(`[data-live="${k}"]`);
-    if (w.type === 'timer') {
+    if (w.type === 'score') {
+      if (!w.timed) continue;
+      const rem = timerRemaining(w, now), done = w.endsAt !== null && rem <= 0;
+      setText(q('time'), mmss(rem));
+      el.classList.toggle('done', done); el.classList.toggle('low', !done && w.endsAt !== null && rem <= 10000);
+      setText(q('state'), done ? 'Abpfiff' : w.endsAt !== null ? 'läuft' : rem === w.durationMs ? 'Bereit' : 'unterbrochen');
+    } else if (w.type === 'timer') {
       const rem = timerRemaining(w, now), done = w.endsAt !== null && rem <= 0, frac = w.durationMs ? rem / w.durationMs : 0;
       setText(q('time'), mmss(rem));
       el.classList.toggle('done', done);
@@ -271,11 +287,14 @@ function updateLive(now, withSound) {
       const egg = q('egg'); if (egg) { egg.classList.toggle('hatched', done); egg.classList.toggle('wobble', !done && w.endsAt !== null && rem <= 10000); }
     } else if (w.type === 'stopwatch') {
       setText(q('sw'), swText(swElapsed(w, now)));
-    } else if (w.type === 'interval') {
+    } else if (isPhased(w)) {
       const st = ivState(w, now);
       setText(q('iv'), mmss(st.remaining));
-      setText(q('phase'), { train: 'Training', pause: 'Satzpause', 'round-pause': 'Rundenpause', finished: 'Geschafft!' }[st.stage]);
-      setText(q('meta'), st.stage === 'finished' ? `${w.rounds} Runden · ${w.sets} Sätze` : `Runde ${st.round}/${w.rounds} · Satz ${st.set}/${w.sets}`);
+      if (w.type === 'stations') extra.live(w, el, q, now, { withSound, muted, st });
+      else {
+        setText(q('phase'), { train: 'Training', pause: 'Satzpause', 'round-pause': 'Rundenpause', finished: 'Geschafft!' }[st.stage]);
+        setText(q('meta'), st.stage === 'finished' ? `${w.rounds} Runden · ${w.sets} Sätze` : `Runde ${st.round}/${w.rounds} · Satz ${st.set}/${w.sets}`);
+      }
       setText(q('ivtotal'), `Gesamt noch ${mmss(st.totalRemaining)} von ${mmss(st.total)}`);
       const len = st.stage === 'train' ? w.trainMs : st.stage === 'pause' ? w.pauseMs : st.stage === 'round-pause' ? w.roundPauseMs : 1;
       const bar = q('ivbar'); if (bar) bar.style.width = clamp((st.remaining / len) * 100, 0, 100) + '%';
@@ -291,7 +310,7 @@ function updateLive(now, withSound) {
         if (sec <= 3 && sec >= 1 && len >= 5000 && st.stage !== 'finished' && lastCount.get(w.id) !== cdKey) { lastCount.set(w.id, cdKey); if (!muted) play(tones.countdown, vol); }
         if (st.stage === 'finished') { patch(w.id, x => { x.elapsedMs = ivTotal(x); x.startedAt = null; }); }
       } else lastPhase.set(w.id, st.phase);
-    }
+    } else if (extra.TYPES.includes(w.type)) extra.live(w, el, q, now, { withSound, muted });
   }
 }
 function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
@@ -310,12 +329,13 @@ function freeSpot(wd, ht) {
 }
 function addWidget(kind) {
   if (scr().widgets.length >= MAX_WIDGETS) return toast(`Höchstens ${MAX_WIDGETS} Objekte pro Bildschirm.`);
-  const base = { id: uid(), label: ADD.find(a => a.kind === kind).label };
+  const base = { id: uid(), label: allAdd.find(a => a.kind === kind).label };
   let w;
   if (['digital', 'circle', 'egg'].includes(kind)) w = { ...base, type: 'timer', style: kind, durationMs: kind === 'egg' ? 180000 : 300000, remainingMs: kind === 'egg' ? 180000 : 300000, endsAt: null, sound: true, width: kind === 'digital' ? 340 : 280, height: kind === 'digital' ? 230 : 360 };
   else if (kind === 'qr') w = { ...base, type: 'qr', content: '', width: 280, height: 360 };
   else if (kind === 'stopwatch') w = { ...base, type: 'stopwatch', mode: 'single', elapsedMs: 0, startedAt: null, results: [], width: 340, height: 230 };
   else if (kind === 'people') w = { ...base, type: 'stopwatch', mode: 'people', elapsedMs: 0, startedAt: null, results: [], width: 340, height: 460 };
+  else if (extra.TYPES.includes(kind)) w = { ...base, ...extra.create(kind) };
   else if (kind === 'hall') { const list = hall.planList(), p = list.find(x => x.id === store.get().sport.activeHall) || list[0]; w = { ...base, type: 'hall', planId: p?.id ?? null, label: p?.title || 'Hallenplan', width: 500, height: 350 }; }
   else w = { ...base, type: 'interval', trainMs: 30000, pauseMs: 25000, sets: 12, rounds: 2, roundPauseMs: 120000, volume: 70, tones: { ...DEFAULT_INTERVAL_TONES }, elapsedMs: 0, startedAt: null, width: 340, height: 400 };
   Object.assign(w, freeSpot(w.width, w.height));
@@ -331,7 +351,14 @@ async function onClick(e) {
   if (wEl && selected !== wEl.dataset.wid) { selected = wEl.dataset.wid; root.querySelectorAll('.widget.selected').forEach(x => x.classList.remove('selected')); wEl.classList.add('selected'); }
   if (!b) return;
   const act = b.dataset.act, id = wEl?.dataset.wid, w = id ? wid(id) : null, now = Date.now();
+  if (extra.click(act, w, b)) return;
   switch (act) {
+    case 'layouts': layoutsDialog(); break;
+    case 'csv-results': {
+      const rows = [['Platz', 'Name', 'Zeit', 'Sekunden'], ...w.results.map((r, i) => [i + 1, r.name, swText(r.elapsedMs), (r.elapsedMs / 1000).toFixed(2).replace('.', ',')])];
+      downloadFile(`Zeiten-${w.label || 'Stoppuhr'}-${todayISO()}.csv`.replace(/[\\/:*?"<>|]/g, '_'), '\ufeff' + rows.map(l => l.map(v => (/[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+      break;
+    }
     case 'add': addWidget(b.dataset.kind); break;
     case 'bg': store.update(s => { s.screen.background = b.dataset.bg; }); break;
     case 'present': toggleFullscreen(); draw(); break;
@@ -345,16 +372,16 @@ async function onClick(e) {
       break;
     }
     case 'start':
-      if (w.type === 'timer') patch(id, x => { const rem = x.remainingMs > 0 ? x.remainingMs : x.durationMs; x.remainingMs = rem; x.endsAt = now + rem; });
-      else if (w.type === 'interval') patch(id, x => { if (swElapsed(x, now) >= ivTotal(x)) x.elapsedMs = 0; x.startedAt = now; lastPhase.delete(id); if (!muted) play({ ...DEFAULT_INTERVAL_TONES, ...(x.tones || {}) }.start, (x.volume ?? 70) / 100); });
+      if (isTimer(w)) patch(id, x => { const rem = x.remainingMs > 0 ? x.remainingMs : x.durationMs; x.remainingMs = rem; x.endsAt = now + rem; });
+      else if (isPhased(w)) patch(id, x => { if (swElapsed(x, now) >= ivTotal(x)) x.elapsedMs = 0; x.startedAt = now; lastPhase.delete(id); if (!muted) play({ ...DEFAULT_INTERVAL_TONES, ...(x.tones || {}) }.start, (x.volume ?? 70) / 100); });
       else patch(id, x => { if (x.startedAt === null) x.startedAt = now; });
       break;
     case 'pause':
-      if (w.type === 'timer') patch(id, x => { x.remainingMs = timerRemaining(x, now); x.endsAt = null; if (x.remainingMs <= 0) x.remainingMs = x.durationMs; });
+      if (isTimer(w)) patch(id, x => { x.remainingMs = timerRemaining(x, now); x.endsAt = null; if (x.remainingMs <= 0) x.remainingMs = x.durationMs; });
       else patch(id, x => { x.elapsedMs = swElapsed(x, now); x.startedAt = null; });
       break;
     case 'reset':
-      if (w.type === 'timer') patch(id, x => { x.remainingMs = x.durationMs; x.endsAt = null; });
+      if (isTimer(w)) patch(id, x => { x.remainingMs = x.durationMs; x.endsAt = null; });
       else patch(id, x => { x.elapsedMs = 0; x.startedAt = null; });
       break;
     case 'sound': patch(id, x => { x.sound = !x.sound; }); break;
@@ -438,7 +465,7 @@ function settingsDialog(w) {
   const pos = `<details class="pos"><summary>Position und Größe</summary><div class="four">${['x', 'y', 'width', 'height'].map(k => `<label class="field">${{ x: 'Links', y: 'Oben', width: 'Breite', height: 'Höhe' }[k]}<input class="input" type="number" name="${k}" value="${w[k]}"></label>`).join('')}</div></details>`;
   let body = `<label class="field">Titel<input name="label" class="input" maxlength="60" value="${esc(w.label)}"></label>`;
   if (w.type === 'timer') body += `<div class="two">${durField('dur', 'Dauer', w.durationMs)}<label class="field">Darstellung<select name="style" class="select">${[['digital', 'Digital'], ['circle', 'Kreis'], ['egg', 'Ei']].map(([v, l]) => `<option value="${v}" ${w.style === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
-    <label class="check"><input type="checkbox" name="sound" ${w.sound ? 'checked' : ''}> Signalton am Ende</label><p class="muted small-text">Eine geänderte Dauer setzt nur diesen Timer zurück.</p>`;
+    ${toneFields(w)}<p class="muted small-text">Eine geänderte Dauer setzt nur diesen Timer zurück.</p>`;
   if (w.type === 'qr') body += `<label class="field">Link oder Text<textarea name="content" class="input" rows="4" maxlength="2000">${esc(w.content)}</textarea></label><p class="muted small-text">Der QR-Code wird direkt auf diesem Gerät erzeugt; der Text wird an keinen Dienst gesendet.</p>`;
   if (w.type === 'hall') { const list = hall.planList(); body += list.length ? `<label class="field">Hallenplan<select name="plan" class="select">${list.map(p => `<option value="${esc(p.id)}" ${p.id === w.planId ? 'selected' : ''}>${esc(p.title)}</option>`).join('')}</select></label><p class="muted small-text">Bearbeiten im Bereich Hallenpläne; Änderungen erscheinen hier sofort.</p>` : '<p class="muted">Noch kein Hallenplan. Lege einen im Bereich Hallenpläne an.</p>'; }
   if (w.type === 'stopwatch') body += `<p class="muted small-text">${w.mode === 'people' ? 'Mehrpersonen-Stoppuhr: gemeinsame Uhr starten, für jede Person „Zeit speichern“ drücken.' : 'Einfache Stoppuhr mit Hundertstelsekunden.'}</p>`;
@@ -450,9 +477,12 @@ function settingsDialog(w) {
       <details><summary>Töne auswählen und vorhören</summary><div class="tone-grid">${Object.entries(INTERVAL_TONE_LABELS).map(([k, l]) => `<label class="field">${l}<span class="tone-row"><select name="tone_${k}" class="select sm">${Object.entries(TONES).map(([id, t]) => `<option value="${id}" ${tones[k] === id ? 'selected' : ''}>${t.name}</option>`).join('')}</select><button type="button" class="icon-btn sm" data-preview="${k}" aria-label="Vorhören">${icon('play', 14)}</button></span></label>`).join('')}</div></details>
       <p class="muted small-text" data-total></p>`;
   }
+  const ex = extra.TYPES.includes(w.type) ? extra.settings(w, { durField, readDur, toneFields, readTone }) : null;
+  if (ex) body += ex.body;
   body += pos;
-  dialog({ title: 'Einstellungen', body, wide: w.type === 'interval',
+  const d = dialog({ title: 'Einstellungen', body, wide: w.type === 'interval' || !!ex?.wide,
     onOpen: el => {
+      bindTone(el); ex?.onOpen?.(el);
       el.querySelectorAll('[data-preview]').forEach(btn => btn.onclick = () => play(el.querySelector(`[name="tone_${btn.dataset.preview}"]`).value, Number(el.querySelector('[name=volume]').value) / 100));
       const tot = el.querySelector('[data-total]');
       if (tot) { const upd = () => { const fd = new FormData(el.querySelector('form')); const x = { trainMs: readDur(fd, 'train'), pauseMs: readDur(fd, 'pause'), sets: Math.max(1, Number(fd.get('sets')) || 1), rounds: Math.max(1, Number(fd.get('rounds')) || 1), roundPauseMs: readDur(fd, 'rp') }; tot.textContent = 'Gesamtdauer: ' + mmss(ivTotal(x)) + ' Minuten'; }; el.addEventListener('input', upd); upd(); }
@@ -465,8 +495,9 @@ function settingsDialog(w) {
         if (x.type === 'timer') {
           const d = clamp(readDur(fd, 'dur'), 1000, 24 * 3600000);
           if (d !== x.durationMs) { x.durationMs = d; x.remainingMs = d; x.endsAt = null; }
-          x.style = fd.get('style'); x.sound = fd.get('sound') === 'on';
+          x.style = fd.get('style'); readTone(fd, x);
         }
+        ex?.apply(fd, x);
         if (x.type === 'hall' && fd.get('plan')) { const prevTitle = hall.planById(x.planId)?.title; x.planId = String(fd.get('plan')); const t = hall.planById(x.planId)?.title; if (t && (!x.label || x.label === prevTitle || x.label === 'Hallenplan')) x.label = t.slice(0, 60); }
         if (x.type === 'qr') { const v = String(fd.get('content')).trim(); if (v) qrSvg(v); x.content = v; }
         if (x.type === 'interval') {
@@ -479,16 +510,83 @@ function settingsDialog(w) {
         x.width = clamp(Number(fd.get('width')) || x.width, Math.max(minW, mw), W() - x.x); x.height = clamp(Number(fd.get('height')) || x.height, Math.max(minH, mh), SCREEN_H - x.y);
       });
     } });
+  d.el.addEventListener('close', stopPreview);
+}
+
+// Endton eines Timers: Auswahl mit Probehören, Lautstärke, Wiederholungen und Vorwarnton
+const WARNS = [[0, 'Aus'], [30, '30 Sekunden vorher'], [60, '1 Minute vorher'], [120, '2 Minuten vorher'], [300, '5 Minuten vorher']];
+function toneFields(w) {
+  const cur = endToneId(w.tone), vol = w.volume ?? 90, rep = w.repeats ?? 2;
+  return `<label class="check"><input type="checkbox" name="sound" ${w.sound ? 'checked' : ''}> Ton am Ende</label>
+    <div class="two"><label class="field">Endton<span class="tone-row"><select name="tone" class="select">${Object.entries(END_TONES).filter(([, t]) => !t.hidden).map(([id, t]) => `<option value="${id}" ${cur === id ? 'selected' : ''}>${t.name} – ${t.hint}</option>`).join('')}</select><button type="button" class="icon-btn sm" data-end-test aria-label="Probehören" title="Probehören">${icon('play', 14)}</button></span></label>
+    <label class="field">Lautstärke <output>${vol} %</output><input type="range" min="10" max="100" step="5" name="volume" value="${vol}" oninput="this.previousElementSibling.value=this.value+' %'"></label></div>
+    <div class="two"><label class="field">Wie oft?<select name="repeats" class="select">${[1, 2, 3].map(n => `<option value="${n}" ${rep === n ? 'selected' : ''}>${n} Mal</option>`).join('')}</select></label>
+    <label class="field">Vorwarnton <small class="muted">(leise)</small><select name="warn" class="select">${WARNS.map(([v, l]) => `<option value="${v}" ${(Number(w.warn) || 0) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`;
+}
+function readTone(fd, x) {
+  x.sound = fd.get('sound') === 'on'; x.tone = endToneId(String(fd.get('tone'))); x.volume = clamp(Number(fd.get('volume')) || 90, 10, 100);
+  x.repeats = clamp(Number(fd.get('repeats')) || 1, 1, 3); x.warn = WARNS.some(([v]) => v === Number(fd.get('warn'))) ? Number(fd.get('warn')) : 0;
+}
+function bindTone(el) {
+  const btn = el.querySelector('[data-end-test]'); if (!btn) return;
+  btn.onclick = () => previewEnd({ tone: el.querySelector('[name=tone]').value, volume: Number(el.querySelector('[name=volume]').value) / 100 });
+}
+
+// ---------- Vorlagen: Anordnungen des Bildschirms speichern und wieder laden ----------
+// Beim Laden beginnen Timer, Stoppuhren und Intervalle von vorn; Inhalte (Aufträge, Dienste, Punkte) bleiben wie gespeichert.
+function freshCopy(w) {
+  const x = { ...structuredClone(w), id: uid() };
+  if ('endsAt' in x) { x.endsAt = null; x.remainingMs = x.durationMs; }
+  if ('startedAt' in x) { x.startedAt = null; x.elapsedMs = 0; }
+  return x;
+}
+function layoutsDialog() {
+  const list = () => scr().layouts || [];
+  const rows = () => list().map(l => `<li><span class="name"><b>${esc(l.name)}</b> <small class="muted">${l.widgets.length} ${l.widgets.length === 1 ? 'Objekt' : 'Objekte'}</small></span>
+    <button type="button" class="btn primary sm" data-l="load" data-id="${esc(l.id)}">Laden</button><button type="button" class="icon-btn sm" data-l="save" data-id="${esc(l.id)}" title="Mit der jetzigen Anordnung überschreiben" aria-label="Überschreiben">${icon('download', 15)}</button><button type="button" class="icon-btn sm" data-l="del" data-id="${esc(l.id)}" title="Löschen" aria-label="Löschen">${icon('trash', 15)}</button></li>`).join('') || '<li class="muted">Noch keine Vorlage gespeichert.</li>';
+  const snap = () => ({ background: scr().background, widgets: scr().widgets.map(freshCopy) });
+  dialog({ title: 'Vorlagen für den Bildschirm', submit: 'Speichern', cancel: 'Schließen', body: `
+    <ul class="manage-list" data-list>${rows()}</ul>
+    <label class="field">Jetzige Anordnung speichern als<input name="name" class="input" maxlength="40" placeholder="z. B. Arbeitsphase Technik"></label>
+    <p class="muted small-text">Eine Vorlage merkt sich alle Objekte mit Platz, Größe und Einstellungen. „Laden“ ersetzt den jetzigen Bildschirm; Timer beginnen dabei von vorn.</p>`,
+    onOpen: (el, close) => el.addEventListener('click', async e => {
+      const b = e.target.closest('[data-l]'); if (!b) return;
+      const l = list().find(x => x.id === b.dataset.id); if (!l) return;
+      if (b.dataset.l === 'load') {
+        close();
+        const before = { background: scr().background, widgets: scr().widgets };
+        store.update(s => { s.screen.background = l.background; s.screen.widgets = l.widgets.map(freshCopy); });
+        toast(`Vorlage „${l.name}“ geladen.`, { action: 'Rückgängig', onAction: () => store.update(s => { s.screen.background = before.background; s.screen.widgets = before.widgets; }) });
+      } else if (b.dataset.l === 'save') { store.update(s => { Object.assign(s.screen.layouts.find(x => x.id === l.id), snap()); }); el.querySelector('[data-list]').innerHTML = rows(); toast(`„${l.name}“ überschrieben.`); }
+      else { close(); if (await confirmDialog('Vorlage löschen', `Die Vorlage „${l.name}“ löschen? Der jetzige Bildschirm bleibt, wie er ist.`)) store.update(s => { s.screen.layouts = s.screen.layouts.filter(x => x.id !== l.id); }); }
+    }),
+    onSubmit: fd => {
+      const name = String(fd.get('name')).trim().slice(0, 40); if (!name) throw new Error('Bitte einen Namen für die Vorlage eingeben.');
+      if (!scr().widgets.length) throw new Error('Der Bildschirm ist leer – erst Objekte hinzufügen.');
+      if (list().length >= MAX_LAYOUTS && !list().some(l => l.name === name)) throw new Error(`Höchstens ${MAX_LAYOUTS} Vorlagen. Bitte eine löschen oder überschreiben.`);
+      store.update(s => { s.screen.layouts ||= []; const old = s.screen.layouts.find(l => l.name === name); if (old) Object.assign(old, snap()); else s.screen.layouts.push({ id: uid(), name, ...snap() }); });
+      toast(`Vorlage „${name}“ gespeichert.`);
+    } });
 }
 
 function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
-      <li><b>Hinzufügen:</b> Unten Timer, Stoppuhr, Intervalltimer oder QR-Code wählen (bis zu 30 Objekte).</li>
+      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel und Stationen.</li>
       <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
-      <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
-      <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter.</li>
+      <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und den Endton einstellen: Klangschale (Standard), Glockenspiel, Windspiel, Gong, Wecker oder Pfiff – mit Probehören, Lautstärke, Wiederholungen und leisem Vorwarnton. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
+      <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter. Die Zeiten gibt es auch als Tabelle (CSV).</li>
+      <li><b>Zufallsauswahl:</b> Zieht ein Kind (oder mehrere) aus einer Lerngruppe, aus den Tieren des Kartenquiz oder aus Nummern – ohne Wiederholung, bis alle dran waren. Kinder, die im Bereich Gruppen als „fehlt heute“ markiert sind, werden übersprungen.</li>
+      <li><b>Arbeitsform:</b> Zeigt groß Stille, Flüstern, Partnerarbeit, Gruppenarbeit oder „Alle hören zu“. Am Zahnrad lässt sich eine Lautstärke-Ampel mit dem Mikrofon zuschalten; es wird nichts aufgenommen.</li>
+      <li><b>Auftragskarte:</b> Pflicht, Zusatz, Material und Hilfe – bleibt die ganze Arbeitsphase sichtbar.</li>
+      <li><b>Stundenablauf:</b> Phasen mit Minuten; die laufende Phase ist hervorgehoben („noch 12 min · dann: Aufräumen“).</li>
+      <li><b>Ruhezeichen:</b> Ein Knopf, der sofort einen Ton spielt (Standard: Klangschale).</li>
+      <li><b>Dienste:</b> Verteilt Dienste reihum; „Weiter“ gibt sie an die nächsten Kinder.</li>
+      <li><b>Hilfe-Warteliste:</b> Du trägst ein, wer Hilfe braucht; der Haken entfernt das Kind, die nächsten rücken auf.</li>
+      <li><b>Anzeigetafel:</b> Spielstand für zwei Teams, auf Wunsch mit Spielzeit und Schlusspfiff.</li>
+      <li><b>Stationen:</b> Zeit je Station und Wechselzeit; die Tabelle zeigt, welche Gruppe an welcher Station ist und wohin sie wechselt – auf Wunsch mit Hallenplan daneben.</li>
+      <li><b>Vorlagen:</b> Unten „Vorlagen“ speichert die jetzige Anordnung unter einem Namen (z. B. Ankommen, Arbeitsphase, Aufräumen) und lädt sie wieder.</li>
       <li><b>Hallenplan:</b> Zeigt einen Plan aus dem Bereich Hallenpläne, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
       <li><b>Intervalltimer:</b> Trainingszeit, Satzpause, Sätze, Runden, Rundenpause, Lautstärke und Töne einstellen. Die Phasen wechseln automatisch.</li>
       <li><b>Töne:</b> Der Browser spielt Töne nur, solange die Seite geöffnet und das Gerät nicht gesperrt ist. Mit „Töne an/aus“ schaltest du alle Signale stumm. Läuft auf dem Gerät Musik (Spotify, YouTube), kann die App sie bei Signalen leiser stellen oder kurz anhalten: Zahnrad oben rechts → „Musik bei Signalen“.</li>

@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 4;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0)
+export const SCHEMA = 5;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -40,7 +40,7 @@ export function demoHall() {
   return { id: uid(), title: 'Beispiel: drei Bereiche', topic: 'Beispiele', demo: true, floor: 'halle', v: 3, lines: [], items: items.map(fromOldFloor) };
 }
 export function defaultScreen() {
-  return { background: 'mint', zoom: 'auto', format: 'std', widgets: [
+  return { background: 'mint', zoom: 'auto', format: 'std', layouts: [], widgets: [
     { id: uid(), type: 'timer', style: 'digital', label: 'Arbeitsphase', x: 52, y: 90, width: 390, height: 230, durationMs: 600000, remainingMs: 600000, endsAt: null, sound: true },
     { id: uid(), type: 'timer', style: 'circle', label: 'Noch Zeit für Fragen', x: 493, y: 56, width: 280, height: 364, durationMs: 300000, remainingMs: 300000, endsAt: null, sound: true },
     { id: uid(), type: 'qr', label: 'Unterrichtsmaterial', x: 834, y: 114, width: 278, height: 354, content: '' },
@@ -206,11 +206,17 @@ function normSport(g) {
     teams: (Array.isArray(g?.teams) ? g.teams : []).map(t => ({ id: String(t.id || uid()), name: str(t.name, 40), members: (t.members || []).filter(id => ids.has(id)) })),
     tournaments, series };
 }
+// Objekte des Bildschirms: Zeit (bis 2.4.0) und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf,
+// Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel und Stationen (js/widgets.js)
+const WIDGET_TYPES = ['timer', 'qr', 'stopwatch', 'interval', 'hall', 'pick', 'mode', 'task', 'agenda', 'signal', 'duty', 'queue', 'score', 'stations'];
+const normWidgets = list => (Array.isArray(list) ? list : []).filter(w => w && WIDGET_TYPES.includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
+  x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
+const BACKGROUNDS = ['mint', 'paper', 'night'];
 function normScreen(s) {
   if (!s || !Array.isArray(s.widgets)) return defaultScreen();
-  const widgets = s.widgets.filter(w => w && ['timer', 'qr', 'stopwatch', 'interval', 'hall'].includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
-    x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
-  return { background: ['mint', 'paper', 'night'].includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets };
+  // Vorlagen (seit 2.5.0): gespeicherte Anordnungen, z. B. Ankommen, Arbeitsphase, Aufräumen
+  const layouts = (Array.isArray(s.layouts) ? s.layouts : []).filter(l => l && str(l.name, 40)).slice(0, 12).map(l => ({ id: String(l.id || uid()), name: str(l.name, 40), background: BACKGROUNDS.includes(l.background) ? l.background : 'mint', widgets: normWidgets(l.widgets) }));
+  return { background: BACKGROUNDS.includes(s.background) ? s.background : 'mint', zoom: s.zoom || 'auto', format: s.format === 'wide' ? 'wide' : 'std', widgets: normWidgets(s.widgets), layouts };
 }
 // ---------- Hallenpläne ----------
 export const HALL_MAX = 120;
