@@ -134,6 +134,30 @@ function teacherSvg(i) {
     + `<path d="${arms}" fill="none" stroke="${ink}" stroke-width="${num(6.6 * s)}" stroke-linecap="round"/><path d="${arms}" fill="none" stroke="${skin}" stroke-width="${num(3.6 * s)}" stroke-linecap="round"/>`
     + `${P(shirt, c, line)}${whistle}${head} fill="${skin}"${line}/>${top}${face}`;
 }
+// ---------- Hütchen (seit 2.8.0) ----------
+// Markierungshütchen von schräg oben: Schatten, runder Fuß, Kegel mit Licht und Schatten, weißer Streifen mit der
+// Nummer und kleine Öffnung an der Spitze. Steht immer aufrecht (eine Drehung des Elements wird ausgeglichen).
+const shade = (c, t, f) => { const n = parseInt(String(c).slice(1, 7), 16); if (!Number.isFinite(n)) return c; const a = [n >> 16 & 255, n >> 8 & 255, n & 255], b = t === 'w' ? 255 : 0;
+  return '#' + a.map(v => Math.round(v + (b - v) * f).toString(16).padStart(2, '0')).join(''); };
+function coneSvg(i, c) {
+  const { w, h } = i, u = Math.min(w, h), ox = (w - u) / 2, oy = (h - u) / 2, X = v => num(ox + v * u), Y = v => num(oy + v * u), R = v => num(v * u);
+  const ink = '#1f2a3c', sw = num(Math.max(1.5, u * 0.035)), t = String(i.text || '');
+  // halbe Breite des Kegels in der Höhe y (Spitze bei 0,12, Fuß bei 0,82)
+  const T = 0.12, B = 0.82, hw = y => 0.07 + (0.33 - 0.07) * (y - T) / (B - T);
+  const band = (y1, y2) => `M${X(0.5 - hw(y1))} ${Y(y1)}Q${X(0.5)} ${Y(y1 + 0.04)} ${X(0.5 + hw(y1))} ${Y(y1)}L${X(0.5 + hw(y2))} ${Y(y2)}Q${X(0.5)} ${Y(y2 + 0.05)} ${X(0.5 - hw(y2))} ${Y(y2)}Z`;
+  const body = `M${X(0.5 - hw(B))} ${Y(B)}L${X(0.43)} ${Y(T)}Q${X(0.5)} ${Y(T - 0.05)} ${X(0.57)} ${Y(T)}L${X(0.5 + hw(B))} ${Y(B)}Q${X(0.5)} ${Y(B + 0.09)} ${X(0.5 - hw(B))} ${Y(B)}Z`;
+  const fs = u * (t.length > 2 ? 0.25 : t.length > 1 ? 0.34 : 0.4);
+  const g = `<ellipse cx="${X(0.55)}" cy="${Y(0.9)}" rx="${R(0.46)}" ry="${R(0.095)}" fill="#000" opacity=".2"/>`
+    + `<ellipse cx="${X(0.5)}" cy="${Y(0.845)}" rx="${R(0.48)}" ry="${R(0.12)}" fill="${shade(c, 'b', 0.35)}" stroke="${ink}" stroke-width="${sw}"/>`
+    + `<ellipse cx="${X(0.5)}" cy="${Y(0.82)}" rx="${R(0.45)}" ry="${R(0.1)}" fill="${shade(c, 'b', 0.08)}"/>`
+    + `<path d="${body}" fill="${c}" stroke="${ink}" stroke-width="${sw}" stroke-linejoin="round"/>`
+    + `<path d="M${X(0.53)} ${Y(T - 0.03)}L${X(0.57)} ${Y(T)}L${X(0.5 + hw(B))} ${Y(B)}Q${X(0.71)} ${Y(B + 0.06)} ${X(0.6)} ${Y(B + 0.08)}Z" fill="#000" opacity=".15"/>`
+    + `<path d="${band(0.35, 0.65)}" fill="#fff"/>`
+    + `<path d="M${X(0.445)} ${Y(T + 0.05)}L${X(0.47)} ${Y(T + 0.03)}L${X(0.33)} ${Y(B - 0.04)}L${X(0.27)} ${Y(B - 0.05)}Z" fill="#fff" opacity=".38"/>`
+    + `<ellipse cx="${X(0.5)}" cy="${Y(T - 0.01)}" rx="${R(0.05)}" ry="${R(0.018)}" fill="${shade(c, 'b', 0.5)}"/>`
+    + (t ? `<text x="${X(0.5)}" y="${Y(0.515)}" dy=".35em" font-size="${num(fs)}" font-weight="800" text-anchor="middle" fill="${ink}" stroke="#fff" stroke-width="${num(u * 0.035)}" paint-order="stroke" stroke-linejoin="round" class="h-cone-t">${esc(t)}</text>` : '');
+  return i.rot ? `<g transform="rotate(${-i.rot} ${num(w / 2)} ${num(h / 2)})">${g}</g>` : g;
+}
 export function shape(i) {
   const { w, h } = i, c = i.color || KINDS[i.kind]?.color || '#333';
   switch (i.kind) {
@@ -142,10 +166,8 @@ export function shape(i) {
       const zp = zonePath(i), body = zp ? `<path d="${zp}" fill-rule="evenodd"` : `<polygon points="${para(w, h)}"`;
       return `${body} fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="4"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
     }
-    case 'cone': {
-      const r = Math.min(w, h) / 2, fs = r * (String(i.text || '').length > 2 ? 0.62 : 0.78);
-      return `<circle cx="${w / 2}" cy="${h / 2}" r="${num(r - 3)}" fill="${c}" stroke="#1f2a3c" stroke-width="4"/>${i.text ? `<text x="${w / 2}" y="${h / 2}" dy=".35em" font-size="${num(fs)}" text-anchor="middle" class="h-on-color">${esc(i.text)}</text>` : ''}`;
-    }
+    case 'cone':
+      return coneSvg(i, c);
     case 'kid':
       return kidSvg(i);
     case 'teacher':

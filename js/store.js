@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 7;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0)
+export const SCHEMA = 8;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -171,40 +171,67 @@ const int = (v, min, max, d) => { const n = Math.round(Number(v)); return Number
 // Fach einer Lerngruppe (seit 2.0.0); ältere Klassen aus „Technik“ bekommen es aus dem Namen, sonst Technik
 export const SUBJECTS = ['Technik', 'Sport', 'Informatik'];
 function guessSubject(name, d) { const n = String(name || '').toLocaleLowerCase('de'); return SUBJECTS.find(x => n.includes(x.toLocaleLowerCase('de'))) || d; }
-const LAYOUTS = ['omnibus', 'gruppen', 'sitzkreis', 'stehkreis', 'uform', 'arena', 'raum'];
+const LAYOUTS = ['omnibus', 'gruppen', 'sitzkreis', 'stehkreis', 'uform', 'arena'];
+export const SEAT_LAYOUTS = LAYOUTS;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-// Platz im Raumplaner: „<Kennung des Tisches>:<Nummer>“ → Kennung eines Kindes
-const normSlots = (v, ids) => { const out = {}, seen = new Set(); for (const [k, id] of Object.entries(v && typeof v === 'object' ? v : {}).slice(0, 400)) if (/^[A-Za-z0-9_-]{1,64}:\d{1,2}$/.test(k) && ids.has(id) && !seen.has(id)) { seen.add(id); out[k] = String(id); } return out; };
 
-function normClass(c) {
-  const students = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id && str(s.name)).slice(0, 80).map(s => ({ id: String(s.id), name: str(s.name, 40) }));
-  const ids = new Set(students.map(s => s.id));
-  const st = c?.settings || {};
-  const plan = c?.plan && Array.isArray(c.plan.groups) ? { groups: c.plan.groups.map(g => (g || []).filter(id => ids.has(id))), createdAt: c.plan.createdAt || '' } : null;
-  // Standardsitzplan (seit 2.6.0, optional): wer normalerweise wo sitzt – Plätze als flache Liste, Tisch t = Plätze 2t und 2t + 1
-  const sd = c?.standard, seen = new Set();
-  const standard = sd && Array.isArray(sd.seats) ? { layout: LAYOUTS.includes(sd.layout) ? sd.layout : 'omnibus', tables: int(sd.tables, 1, 40, 8), groups: int(sd.groups, 1, 20, 4), cols: int(sd.cols, 0, 5, 0),
-    ...(int(sd.icols, 0, 6, 0) ? { icols: int(sd.icols, 1, 6, 2) } : {}), ...(ID_RE.test(sd.room) ? { room: sd.room } : {}), ...(sd.layout === 'raum' ? { slots: normSlots(sd.slots, ids) } : {}),
-    seats: sd.seats.slice(0, 80).map(id => (ids.has(id) && !seen.has(id) && seen.add(id) ? String(id) : null)), savedAt: str(sd.savedAt, 30) } : null;
-  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', subject: str(c?.subject, 30) || guessSubject(c?.name, 'Technik'), demo: !!c?.demo, students, ...(standard ? { standard } : {}),
-    settings: { layout: LAYOUTS.includes(st.layout) ? st.layout : 'omnibus', tables: int(st.tables, 1, 40, 8), groups: int(st.groups, 1, 20, 4), ...(int(st.cols, 0, 5, 0) ? { cols: int(st.cols, 2, 5, 3) } : {}),
-      ...(int(st.icols, 0, 6, 0) ? { icols: int(st.icols, 1, 6, 2) } : {}), ...(ID_RE.test(st.room) ? { room: st.room } : {}) },
-    rules: (Array.isArray(c?.rules) ? c.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1]) && r[0] !== r[1]).map(r => [r[0], r[1]]), plan };
-}
-// Räume des Raumplaners (seit 2.7.0, js/room.js): Maße in Metern, Teile mit Art, Lage, Größe und Plätzen
-export const ROOM_KINDS = ['table', 'bench', 'chair', 'board', 'desk', 'door', 'window', 'cabinet'];
+// Räume des Raumplaners (seit 2.7.0, js/room.js): Maße in Metern. Seit 2.8.0 hat ein Raum einen Grundriss (items: Tafel,
+// Pult, Tür, Fenster, Schränke) und je Organisationsform eine eigene Anordnung der Plätze (layouts[Form]: Tische,
+// Werkbänke, Stühle, Stehplätze). Fehlt eine Anordnung, stellt die App die Organisationsform selbst in den Raum.
+export const ROOM_KINDS = ['table', 'bench', 'chair', 'spot', 'board', 'desk', 'door', 'window', 'cabinet'];
+export const SEAT_KINDS = ['table', 'bench', 'chair', 'spot'];
 const num = (v, min, max, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n * 100) / 100)) : d; };
+function normItems(list, w, h, seated) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).filter(i => i && ROOM_KINDS.includes(i.kind) && SEAT_KINDS.includes(i.kind) === seated).slice(0, 300).map(i => {
+    const id = ID_RE.test(i.id) && !seen.has(i.id) ? String(i.id) : uid().replace(/[^A-Za-z0-9_-]/g, ''); seen.add(id);
+    const iw = num(i.w, 0.1, w, 1), ih = num(i.h, 0.1, h, 0.6);
+    return { id, kind: i.kind, x: num(i.x, 0, w - iw, 0), y: num(i.y, 0, h - ih, 0), w: iw, h: ih,
+      ...(['table', 'bench'].includes(i.kind) ? { seats: int(i.seats, 1, 12, 2) } : {}), ...(seated && Number.isFinite(Number(i.o)) && i.o !== null && i.o !== '' ? { o: int(i.o, 0, 999, 0) } : {}),
+      ...(str(i.label, 24) ? { label: str(i.label, 24) } : {}) };
+  });
+}
 function normRooms(list) {
   return (Array.isArray(list) ? list : []).filter(r => r && typeof r === 'object').slice(0, 30).map(r => {
-    const w = num(r.w, 3, 30, 8), h = num(r.h, 3, 30, 7), seen = new Set();
-    const items = (Array.isArray(r.items) ? r.items : []).filter(i => i && ROOM_KINDS.includes(i.kind)).slice(0, 300).map(i => {
-      let id = ID_RE.test(i.id) && !seen.has(i.id) ? String(i.id) : uid().replace(/[^A-Za-z0-9_-]/g, ''); seen.add(id);
-      const iw = num(i.w, 0.1, w, 1), ih = num(i.h, 0.1, h, 0.6);
-      return { id, kind: i.kind, x: num(i.x, 0, w - iw, 0), y: num(i.y, 0, h - ih, 0), w: iw, h: ih,
-        ...(['table', 'bench'].includes(i.kind) ? { seats: int(i.seats, 1, 12, 2) } : {}), ...(str(i.label, 24) ? { label: str(i.label, 24) } : {}) };
-    });
-    return { id: ID_RE.test(r.id) ? String(r.id) : uid(), name: str(r.name, 40) || 'Raum', w, h, items };
+    const w = num(r.w, 3, 30, 8), h = num(r.h, 3, 30, 7), layouts = {};
+    if (r.layouts && typeof r.layouts === 'object') { for (const L of LAYOUTS) if (Array.isArray(r.layouts[L])) layouts[L] = normItems(r.layouts[L], w, h, true); }
+    // Stand 7: Tische und Stühle lagen im Grundriss – sie werden die Anordnung für Omnibus
+    else { const old = normItems(r.items, w, h, true); if (old.length) layouts.omnibus = old; }
+    return { id: ID_RE.test(r.id) ? String(r.id) : uid(), name: str(r.name, 40) || 'Raum', w, h, items: normItems(r.items, w, h, false), layouts };
   });
+}
+// Plätze eines Raums (Stand 7) in Lesereihenfolge: Reihen von vorn nach hinten, darin von links (wie js/room.js)
+function oldSlotKeys(items) {
+  const n = it => (it.kind === 'chair' ? 1 : Number(it.seats) || 0), yc = it => it.y + it.h / 2, rows = [];
+  for (const it of items.filter(x => n(x) > 0).sort((a, b) => yc(a) - yc(b))) { const row = rows[rows.length - 1]; if (row && yc(it) - row.y0 < 0.45) row.items.push(it); else rows.push({ y0: yc(it), items: [it] }); }
+  return rows.flatMap(r => r.items.sort((a, b) => a.x - b.x)).flatMap(it => Array.from({ length: n(it) }, (_, i) => it.id + ':' + i));
+}
+
+function normClass(c, rooms = []) {
+  const students = (Array.isArray(c?.students) ? c.students : []).filter(s => s && s.id && str(s.name)).slice(0, 80).map(s => ({ id: String(s.id), name: str(s.name, 40) }));
+  const ids = new Set(students.map(s => s.id)), roomIds = new Set(rooms.map(r => r.id));
+  const st = c?.settings || {};
+  const plan = c?.plan && Array.isArray(c.plan.groups) ? { groups: c.plan.groups.map(g => (g || []).filter(id => ids.has(id))), createdAt: c.plan.createdAt || '' } : null;
+  // Standardraum (seit 2.8.0); Stand 7: der Raum der Organisationsform „Eigener Raum“
+  let room = ID_RE.test(c?.room) && roomIds.has(c.room) ? String(c.room) : null;
+  if (!room && st.layout === 'raum' && roomIds.has(st.room)) room = st.room;
+  if (!room && c?.standard?.layout === 'raum' && roomIds.has(c.standard.room)) room = c.standard.room;
+  // Standardsitzplan (seit 2.6.0, optional): wer normalerweise wo sitzt – Plätze als flache Liste, Tisch t = Plätze 2t und 2t + 1
+  let sd = c?.standard;
+  if (sd && sd.layout === 'raum') {
+    // Stand 7: Plätze „Tisch:Nummer“ im eigenen Raum → flache Liste in Lesereihenfolge
+    const r = rooms.find(x => x.id === sd.room), keys = r ? oldSlotKeys(r.layouts.omnibus || []) : [], slots = sd.slots && typeof sd.slots === 'object' ? sd.slots : {};
+    const seats = keys.map(k => slots[k] ?? null); while (seats.length && !seats[seats.length - 1]) seats.pop(); if (seats.length % 2) seats.push(null);
+    sd = { ...sd, layout: 'omnibus', seats: seats.length ? seats : (Array.isArray(sd.seats) ? sd.seats : []), tables: Math.max(1, Math.ceil(seats.length / 2), Number(sd.tables) || 1) };
+  }
+  const seen = new Set();
+  const standard = sd && Array.isArray(sd.seats) ? { layout: LAYOUTS.includes(sd.layout) ? sd.layout : 'omnibus', tables: int(sd.tables, 1, 40, 8), groups: int(sd.groups, 1, 20, 4), cols: int(sd.cols, 0, 5, 0),
+    ...(int(sd.icols, 0, 6, 0) ? { icols: int(sd.icols, 1, 6, 2) } : {}),
+    seats: sd.seats.slice(0, 80).map(id => (ids.has(id) && !seen.has(id) && seen.add(id) ? String(id) : null)), savedAt: str(sd.savedAt, 30) } : null;
+  return { id: String(c?.id || uid()), name: str(c?.name, 60) || 'Klasse', subject: str(c?.subject, 30) || guessSubject(c?.name, 'Technik'), demo: !!c?.demo, students, ...(standard ? { standard } : {}), ...(room ? { room } : {}),
+    settings: { layout: LAYOUTS.includes(st.layout) ? st.layout : 'omnibus', tables: int(st.tables, 1, 40, 8), groups: int(st.groups, 1, 20, 4), ...(int(st.cols, 0, 5, 0) ? { cols: int(st.cols, 2, 5, 3) } : {}),
+      ...(int(st.icols, 0, 6, 0) ? { icols: int(st.icols, 1, 6, 2) } : {}) },
+    rules: (Array.isArray(c?.rules) ? c.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1]) && r[0] !== r[1]).map(r => [r[0], r[1]]), plan };
 }
 function normSport(g) {
   const students = (Array.isArray(g?.students) ? g.students : []).filter(s => s && s.id && str(s.name)).slice(0, 120).map(s => ({ id: String(s.id), name: str(s.name, 40), className: str(s.className, 20) }));
@@ -355,12 +382,13 @@ function hallPart(sp) {
 export function normalize(raw) {
   const fresh = freshState();
   if (!raw || typeof raw !== 'object') return fresh;
-  const classes = (raw.technik?.classes || []).map(normClass);
+  const rooms = normRooms(raw.technik?.rooms);
+  const classes = (raw.technik?.classes || []).map(c => normClass(c, rooms));
   const groups = (raw.sport?.groups || []).map(normSport);
   const known = id => classes.some(c => c.id === id) || groups.some(g => g.id === id);
   const active = known(raw.active) ? raw.active : known(raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? groups[0]?.id ?? null;
   return { schema: SCHEMA, active,
-    technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null, rooms: normRooms(raw.technik?.rooms) },
+    technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null, rooms },
     sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null, ...hallPart(raw.sport) },
     quiz: normQuiz(raw.quiz), screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
 }

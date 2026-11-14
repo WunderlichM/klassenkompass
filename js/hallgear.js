@@ -93,14 +93,26 @@ function builder(swap, mx = false, my = false) {
       const p = P(cx, cy, r), R = r * U; ext(p[0] - R, p[1] - R); ext(p[0] + R, p[1] + R);
       put(`<circle cx="${n1(p[0])}" cy="${n1(p[1])}" r="${n1(R)}" fill="${fill}"/>${deco ? deco(p[0], p[1], R) : ''}`, keyOf([[cx - r, cy - r, 0]]), o.layer);
     },
-    // Kegel (Hütchen): vordere Hälfte des Fußkreises bis zur Spitze, dazu ein heller Ring
+    // Kegel (Hütchen, seit 2.8.0 mit Schatten, Fußplatte, Licht und Schatten, Streifen und Öffnung an der Spitze):
+    // vordere Hälfte des Fußkreises bis zur Spitze
     cone(cx, cy, r, h, c, o = {}) {
-      const [wx, wy] = sw(cx, cy), t1 = Math.atan(F * K), t2 = t1 + Math.PI;
-      const arc = (rr, z, rev) => { const a = []; for (let i = 0; i <= 16; i++) { const t = t2 + (t1 + 2 * Math.PI - t2) * i / 16; a.push(W(wx + rr * Math.cos(t), wy + rr * Math.sin(t), z)); } return rev ? a.reverse() : a; };
-      const rim = hc(wx, wy, 0, r * 1.2).map(p => W(...p));
-      let s = `<polygon points="${pts(rim)}" fill="${dark(c, 0.25)}"/><polygon points="${pts([...arc(r, 0), W(wx, wy, h)])}" fill="${c}"/>`;
-      const za = h * 0.42, zb = h * 0.62;
-      s += `<polygon points="${pts([...arc(r * (1 - za / h), za), ...arc(r * (1 - zb / h), zb, true)])}" fill="#ffffff" stroke-width="2.5"/>`;
+      const [wx, wy] = sw(cx, cy), t1 = Math.atan(F * K), t2 = t1 + Math.PI, z0 = h * 0.06, top = h * 0.94;
+      const arc = (rr, z, rev, a0 = 0, a1 = 1, n = 16) => { const a = []; for (let i = 0; i <= n; i++) { const t = t2 + (t1 + 2 * Math.PI - t2) * (a0 + (a1 - a0) * i / n); a.push(W(wx + rr * Math.cos(t), wy + rr * Math.sin(t), z)); } return rev ? a.reverse() : a; };
+      const rAt = z => r * (1 - (z - z0) / (h - z0)) + r * 0.14 * ((z - z0) / (h - z0));   // oben bleibt eine kleine Öffnung
+      const shadow = hc(wx + r * 0.25, wy - r * 0.15, 0, r * 1.35).map(p => W(...p));
+      let s = `<polygon points="${pts(shadow)}" fill="${C.shadow}" stroke="none" opacity=".75"/>`;
+      // Fußplatte: Kante und Oberseite
+      s += `<polygon points="${pts([...arc(r * 1.25, 0), ...arc(r * 1.25, z0, true)])}" fill="${dark(c, 0.35)}" stroke="none"/>`;
+      s += `<polygon points="${pts(hc(wx, wy, z0, r * 1.25).map(p => W(...p)))}" fill="${dark(c, 0.12)}" stroke-width="2.5"/>`;
+      // Kegel mit Licht von links und Schatten rechts
+      const cone = (a0, a1, fill, extra = '') => `<polygon points="${pts([...arc(r, z0, false, a0, a1), ...arc(rAt(top), top, true, a0, a1)])}" fill="${fill}"${extra}/>`;
+      s += cone(0, 1, c, ' stroke-width="3"') + cone(0.62, 1, dark(c, 0.16), ' stroke="none"') + cone(0.16, 0.3, light(c, 0.35), ' stroke="none"');
+      // weißer Streifen
+      const za = h * 0.4, zb = h * 0.6;
+      s += `<polygon points="${pts([...arc(rAt(za), za), ...arc(rAt(zb), zb, true)])}" fill="${C.white}" stroke-width="2"/>`;
+      s += `<polygon points="${pts([...arc(rAt(za), za, false, 0.62, 1), ...arc(rAt(zb), zb, true, 0.62, 1)])}" fill="#d9dde3" stroke="none"/>`;
+      // Öffnung an der Spitze
+      s += `<polygon points="${pts(hc(wx, wy, top, rAt(top)).map(p => W(...p)))}" fill="${dark(c, 0.5)}" stroke-width="2"/>`;
       put(s, [wx - r, wy - r, 0], o.layer);
     },
     // fertiges SVG (Punkte bereits mit P berechnet); p/R erweitern den Rahmen für Kreise
