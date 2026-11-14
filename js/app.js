@@ -14,7 +14,7 @@ import * as theme from './theme.js';
 import * as lock from './lock.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.1.0';
+export const VERSION = '2.2.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
@@ -49,7 +49,7 @@ function shell() {
     </nav>
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
-      <button class="btn ghost sm" id="install-btn" ${isInstalled() ? 'hidden' : ''} title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
+      <button class="btn ghost sm" id="install-btn" ${showInstall() ? '' : 'hidden'} title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
       <button class="icon-btn" id="lock-btn" ${lock.enabled() ? '' : 'hidden'} aria-label="Jetzt sperren" title="Jetzt sperren – Daten verschlüsselt, Passwort zum Öffnen">${icon('lock')}</button>
       <button class="icon-btn" id="menu-btn" aria-label="Daten und Hilfe" title="Daten und Hilfe">${icon('gear')}</button>
     </div>
@@ -293,7 +293,20 @@ function helpDialog() {
 }
 
 // ---------- Installation ----------
-function isInstalled() { return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true; }
+// Läuft gerade als installierte App (eigenes Fenster)?
+function runsAsApp() { return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true; }
+// Seit 2.2.0: Ist die App installiert, bleibt der Knopf auch im normalen Browser-Tab weg.
+// Gemerkt wird das beim Start als App und nach der Installation; Chrome und Edge melden es zusätzlich
+// (getInstalledRelatedApps) und bieten die Installation nur an, solange sie noch nicht installiert ist (beforeinstallprompt).
+const INSTALLED_KEY = 'klassenkompass.installed';
+const markInstalled = on => { try { on ? localStorage.setItem(INSTALLED_KEY, '1') : localStorage.removeItem(INSTALLED_KEY); } catch {} };
+const knownInstalled = () => { try { return localStorage.getItem(INSTALLED_KEY) === '1'; } catch { return false; } };
+const chromiumInstall = 'onbeforeinstallprompt' in window;   // Chrome, Edge, Samsung Internet: Installation über den Browser-Dialog
+function isInstalled() { return runsAsApp() || knownInstalled(); }
+function showInstall() { return !isInstalled() && (!chromiumInstall || !!installEvent); }
+function refreshInstall() { const b = document.getElementById('install-btn'); if (b) b.hidden = !showInstall(); }
+if (runsAsApp()) markInstalled(true);
+navigator.getInstalledRelatedApps?.().then(list => { if (list?.length) { markInstalled(true); refreshInstall(); } }).catch(() => {});
 function platform() {
   const ua = navigator.userAgent;
   if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
@@ -304,7 +317,7 @@ async function install() {
   if (installEvent) {
     installEvent.prompt();
     const choice = await installEvent.userChoice.catch(() => null); installEvent = null;
-    if (choice?.outcome === 'accepted') { document.getElementById('install-btn').hidden = true; return; }
+    if (choice?.outcome === 'accepted') { markInstalled(true); refreshInstall(); return; }
   }
   installGuide();
 }
@@ -511,8 +524,9 @@ try {
   }
 } catch {}
 
-addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; const b = document.getElementById('install-btn'); if (b) b.hidden = isInstalled(); });
-addEventListener('appinstalled', () => { const b = document.getElementById('install-btn'); if (b) b.hidden = true; toast('KlassenKompass wurde installiert.'); });
+// Bietet der Browser die Installation an, ist die App hier (nicht mehr) installiert – z. B. nach dem Deinstallieren
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; if (!runsAsApp()) markInstalled(false); refreshInstall(); });
+addEventListener('appinstalled', () => { installEvent = null; markInstalled(true); refreshInstall(); toast('KlassenKompass wurde installiert.'); });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').then(reg => {

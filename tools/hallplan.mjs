@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Hallenplan-Werkzeug: prüft eine Plan-Datei und erzeugt mit der Zeichnung der App je Plan
-//   „Hallenplan - <Titel> - Schüleransicht.pdf“ (A4 quer, zum Zeigen oder Drucken),
+//   „Hallenplan - <Titel> - Schüleransicht.pdf“ (A4 quer, zum Zeigen oder Drucken; mit Spielregeln auf Seite 2, falls angelegt),
 //   „Hallenplan - <Titel>.png“ (nur die Zeichnung, für den Verlaufsplan) und
 //   „Hallenplan - <Titel>.json“ (zum Importieren in KlassenKompass → Hallenpläne → Sammlung → Importieren).
 //
@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { parsePlans, exportPlans, boardSvg, contentBox } from '../js/hallplan.js';
+import { parsePlans, exportPlans, boardSvg, contentBox, printsRules, rulesHtml } from '../js/hallplan.js';
 import { gearList, viewLabel } from '../js/hallgear.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,7 +34,7 @@ for (const p of plans) for (const [n, i] of p.items.entries()) {
   const cx = i.x + i.w / 2, cy = i.y + i.h / 2;
   if (cx < -40 || cx > 1640 || cy < 60 || cy > 760) console.warn(`Hinweis: „${p.title}“, Element ${n + 1} (${i.kind}${i.gear ? ' ' + i.gear : ''}) liegt außerhalb der Halle.`);
 }
-console.log(plans.map(p => `„${p.title}“: ${p.items.length} Elemente${p.lines.length ? ', Linien ' + p.lines.join(', ') : ''}`).join('\n'));
+console.log(plans.map(p => `„${p.title}“: ${p.items.length} Elemente${p.lines.length ? ', Linien ' + p.lines.join(', ') : ''}${p.rules ? `, ${p.rules.items.length} Regeln${p.rules.print ? ' (Seite 2)' : ' (nicht gedruckt)'}` : ''}`).join('\n'));
 if (flag('--check')) process.exit(0);
 
 const chrome = [process.env.CHROME, '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
@@ -57,10 +57,11 @@ const run = (html, extra) => {
 try {
   for (const p of plans) {
     const base = join(dir, 'Hallenplan - ' + fileName(p.title));
-    // Schüleransicht: A4 quer, Titel, Zeichnung, Hinweis – wie „Drucken / PDF“ in der App
-    run(page(`<main><h1>${esc(p.title)}</h1>${boardSvg(p, { crop: true })}<p>Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p></main>`,
+    // Schüleransicht: A4 quer, Titel, Zeichnung, Hinweis – wie „Drucken / PDF“ in der App; Spielregeln auf Seite 2
+    run(page(`<main><h1>${esc(p.title)}</h1>${boardSvg(p, { crop: true })}<p>Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p></main>${printsRules(p) ? `<div class="rules-page">${rulesHtml(p)}</div>` : ''}`,
       `@page { size: A4 landscape; margin: 10mm; } main { height: 189mm; display: flex; flex-direction: column; font-family: "Segoe UI", Arial, sans-serif; color: #1f2a3c; }
-       h1 { font-size: 20pt; margin: 0 0 4mm; } p { font-size: 9pt; color: #6b6d78; margin: 2mm 0 0; } svg { flex: 1; min-height: 0; width: 100%; }`),
+       main h1 { font-size: 20pt; margin: 0 0 4mm; } main p { font-size: 9pt; color: #6b6d78; margin: 2mm 0 0; } main svg { flex: 1; min-height: 0; width: 100%; }
+       .rules-page { break-before: page; }`),
     [`--print-to-pdf=${base} - Schüleransicht.pdf`, '--no-pdf-header-footer']);
     // PNG: nur die Zeichnung, 2000 px breit
     const [, , vw, vh] = contentBox(p).split(' ').map(Number), W = 2000, H = Math.round(W * vh / vw);

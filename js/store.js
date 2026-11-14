@@ -3,10 +3,10 @@ import { uid } from './engine.js';
 import { GEAR, gearSize, scaleOf } from './hallgear.js';
 import { MARKS, fromOldFloor } from './hallfloor.js';
 import { animalName } from './animals.js';
-import { FORM_IDS, bandOf } from './hallplan.js';
+import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 3;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0)
+export const SCHEMA = 4;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -237,6 +237,8 @@ function normHalls(list) {
   return (Array.isArray(list) ? list : []).slice(0, HALL_MAX).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
     // Thema, Stunde und Phase (seit 2.0.0): ordnen die Sammlung; Phase 0 = keine Phase
     topic: str(p?.topic, 60), lesson: str(p?.lesson, 80), phase: p?.lesson ? int(p?.phase, 1, 20, 1) : 0,
+    // Spielregeln (seit 2.2.0): optional, Seite 2 der Schüleransicht
+    ...(normRules(p?.rules) ? { rules: normRules(p.rules) } : {}),
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
     // v 2 = Halle 27 m × 15 m (seit 1.15), v 3 = Geräte maßstäblich (seit 1.16); ältere Pläne werden einmal umgerechnet
     v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),

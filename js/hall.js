@@ -11,7 +11,7 @@ import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
 
 import { BW, BH, HALL, FLOOR, K, MARKS, badmintonCourts } from './hallfloor.js';
-import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, itemAt, parsePlans, exportPlans, ZONE_FORMS, bandOf } from './hallplan.js';
+import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, itemAt, parsePlans, exportPlans, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
 export { boardSvg };
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
@@ -106,6 +106,7 @@ function editorHtml(p) {
       ${p.topic ? `<span class="badge">${esc(p.topic)}</span>` : ''}
       ${phases.length ? `<span class="hall-phase" role="group" aria-label="Phasen der Stunde"><button class="icon-btn sm" data-h="phase" data-d="-1" title="Vorige Phase" aria-label="Vorige Phase" ${k > 0 ? '' : 'disabled'}>${icon('back', 15)}</button><span class="small-text">Phase ${p.phase} · ${k + 1}/${phases.length}</span><button class="icon-btn sm" data-h="phase" data-d="1" title="Nächste Phase" aria-label="Nächste Phase" ${k < phases.length - 1 ? '' : 'disabled'}>${icon('forward', 15)}</button></span>` : ''}
       <button class="btn ghost sm" data-h="props" title="Name, Thema, Stunde und Phase ändern">${icon('edit', 15)} Eigenschaften</button>
+      <button class="btn ghost sm ${p.rules ? 'on' : ''}" data-h="rules" title="Spielregeln zu diesem Plan – werden auf Seite 2 der Schüleransicht gedruckt">${icon('list', 15)} Regeln${p.rules ? ` (${p.rules.items.length})` : ''}</button>
       <button class="btn ghost sm" data-h="next-phase" title="Kopie als nächste Phase derselben Stunde anlegen">${icon('plus', 15)} Nächste Phase</button>
       <button class="btn ghost sm" data-h="copy">Kopie</button>
       <button class="icon-btn sm" data-h="export-plan" title="Exportieren – diesen Hallenplan als Datei speichern" aria-label="Exportieren">${icon('download', 15)}</button>
@@ -129,6 +130,7 @@ function editorHtml(p) {
       </div>
     </div>
     <div class="print-only hall-print"><h1>${esc(p.title)}</h1>${boardSvg(p, { crop: true })}<p>Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p></div>
+    ${printsRules(p) ? `<div class="print-only hall-print-rules">${rulesHtml(p)}</div>` : ''}
   </div>`;
 }
 
@@ -274,6 +276,7 @@ async function onClick(e) {
     case 'import-plan': return importPlansDialog();
     case 'export-plan': return downloadFile(`Hallenplan - ${fileName(p.title)}.json`, exportPlans([p]));
     case 'props': return propsDialog(p);
+    case 'rules': return rulesEditDialog(p);
     case 'copy': return copyPlan(p, false);
     case 'next-phase': return copyPlan(p, true);
     case 'phase': { const list = lessonPlans(p), k = list.findIndex(x => x.id === p.id), n = list[k + Number(b.dataset.d)]; if (n) openPlan(n.id); return; }
@@ -546,6 +549,20 @@ function propsDialog(p) {
       const topic = readTopic(fd);
       store.update(s => addTopic(s, topic), { silent: true });
       commit(x => { x.title = t.slice(0, 80); x.topic = topic; x.lesson = lesson; x.phase = lesson ? clamp(Math.round(Number(fd.get('phase'))) || 1, 1, 20) : 0; });
+    } });
+}
+// Spielregeln dieses Plans (seit 2.2.0): eine Regel je Zeile, gedruckt auf Seite 2 der Schüleransicht
+function rulesEditDialog(p) {
+  const r = p.rules;
+  dialog({ title: 'Spielregeln', submit: 'Speichern', body: `
+    <label class="field">Überschrift<input name="title" class="input" maxlength="60" value="${esc(r?.title || p.topic || '')}" placeholder="z. B. Völkerball"></label>
+    <label class="field">Regeln <small class="muted">(eine je Zeile, höchstens ${RULES_MAX}, kurz halten)</small><textarea name="items" class="input" rows="8" maxlength="${RULES_MAX * 210}" placeholder="Treffer: direkt, ohne Boden.\nKopf zählt nicht.\nGetroffen? Über den Randweg nach außen.">${esc((r?.items || []).join('\n'))}</textarea></label>
+    <label class="check"><input type="checkbox" name="print" ${r?.print === false ? '' : 'checked'}> Beim Drucken der Schüleransicht auf Seite 2 mitdrucken</label>
+    <p class="muted small-text">Seite 1 bleibt der Hallenplan in voller Größe; die Regeln stehen auf Seite 2 – beidseitig gedruckt also auf der Rückseite. Leeres Feld = keine Regeln.</p>`,
+    onSubmit: fd => {
+      const rules = normRules({ title: fd.get('title'), items: String(fd.get('items') || '').split(/\r?\n/).map(x => x.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, '')), print: fd.get('print') === 'on' });
+      commit(x => { if (rules) x.rules = rules; else delete x.rules; });
+      toast(rules ? `${rules.items.length} ${rules.items.length === 1 ? 'Regel' : 'Regeln'} gespeichert${rules.print ? ' – sie stehen beim Drucken auf Seite 2' : ''}.` : 'Keine Spielregeln mehr bei diesem Plan.');
     } });
 }
 // Kopie anlegen; als nächste Phase gehören Original und Kopie zur selben Stunde

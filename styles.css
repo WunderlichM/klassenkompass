@@ -1142,6 +1142,16 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 .h-num { width: 64px; min-height: 36px; }
 .hall-svg .h-band { fill: rgba(61, 111, 181, .1); stroke: #3d6fb5; stroke-width: 2.5; stroke-dasharray: 8 6; }
 .hall-print { display: none; }
+.hall-print-rules { display: none; }
+/* Spielregeln auf Seite 2 der Schüleransicht (seit 2.2.0) – auch von tools/hallplan.mjs genutzt */
+.hall-rules { color: #1f2a3c; font-family: "Segoe UI", Arial, sans-serif; }
+.hall-rules h1 { font-size: 24pt; margin: 0 0 1mm; }
+.hall-rules .hall-rules-sub { font-size: 11pt; color: #6b6d78; margin: 0 0 6mm; }
+.hall-rules ol { margin: 0; padding-left: 10mm; font-size: 17pt; line-height: 1.35; }
+.hall-rules li { margin: 0 0 3.5mm; padding-left: 2mm; break-inside: avoid; }
+@media print {
+  .hall-print-rules { display: block !important; break-before: page; page: hall; }
+}
 body.presenting .hall-page { display: block; }
 @media (max-width: 900px) {
   .hall-page { grid-template-columns: minmax(0, 1fr); }

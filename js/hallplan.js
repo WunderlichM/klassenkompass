@@ -214,9 +214,28 @@ export function lineAt(kind, from, to, { size = 1, color } = {}) {
   return { id: uid(), kind, x: Math.round((a[0] + b[0]) / 2 - w / 2), y: Math.round((a[1] + b[1]) / 2 - h / 2), w, h, rot, color: color || KINDS[kind].color };
 }
 
+// ---------- Spielregeln (seit 2.2.0) ----------
+// Je Plan optional: { title, items: [kurze Regeln], print }. Gedruckt auf Seite 2 der Schüleransicht (Rückseite),
+// damit der Hallenplan auf Seite 1 groß bleibt. In Dateien darf "rules" auch nur eine Liste von Texten sein.
+export const RULES_MAX = 12;
+export function normRules(r) {
+  if (Array.isArray(r)) r = { items: r };
+  if (!r || typeof r !== 'object') return null;
+  const items = (Array.isArray(r.items) ? r.items : []).map(x => String(x ?? '').trim().slice(0, 200)).filter(Boolean).slice(0, RULES_MAX);
+  if (!items.length) return null;
+  return { title: String(r.title ?? '').trim().slice(0, 60), items, print: r.print !== false };
+}
+export const printsRules = p => !!(p?.rules?.items?.length && p.rules.print !== false);
+// Seite 2 der Schüleransicht: Überschrift, Name des Plans, nummerierte Regeln
+export function rulesHtml(p) {
+  if (!p?.rules?.items?.length) return '';
+  return `<section class="hall-rules"><h1>${esc(p.rules.title || 'Spielregeln')}</h1><p class="hall-rules-sub">${esc(p.title)}</p><ol>${p.rules.items.map(x => `<li>${esc(x)}</li>`).join('')}</ol></section>`;
+}
+
 // ---------- Austauschformat ----------
 // { "app": "KlassenKompass", "kind": "hall-plans", "v": 1, "plans": [ { "title": "…", "topic": "Völkerball", "floor": "halle", "lines": ["handball"], "items": [ … ] } ] }
 // Optional (seit 2.0.0): "topic" = Thema, "lesson" = Stunde, "phase" = Phase in dieser Stunde (1, 2, …).
+// Optional (seit 2.2.0): "rules" = { "title": "Völkerball", "items": ["…", "…"], "print": true } – Spielregeln für Seite 2.
 // Elemente stehen entweder in Einheiten der Zeichenfläche (x, y, w, h, rot – so exportiert die App) oder in Metern:
 //   { "kind": "zone", "m": [x0, x1, y0, y1], "color": "#2e7d4f", "text": "Feld 1" }
 //   { "kind": "zone", "m": [13.5, 26.2, 1.5, 13.5], "form": "u-l", "band": [3.6, 1.5] }   (Form und Randbreite in m, seit 1.22.0)
@@ -290,10 +309,11 @@ export function parsePlans(text) {
     const unknown = (Array.isArray(p.lines) ? p.lines : []).filter(m => !MARKS.some(x => x.id === m));
     if (unknown.length) throw new Error(`Plan ${k + 1} („${title}“): Spielfeldlinien „${unknown.join(', ')}“ gibt es nicht (möglich: ${MARKS.map(m => m.id).join(', ')}).`);
     const lesson = str(p.lesson, 80), phase = lesson ? int(p.phase, 1, 20, 1) : 0;
-    return { id: uid(), title, topic: str(p.topic, 60), lesson, phase, demo: false, floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n))) };
+    const rules = normRules(p.rules);
+    return { id: uid(), title, topic: str(p.topic, 60), lesson, phase, demo: false, ...(rules ? { rules } : {}), floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n))) };
   });
 }
 export function exportPlans(plans) {
-  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, ...(p.topic ? { topic: p.topic } : {}), ...(p.lesson ? { lesson: p.lesson, phase: p.phase || 1 } : {}), floor: p.floor, lines: p.lines || [],
+  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, ...(p.topic ? { topic: p.topic } : {}), ...(p.lesson ? { lesson: p.lesson, phase: p.phase || 1 } : {}), ...(p.rules?.items?.length ? { rules: p.rules } : {}), floor: p.floor, lines: p.lines || [],
     items: p.items.map(({ id, ...i }) => i) })) }, null, 2);
 }

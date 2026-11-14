@@ -35,7 +35,7 @@ function draw() {
       </div>
       <div class="tools no-print">
         <button class="btn ghost sm" data-p="lib">${icon('list', 16)} ${libHidden ? 'Sammlung zeigen' : 'Sammlung ausblenden'}</button>
-        <button class="btn ghost sm" data-p="print" title="Schüleransicht: A4 quer mit Titel und Zeichnung">${icon('print', 16)} Schüleransicht drucken</button>
+        <button class="btn ghost sm" data-p="print" title="Schüleransicht: A4 quer mit Titel und Zeichnung, Spielregeln (falls angelegt) auf Seite 2">${icon('print', 16)} Schüleransicht drucken</button>
         <button class="btn ghost sm" data-p="present">${icon(presenting ? 'shrink' : 'expand', 16)} ${presenting ? 'Ansicht verkleinern' : 'Ansicht vergrößern'}</button>
       </div>
     </div>
