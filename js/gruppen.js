@@ -2,7 +2,8 @@
 // und Teams (Sport). Beide nutzen dieselben Kinder und dieselbe Anwesenheit (js/groups.js).
 import * as store from './store.js';
 import * as groups from './groups.js';
-import { mixGroups, planIsCurrent, minimumTables, teamsAreCurrent, uid, TABLE_LAYOUTS } from './engine.js';
+import { mixGroups, minimumTables, uid, swapMembers, TABLE_LAYOUTS } from './engine.js';
+import { enableDrag } from './drag.js';
 import { esc, icon, toast, palStyle, toggleFullscreen, rulesDialog } from './ui.js';
 import { tournamentDialog } from './turniere.js';
 
@@ -25,7 +26,7 @@ const LAYOUT_PICS = {
 
 // Ansicht je Lerngruppe merken: Sport-Gruppen öffnen mit „Teams“, alle anderen mit „Sitzordnung“
 const viewOf = groups.viewOf;
-let listMode = 'plan', search = '', root = null;
+let listMode = 'plan', search = '', root = null, problem = '';
 const viewFor = g => viewOf.get(g.id) || (g.subject === 'Sport' ? 'teams' : 'sitz');
 // Aufruf von außen (alte Adresse #/sport): Teams zeigen
 export function showTeams() { const g = groups.active(); if (g) viewOf.set(g.id, 'teams'); }
@@ -39,12 +40,24 @@ export function mount(el) {
   el.oninput = e => { if (e.target.id === 'lg-search') { search = e.target.value; drawPeople(); } };
   const onResize = () => fitRoom();
   addEventListener('resize', onResize);
+  // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan, Gruppenliste)
+  const offDrag = enableDrag(el, { item: '[data-pid]', target: '[data-pid]', onDrop: (a, b) => swap(a.dataset.pid, b.dataset.pid) });
   render();
-  return () => { off(); removeEventListener('resize', onResize); el.onclick = el.onchange = el.oninput = null; root = null; };
+  return () => { off(); offDrag(); removeEventListener('resize', onResize); el.onclick = el.onchange = el.oninput = null; root = null; };
+}
+
+// Einteilung der gezeigten Ansicht aktuell halten (js/groups.js): mischen, wenn noch keine da ist oder die Anzahl
+// nicht passt; bei Abwesenheit, neuen und entfernten Kindern nur ausgleichen. Die Änderung zeichnet die Seite neu.
+function keepCurrent(g) {
+  const teams = viewFor(g) === 'teams', r = teams ? groups.ensureTeams(g) : groups.ensureSeat(g);
+  problem = r.error || '';
+  if (r.changed === 'balance' && r.moved) toast(`${teams ? 'Teams' : 'Gruppen'} ausgeglichen: ${r.moved === 1 ? 'ein Kind hat' : r.moved + ' Kinder haben'} gewechselt.`);
+  return !!r.changed;
 }
 
 function draw() {
   if (!root) return;
+  if (groups.active() && keepCurrent(groups.active())) return;   // die Änderung hat bereits neu gezeichnet
   const g = groups.active(), v = g ? viewFor(g) : 'sitz', presenting = document.body.classList.contains('presenting');
   root.innerHTML = `
   <section class="page gruppen ${v === 'teams' ? 'sport' : 'technik'}">
@@ -74,7 +87,7 @@ const nameOf = (c, id) => c.students.find(s => s.id === id)?.name ?? '?';
 function seatHtml(g) {
   const c = groups.seatView(g), absent = groups.absent(g.id), present = groups.presentCount(g);
   const layout = LAYOUTS.find(l => l.id === c.settings.layout) || LAYOUTS[0];
-  const current = planIsCurrent(c, absent), usesTables = TABLE_LAYOUTS.includes(c.settings.layout), minT = minimumTables(present, c.settings.groups);
+  const usesTables = TABLE_LAYOUTS.includes(c.settings.layout), minT = minimumTables(present, c.settings.groups);
   return `<div class="work-grid">
     <div class="card room-card print-area">
       <div class="card-head">
@@ -88,21 +101,24 @@ function seatHtml(g) {
         </div>
       </div>
       <p class="print-only print-title">${esc(g.name)} · ${esc(layout.name)} · ${new Date().toLocaleDateString('de-DE')}</p>
-      ${c.plan && !current ? '<p class="notice no-print">Anwesenheit oder Einstellungen wurden geändert. Mische neu, damit der Plan passt.</p>' : ''}
+      ${problem ? `<p class="notice no-print">${esc(problem)}</p>` : ''}
       <div class="room-wrap">${c.plan ? (listMode === 'plan' ? room(c) : groupList(c)) : '<div class="room-empty"><p>Noch keine Verteilung.</p></div>'}</div>
-      ${c.plan ? `<p class="hint no-print">${icon('check', 14)} Die Farben zeigen die Gruppen – auch im Sitzplan.</p>` : ''}
+      ${c.plan ? `<p class="hint no-print">${icon('check', 14)} Die Farben zeigen die Gruppen. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</p>` : ''}
     </div>
     <aside class="side no-print">
-      ${groups.peopleCardHtml(g, search)}
+      <div class="card">
+        <h3>${icon('users', 16)} Gruppen und Tische</h3>
+        <div class="num-row">
+          <label>Anzahl Gruppen<span class="stepper"><button data-act="step" data-k="groups" data-d="-1">−</button><output>${c.settings.groups}</output><button data-act="step" data-k="groups" data-d="1">+</button></span></label>
+          <label ${usesTables ? '' : 'class="disabled"'}>Anzahl Tische<span class="stepper"><button data-act="step" data-k="tables" data-d="-1" ${usesTables && c.settings.tables > minT ? '' : 'disabled'}>−</button><output>${c.settings.tables}</output><button data-act="step" data-k="tables" data-d="1" ${usesTables ? '' : 'disabled'}>+</button></span></label>
+        </div>
+        <p class="muted small-text">${usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Organisationsform braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
+      </div>
       <div class="card">
         <h3>${icon('sliders', 16)} Organisationsform</h3>
         <div class="layout-grid">${LAYOUTS.map(l => `<button class="layout-opt ${l.id === c.settings.layout ? 'on' : ''}" data-act="layout" data-id="${l.id}" title="${esc(l.hint)}"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.4">${LAYOUT_PICS[l.id]}</svg><span>${esc(l.name)}</span></button>`).join('')}</div>
-        <div class="num-row">
-          <label ${usesTables ? '' : 'class="disabled"'}>Anzahl Tische<span class="stepper"><button data-act="step" data-k="tables" data-d="-1" ${usesTables ? '' : 'disabled'}>−</button><output>${c.settings.tables}</output><button data-act="step" data-k="tables" data-d="1" ${usesTables ? '' : 'disabled'}>+</button></span></label>
-          <label>Anzahl Gruppen<span class="stepper"><button data-act="step" data-k="groups" data-d="-1">−</button><output>${c.settings.groups}</output><button data-act="step" data-k="groups" data-d="1">+</button></span></label>
-        </div>
-        <p class="muted small-text">${usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Form braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
       </div>
+      ${groups.peopleCardHtml(g, search)}
       <div class="card">
         <button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button>
         <p class="muted small-text center">Alle Einstellungen werden automatisch gespeichert.</p>
@@ -112,7 +128,7 @@ function seatHtml(g) {
 }
 
 const seat = (c, id, g) => id
-  ? `<div class="seat" style="${palStyle(g)}"><span>${esc(nameOf(c, id))}</span></div>`
+  ? `<div class="seat" data-pid="${esc(id)}" style="${palStyle(g)}"><span>${esc(nameOf(c, id))}</span></div>`
   : '<div class="seat free"><span>frei</span></div>';
 function tablesFromPlan(c) {
   const tables = [];
@@ -154,7 +170,7 @@ function room(c) {
     const ids = c.plan.groups.flatMap((g, gi) => g.map(id => ({ id, gi }))), n = ids.length || 1, r = 42;
     return `<div class="room circle ${L}"><div class="ring">${ids.map((x, i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      return `<div class="seat round" style="${palStyle(x.gi)};left:${50 + r * Math.cos(a)}%;top:${50 + r * Math.sin(a)}%"><span>${esc(nameOf(c, x.id))}</span></div>`;
+      return `<div class="seat round" data-pid="${esc(x.id)}" style="${palStyle(x.gi)};left:${50 + r * Math.cos(a)}%;top:${50 + r * Math.sin(a)}%"><span>${esc(nameOf(c, x.id))}</span></div>`;
     }).join('')}<div class="ring-center">${L === 'sitzkreis' ? 'Sitzkreis' : 'Stehkreis'}</div></div></div>`;
   }
   // Arena / Kino: Reihen ohne Tische, Gruppen nebeneinander
@@ -162,7 +178,7 @@ function room(c) {
   for (let i = 0; i < ids.length; i += per) rows.push(ids.slice(i, i + per));
   return `<div class="room arena">${front}${rows.map((row, ri) => `<div class="arena-row" style="--curve:${ri}">${row.map(x => seat(c, x.id, x.gi)).join('')}</div>`).join('')}</div>`;
 }
-const groupList = c => `<div class="group-list">${c.plan.groups.map((g, gi) => `<div class="group-card" style="${palStyle(gi)}"><h4><span class="gdot"></span>Gruppe ${gi + 1} <span class="badge">${g.length}</span></h4><ol>${g.map(id => `<li>${esc(nameOf(c, id))}</li>`).join('')}</ol></div>`).join('')}</div>`;
+const groupList = c => `<div class="group-list">${c.plan.groups.map((g, gi) => `<div class="group-card" style="${palStyle(gi)}"><h4><span class="gdot"></span>Gruppe ${gi + 1} <span class="badge">${g.length}</span></h4><ol>${g.map(id => `<li data-pid="${esc(id)}">${esc(nameOf(c, id))}</li>`).join('')}</ol></div>`).join('')}</div>`;
 
 // Sitzplan auf schmalen Bildschirmen (Handy) verkleinern statt waagerecht scrollen
 function fitRoom() {
@@ -178,7 +194,7 @@ function fitRoom() {
 
 // ---------- Teams ----------
 function teamsHtml(g) {
-  const k = groups.sportView(g), absent = groups.absent(g.id), present = groups.presentCount(g), current = teamsAreCurrent(k, absent);
+  const k = groups.sportView(g), present = groups.presentCount(g);
   const person = id => g.students.find(p => p.id === id);
   return `<div class="work-grid">
     <div class="main-col print-area"><div class="card">
@@ -187,17 +203,17 @@ function teamsHtml(g) {
         <button class="btn primary sport-btn no-print" data-act="mix-teams">${icon('shuffle')} Neu mischen</button>
       </div>
       <p class="print-only print-title">${esc(g.name)} · Teams · ${new Date().toLocaleDateString('de-DE')}</p>
-      ${k.teams.length ? `<div class="team-grid">${k.teams.map((t, i) => `<div class="team" style="${palStyle(i)}"><h4><span class="gdot"></span>${esc(t.name)}<span class="count">${t.members.length}</span></h4><ul>${t.members.map(id => { const p = person(id); return p ? `<li>${esc(p.name)}${p.className ? `<small>${esc(p.className)}</small>` : ''}</li>` : ''; }).join('')}</ul></div>`).join('')}</div>`
+      ${k.teams.length ? `<div class="team-grid">${k.teams.map((t, i) => `<div class="team" style="${palStyle(i)}"><h4><span class="gdot"></span>${esc(t.name)}<span class="count">${t.members.length}</span></h4><ul>${t.members.map(id => { const p = person(id); return p ? `<li data-pid="${esc(id)}">${esc(p.name)}${p.className ? `<small>${esc(p.className)}</small>` : ''}</li>` : ''; }).join('')}</ul></div>`).join('')}</div>`
         : '<div class="room-empty"><p>Noch keine Teams.</p></div>'}
-      ${k.teams.length && !current ? '<p class="notice">Die Anwesenheit oder Teamanzahl wurde geändert. Mische neu, bevor du ein neues Turnier anlegst.</p>' : ''}
-      <div class="card-foot no-print"><span class="muted small-text">${icon('check', 14)} Teams sind möglichst gleich groß.</span>
-        <button class="btn ghost" data-act="new-tournament" ${k.teams.length >= 2 && current ? '' : 'disabled'}>Turnier mit diesen Teams →</button></div>
+      ${problem ? `<p class="notice no-print">${esc(problem)}</p>` : ''}
+      <div class="card-foot no-print"><span class="muted small-text">${icon('check', 14)} Teams sind möglichst gleich groß. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</span>
+        <button class="btn ghost" data-act="new-tournament" ${k.teams.length >= 2 && !problem ? '' : 'disabled'}>Turnier mit diesen Teams →</button></div>
     </div></div>
     <aside class="side no-print">
       <div class="card">
         <h3>Teams</h3>
         <label class="field inline">Anzahl Teams<select class="select sm" id="team-count">${Array.from({ length: 19 }, (_, i) => i + 2).map(n => `<option ${n === k.teamCount ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-        <p class="muted small-text">Alle heute anwesenden Kinder werden genau einmal zugeordnet.</p>
+        <p class="muted small-text">Alle heute anwesenden Kinder werden genau einmal zugeordnet. Ändert sich die Anzahl, wird neu gemischt; fehlt ein Kind, wird nur ausgeglichen.</p>
       </div>
       ${groups.peopleCardHtml(g, search)}
       <div class="card"><button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button></div>
@@ -212,6 +228,19 @@ function drawPeople() {
   if (viewFor(g) === 'sitz' && g.seat?.plan) { const m = new Map(g.seat.plan.groups.flatMap((gr, i) => gr.map(id => [id, i]))); color = id => (m.has(id) ? palStyle(m.get(id)) : ''); }
   else if (g.sport?.teams.length) { const m = new Map(g.sport.teams.flatMap((t, i) => t.members.map(id => [id, i]))); color = id => (m.has(id) ? palStyle(m.get(id)) : ''); }
   ul.innerHTML = groups.peopleItems(g, search, color);
+}
+
+// Zwei Kinder tauschen (Ziehen und Ablegen)
+function swap(a, b) {
+  const g = groups.active(); if (!g || a === b) return;
+  const teams = viewFor(g) === 'teams', view = teams ? groups.sportView(g) : groups.seatView(g);
+  const cur = teams ? view.teams.map(t => t.members) : view.plan?.groups; if (!cur) return;
+  const r = swapMembers(cur, a, b, view.rules);
+  if (r.error) return toast(r.error, { kind: 'warn' });
+  store.update(s => {
+    if (teams) { const p = groups.sportPart(s, g.id); p.teams = p.teams.map((t, i) => ({ ...t, members: r.groups[i] })); }
+    else groups.seatPart(s, g.id).plan.groups = r.groups;
+  });
 }
 
 // ---------- Aktionen ----------
@@ -234,14 +263,16 @@ async function onClick(e) {
     case 'layout': store.update(s => { groups.seatPart(s, g.id).settings.layout = b.dataset.id; }); break;
     case 'step': {
       const k = b.dataset.k, d = Number(b.dataset.d);
-      store.update(s => { const st = groups.seatPart(s, g.id).settings; st[k] = Math.min(k === 'tables' ? 40 : 20, Math.max(1, st[k] + d)); });
+      const minT = k === 'tables' ? minimumTables(groups.presentCount(g), groups.seatView(g).settings.groups) : 1;
+      store.update(s => { const st = groups.seatPart(s, g.id).settings; st[k] = Math.min(k === 'tables' ? 40 : 20, Math.max(minT, 1, st[k] + d)); });
       break;
     }
     case 'mix-seat': {
       const c = groups.seatView(g);
-      const res = mixGroups({ students: c.students, rules: c.rules, groupCount: c.settings.groups, layout: c.settings.layout, tables: c.settings.tables }, absent);
+      const res = mixGroups({ students: c.students, rules: c.rules, groupCount: c.settings.groups }, absent);
       if (!res.ok) return toast(res.message, { kind: 'warn' });
-      store.update(s => { groups.seatPart(s, g.id).plan = { groups: res.groups, createdAt: new Date().toISOString() }; });
+      const need = res.groups.reduce((n, gr) => n + Math.ceil(gr.length / 2), 0);
+      store.update(s => { const p = groups.seatPart(s, g.id); p.plan = { groups: res.groups, createdAt: new Date().toISOString() }; if (TABLE_LAYOUTS.includes(p.settings.layout)) p.settings.tables = Math.min(40, Math.max(p.settings.tables, need)); });
       toast('Neu verteilt.');
       break;
     }

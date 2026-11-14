@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 2;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0)
+export const SCHEMA = 3;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -65,7 +65,7 @@ export function demoQuiz() {
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
   const h = demoHall();
-  return { schema: SCHEMA, active: c.id, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [] }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
+  return { schema: SCHEMA, active: c.id, technik: { classes: [c], activeId: c.id }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [], hallTopics: normTopics(undefined, [h]) }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
 }
 
 let state;
@@ -294,10 +294,21 @@ function normQuiz(q) {
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
 }
+// Themen der Hallenpläne (seit 2.1.0): eigene, geordnete Liste – auch Themen ohne Plan bleiben stehen. Themen, die in
+// Plänen vorkommen, aber (noch) fehlen, werden hinten ergänzt. Ohne gespeicherte Liste gibt es Vorschläge.
+export const TOPIC_DEFAULTS = ['Aufwärmen', 'Fußball', 'Volleyball', 'Völkerball', 'Basketball', 'Handball', 'Turnen'];
+export const TOPIC_MAX = 80;
+export function normTopics(list, halls = []) {
+  const out = [], seen = new Set();
+  const add = t => { const v = str(t, 60); const k = v.toLocaleLowerCase('de'); if (v && !seen.has(k) && out.length < TOPIC_MAX) { seen.add(k); out.push(v); } };
+  (Array.isArray(list) ? list : TOPIC_DEFAULTS).forEach(add);
+  halls.forEach(h => add(h.topic));
+  return out;
+}
 function hallPart(sp) {
   // Ältere Stände ohne Hallenpläne bekommen das Beispiel
   const halls = Array.isArray(sp?.halls) ? normHalls(sp.halls) : [demoHall()];
-  return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib) };
+  return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib), hallTopics: normTopics(sp?.hallTopics, halls) };
 }
 export function normalize(raw) {
   const fresh = freshState();
@@ -346,6 +357,7 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.active = incoming.technik.classes[0]?.id ?? incoming.sport.groups[0]?.id ?? next.active;
   next.sport.halls = merge(next.sport.halls, incoming.sport.halls.filter(h => !h.demo));
   next.sport.hallLib = merge(next.sport.hallLib, incoming.sport.hallLib);
+  next.sport.hallTopics = normTopics([...(next.sport.hallTopics || []), ...(incoming.sport.hallTopics || [])], next.sport.halls);
   const iq = incoming.quiz, nq = next.quiz;
   nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions);
   if (!nq.classes.some(c => c.id === nq.activeClassId)) nq.activeClassId = nq.classes[0]?.id ?? null;

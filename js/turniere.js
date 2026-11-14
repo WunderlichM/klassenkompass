@@ -21,6 +21,8 @@ export function mount(el) {
 
 function draw() {
   if (!root) return;
+  // Teams aktuell halten wie in Gruppen → Teams (seit 2.1.0); eine Änderung zeichnet die Seite bereits neu
+  if (groups.active() && groups.ensureTeams(groups.active()).changed) return;
   const g = groups.active(), presenting = document.body.classList.contains('presenting');
   if (g && !g.sport?.tournaments.some(t => t.id === activeTournament)) activeTournament = null;
   root.innerHTML = `
@@ -53,7 +55,7 @@ function sidebar(g) {
   return `<div class="card">
       <div class="card-head small"><h3>${icon('users', 16)} Aktuelle Teams <span class="badge">${k.teams.length}</span></h3></div>
       ${k.teams.length ? `<ul class="team-mini">${k.teams.map((t, i) => `<li style="${palStyle(i)}"><span class="gdot"></span>${esc(t.name)} <small class="muted">${t.members.length}</small></li>`).join('')}</ul>` : '<p class="muted small-text">Noch keine Teams.</p>'}
-      ${k.teams.length && !current ? '<p class="notice small-text">Anwesenheit oder Teamzahl haben sich geändert – unter Gruppen → Teams neu mischen.</p>' : ''}
+      ${k.teams.length && !current ? '<p class="notice small-text">Die Teams passen gerade nicht zur Anwesenheit – unter Gruppen → Teams prüfen.</p>' : ''}
       <button class="btn primary sport-btn full" data-act="new-tournament" ${k.teams.length >= 2 && current ? '' : 'disabled'}>${icon('plus', 16)} Turnier mit diesen Teams</button>
       <a class="btn ghost full" href="#/" data-act="to-teams">${icon('shuffle', 16)} Teams mischen (Gruppen)</a>
     </div>

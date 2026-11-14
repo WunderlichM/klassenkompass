@@ -71,6 +71,50 @@ export function mixGroups({ students, rules, groupCount, layout = 'stehkreis', t
   return { ok: true, groups: buckets.map(g => shuffle(g.map(i => present[i].id), rng)) };
 }
 
+// ---------- Bestehende Einteilung anpassen (seit 2.1.0) ----------
+const clash = (rules, id, members) => (rules || []).some(([a, b]) => (a === id && members.includes(b)) || (b === id && members.includes(a)));
+// Hält jede Gruppe die Trennungsregeln ein?
+export const rulesKept = (groups, rules) => groups.every(g => g.every(id => !clash(rules, id, g)));
+// Fehlende (abwesende, entfernte) Kinder herausnehmen, neue bzw. wieder anwesende in die kleinste passende Gruppe setzen
+// und die Größen ausgleichen, indem einzelne Kinder wechseln. Alle übrigen bleiben in ihrer Gruppe.
+// Liefert die neuen Gruppen und die Zahl der Wechsel, oder null, wenn die Trennungsregeln das nicht zulassen.
+export function rebalance(groups, presentIds, rules = []) {
+  const present = new Set(presentIds), seen = new Set();
+  const gs = groups.map(g => g.filter(id => present.has(id) && !seen.has(id) && seen.add(id)));
+  if (!gs.length) return null;
+  let moved = 0;
+  for (const id of presentIds) {
+    if (seen.has(id)) continue;
+    const order = gs.map((_, i) => i).sort((a, b) => gs[a].length - gs[b].length), min = gs[order[0]].length;
+    const t = order.find(i => gs[i].length === min && !clash(rules, id, gs[i])) ?? order.find(i => !clash(rules, id, gs[i]));
+    if (t === undefined) return null;
+    gs[t].push(id); seen.add(id);
+  }
+  for (let guard = 0; guard < 400; guard++) {
+    const sizes = gs.map(g => g.length), max = Math.max(...sizes), min = Math.min(...sizes);
+    if (max - min <= 1) return rulesKept(gs, rules) ? { groups: gs, moved } : null;
+    let done = false;
+    for (const from of gs.map((_, i) => i).filter(i => sizes[i] === max)) {
+      for (const to of gs.map((_, i) => i).filter(i => sizes[i] === min)) {
+        // zuletzt hinzugekommene Kinder wechseln zuerst
+        const id = [...gs[from]].reverse().find(x => !clash(rules, x, gs[to]));
+        if (id) { gs[from] = gs[from].filter(x => x !== id); gs[to].push(id); moved++; done = true; break; }
+      }
+      if (done) break;
+    }
+    if (!done) return null;
+  }
+  return null;
+}
+// Zwei Kinder tauschen ihre Plätze (Ziehen und Ablegen). Liefert die neuen Gruppen oder { error }.
+export function swapMembers(groups, a, b, rules = []) {
+  const ga = groups.findIndex(g => g.includes(a)), gb = groups.findIndex(g => g.includes(b));
+  if (ga < 0 || gb < 0 || a === b) return { error: 'Tausch nicht möglich.' };
+  const next = groups.map(g => g.map(id => (id === a ? b : id === b ? a : id)));
+  if (ga !== gb && !rulesKept([next[ga], next[gb]], rules)) return { error: 'Das widerspricht einer Trennungsregel („Einteilung anpassen“).' };
+  return { groups: next };
+}
+
 export function planIsCurrent(cls, absent) {
   const plan = cls.plan;
   if (!plan || plan.groups.length !== cls.settings.groups) return false;

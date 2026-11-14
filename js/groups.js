@@ -3,7 +3,7 @@
 // Ranglisten) in sport.groups – beide Teile einer Lerngruppe tragen dieselbe Kennung und dieselben Kinder.
 // So bleiben ältere App-Fassungen lesbar. Ein fehlender Teil entsteht erst, wenn er zum ersten Mal geändert wird.
 import * as store from './store.js';
-import { uid } from './engine.js';
+import { uid, mixGroups, rebalance, rulesKept, TABLE_LAYOUTS } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast } from './ui.js';
 
 export const SUBJECTS = store.SUBJECTS;
@@ -40,6 +40,58 @@ export const presentCount = g => g.students.filter(p => !absent(g.id).has(p.id))
 // Standardwerte, solange ein Teil noch nicht gespeichert ist (nur lesen, nichts anlegen)
 export const seatView = g => g.seat || { id: g.id, name: g.name, students: g.students.map(p => ({ id: p.id, name: p.name })), settings: { layout: 'omnibus', tables: Math.max(8, Math.ceil(g.students.length / 2)), groups: 4 }, rules: [], plan: null };
 export const sportView = g => g.sport || { id: g.id, name: g.name, students: g.students.map(p => ({ ...p })), teamCount: 4, rules: [], teams: [], tournaments: [], series: [] };
+
+// ---------- Einteilung immer aktuell halten (seit 2.1.0) ----------
+// Gibt es noch keine Einteilung oder passt die Anzahl nicht, wird gemischt. Fehlt ein Kind (abwesend, entfernt) oder kommt
+// eines dazu, bleiben die übrigen in ihrer Gruppe: Das Kind wird herausgenommen bzw. eingesetzt, und die Größen werden
+// durch einzelne Wechsel ausgeglichen. Ergebnis: { changed: 'mix' | 'balance', moved } oder { error } oder {}.
+const failed = new Map(); // Schlüssel → Meldung: dieselbe aussichtslose Lage nicht bei jedem Neuzeichnen erneut durchsuchen
+const sameMembers = (groups, ids) => { const flat = groups.flat(); return flat.length === ids.length && new Set(flat).size === flat.length && ids.every(id => flat.includes(id)); };
+const tablesFor = groups => groups.reduce((n, g) => n + Math.ceil(g.length / 2), 0);
+function ensure(key, run) {
+  if (failed.has(key)) return { error: failed.get(key) };
+  const r = run();
+  if (r.error) failed.set(key, r.error);
+  return r;
+}
+export function ensureTeams(g) {
+  const k = sportView(g), off = absent(g.id), ids = k.students.filter(p => !off.has(p.id)).map(p => p.id);
+  const cur = k.teams.map(t => t.members);
+  if (k.teams.length === k.teamCount && sameMembers(cur, ids) && rulesKept(cur, k.rules)) return {};
+  return ensure(['t', g.id, k.teamCount, ids.join(), JSON.stringify(k.rules), cur.length].join('|'), () => {
+    if (!ids.length) return { error: 'Heute ist niemand anwesend.' };
+    if (k.teams.length === k.teamCount && rulesKept(cur, k.rules)) {
+      const r = rebalance(cur, ids, k.rules);
+      if (r) { store.update(s => { const p = sportPart(s, g.id); p.teams = p.teams.map((t, i) => ({ ...t, members: r.groups[i] })); }); return { changed: 'balance', moved: r.moved }; }
+    }
+    const res = mixGroups({ students: k.students, rules: k.rules, groupCount: k.teamCount }, off);
+    if (!res.ok) return { error: res.message };
+    store.update(s => { sportPart(s, g.id).teams = res.groups.map((members, i) => ({ id: uid(), name: 'Team ' + (i + 1), members })); });
+    return { changed: 'mix' };
+  });
+}
+export function ensureSeat(g) {
+  const c = seatView(g), off = absent(g.id), ids = c.students.filter(p => !off.has(p.id)).map(p => p.id), st = c.settings;
+  const cur = c.plan?.groups || [], tables = TABLE_LAYOUTS.includes(st.layout);
+  const ok = c.plan && cur.length === st.groups && sameMembers(cur, ids) && rulesKept(cur, c.rules);
+  // Reichen die Tische nicht, wird die Tischzahl auf das Nötige erhöht
+  const fit = (s, groups) => { const p = seatPart(s, g.id); if (tables) p.settings.tables = Math.min(40, Math.max(p.settings.tables, tablesFor(groups))); };
+  if (ok) {
+    if (tables && tablesFor(cur) > st.tables) { store.update(s => fit(s, cur)); return { changed: 'tables' }; }
+    return {};
+  }
+  return ensure(['s', g.id, st.groups, ids.join(), JSON.stringify(c.rules), cur.length].join('|'), () => {
+    if (!ids.length) return { error: 'Heute ist niemand anwesend.' };
+    if (c.plan && cur.length === st.groups && rulesKept(cur, c.rules)) {
+      const r = rebalance(cur, ids, c.rules);
+      if (r) { store.update(s => { seatPart(s, g.id).plan.groups = r.groups; fit(s, r.groups); }); return { changed: 'balance', moved: r.moved }; }
+    }
+    const res = mixGroups({ students: c.students, rules: c.rules, groupCount: st.groups }, off);
+    if (!res.ok) return { error: res.message };
+    store.update(s => { seatPart(s, g.id).plan = { groups: res.groups, createdAt: new Date().toISOString() }; fit(s, res.groups); });
+    return { changed: 'mix' };
+  });
+}
 
 // ---------- Ändern ----------
 // Teil für Änderungen holen (fehlenden Teil mit denselben Kindern anlegen); nur innerhalb von store.update aufrufen
@@ -215,7 +267,7 @@ function addDialog(g) {
       if (!ppl.length) throw new Error('Bitte mindestens einen Vornamen eintragen.');
       if (g.students.length + ppl.length > MAX) throw new Error(`Eine Lerngruppe kann höchstens ${MAX} Kinder haben.`);
       addPeople(g.id, ppl);
-      toast(`${ppl.length} hinzugefügt. Neu mischen, um sie einzuplanen.`);
+      toast(`${ppl.length} hinzugefügt und eingeteilt.`);
     } });
 }
 function personDialog(g, pid) {

@@ -78,8 +78,9 @@ export const planById = id => sp().halls.find(h => h.id === id) || null;
 export const planLabel = p => `${p.topic ? p.topic + ' · ' : ''}${p.title}${p.lesson ? ` (Phase ${p.phase})` : ''}`;
 export const planList = () => sortPlans(sp().halls).map(h => ({ id: h.id, title: planLabel(h) }));
 export function sortPlans(list) {
-  const t = p => (p.topic || '￿').toLocaleLowerCase('de');
-  return [...list].sort((a, b) => t(a).localeCompare(t(b), 'de') || (a.lesson || a.title).localeCompare(b.lesson || b.title, 'de') || (a.phase || 0) - (b.phase || 0) || a.title.localeCompare(b.title, 'de'));
+  // Themen in der Reihenfolge der Themenliste (seit 2.1.0), Pläne ohne Thema zuletzt
+  const order = new Map(topics().map((x, i) => [x, i])), t = p => (p.topic ? order.get(p.topic) ?? 9998 : 9999);
+  return [...list].sort((a, b) => t(a) - t(b) || (a.topic || '').localeCompare(b.topic || '', 'de') || (a.lesson || a.title).localeCompare(b.lesson || b.title, 'de') || (a.phase || 0) - (b.phase || 0) || a.title.localeCompare(b.title, 'de'));
 }
 // Pläne derselben Stunde, nach Phase
 export const lessonPlans = p => (p?.lesson ? sp().halls.filter(x => x.lesson === p.lesson && (x.topic || '') === (p.topic || '')).sort((a, b) => a.phase - b.phase) : []);
@@ -490,7 +491,28 @@ const TEMPLATES = [
 ];
 // Lehrkraft vorn an der Mittellinie (Nutzerentscheidung 14.11.2026: in jedem Plan, ohne Text, Größe 0,6)
 const teacherItem = () => itemAt('teacher', HALL.len / 2, 0.6, { size: FIGURE });
-export const topics = () => [...new Set(sp().halls.map(h => h.topic).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+// ---------- Themen (seit 2.1.0): eigene Liste in sport.hallTopics, Auswahl statt freier Eingabe ----------
+export const topics = () => sp().hallTopics || [];
+const NEW_TOPIC = '__neu__';
+const sameTopic = (a, b) => a.toLocaleLowerCase('de') === b.toLocaleLowerCase('de');
+// Vorhandene Schreibweise übernehmen („fußball“ → „Fußball“)
+export const topicName = t => { const v = String(t || '').trim().slice(0, 60); return v ? topics().find(x => sameTopic(x, v)) || v : ''; };
+// Thema in die Liste aufnehmen (nur innerhalb von store.update)
+export function addTopic(s, t) { if (t && !s.sport.hallTopics.some(x => sameTopic(x, t)) && s.sport.hallTopics.length < store.TOPIC_MAX) s.sport.hallTopics.push(t); }
+const topicField = (cur = '', hint = '') => `<label class="field">Thema${hint ? ` <small class="muted">${hint}</small>` : ''}<select name="topic" class="select" data-topic-sel>
+    <option value="">Ohne Thema</option>${[...new Set([...topics(), ...(cur ? [cur] : [])])].map(t => `<option value="${esc(t)}" ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+    <option value="${NEW_TOPIC}">+ Neues Thema …</option></select></label>
+  <label class="field" data-topic-new hidden>Neues Thema<input name="newTopic" class="input" maxlength="60" placeholder="z. B. Badminton"></label>`;
+const topicOpen = el => {
+  const sel = el.querySelector('[data-topic-sel]'), box = el.querySelector('[data-topic-new]'); if (!sel) return;
+  sel.onchange = () => { box.hidden = sel.value !== NEW_TOPIC; if (!box.hidden) box.querySelector('input').focus(); };
+};
+const readTopic = fd => {
+  const v = String(fd.get('topic') || '');
+  if (v !== NEW_TOPIC) return topicName(v);
+  const n = topicName(fd.get('newTopic')); if (!n) throw new Error('Bitte einen Namen für das neue Thema eingeben.');
+  return n;
+};
 const lessons = () => [...new Set(sp().halls.map(h => h.lesson).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
 const datalist = (id, list) => `<datalist id="${id}">${list.map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
 const checkLimit = (n = 1) => { if (sp().halls.filter(h => !h.demo).length + n > store.HALL_MAX) throw new Error(`Es sind höchstens ${store.HALL_MAX} Hallenpläne möglich. Bitte zuerst alte Pläne löschen.`); };
@@ -498,30 +520,32 @@ const checkLimit = (n = 1) => { if (sp().halls.filter(h => !h.demo).length + n >
 export function newPlanDialog(topic = '') {
   dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen" required></label>
-    <label class="field">Thema <small class="muted">– ordnet die Sammlung, z. B. Völkerball, Turnen</small><input name="topic" class="input" maxlength="60" list="h-topics" value="${esc(topic)}">${datalist('h-topics', topics())}</label>
+    ${topicField(topic, '– ordnet die Sammlung')}
     <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
     <p class="muted small-text">Halle 27 m × 15 m, Geräte maßstäblich (Kleingeräte etwas größer). Die Lehrkraft steht schon vorn an der Mittellinie. Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       checkLimit();
       const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
-      const p = { id: uid(), title: t, topic: String(fd.get('topic') || '').trim().slice(0, 60), lesson: '', phase: 0, floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []), teacherItem()] };
-      sel = []; store.update(s => { s.sport.halls.push(p); s.sport.activeHall = p.id; });
-    } });
+      const p = { id: uid(), title: t, topic: readTopic(fd), lesson: '', phase: 0, floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []), teacherItem()] };
+      sel = []; store.update(s => { addTopic(s, p.topic); s.sport.halls.push(p); s.sport.activeHall = p.id; });
+    }, onOpen: topicOpen });
 }
 
 // Name, Thema, Stunde und Phase eines Plans
 function propsDialog(p) {
   dialog({ title: 'Eigenschaften', submit: 'Speichern', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" value="${esc(p.title)}" required></label>
-    <label class="field">Thema<input name="topic" class="input" maxlength="60" list="h-topics" value="${esc(p.topic || '')}">${datalist('h-topics', topics())}</label>
+    ${topicField(p.topic || '')}
     <div class="two"><label class="field">Stunde <small class="muted">(optional)</small><input name="lesson" class="input" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 Völkerball">${datalist('h-lessons', lessons())}</label>
     <label class="field">Phase<input name="phase" type="number" class="input" min="1" max="20" value="${p.phase || 1}"></label></div>
     <p class="muted small-text">Pläne mit derselben Stunde stehen in der Sammlung zusammen und lassen sich oben mit den Pfeilen nacheinander zeigen (z. B. Erwärmung, Übung, Spiel).</p>`,
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       const lesson = String(fd.get('lesson') || '').trim().slice(0, 80);
-      commit(x => { x.title = t.slice(0, 80); x.topic = String(fd.get('topic') || '').trim().slice(0, 60); x.lesson = lesson; x.phase = lesson ? clamp(Math.round(Number(fd.get('phase'))) || 1, 1, 20) : 0; });
+      const topic = readTopic(fd);
+      store.update(s => addTopic(s, topic), { silent: true });
+      commit(x => { x.title = t.slice(0, 80); x.topic = topic; x.lesson = lesson; x.phase = lesson ? clamp(Math.round(Number(fd.get('phase'))) || 1, 1, 20) : 0; });
     } });
 }
 // Kopie anlegen; als nächste Phase gehören Original und Kopie zur selben Stunde
@@ -546,19 +570,20 @@ export function importPlansDialog() {
   dialog({ title: 'Hallenpläne importieren', submit: 'Importieren', body: `
     <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
     <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "plans": [ { "title": "…", "items": [ … ] } ] }'></textarea></label>
-    <label class="field">Thema <small class="muted">– für Pläne ohne Thema in der Datei</small><input name="topic" class="input" maxlength="60" list="h-topics">${datalist('h-topics', topics())}</label>
+    ${topicField('', '– für Pläne ohne Thema in der Datei')}
     <label class="check"><input type="checkbox" name="replace"> Vorhandene Pläne mit gleichem Namen ersetzen</label>
     <p class="muted small-text">Ohne Haken kommen die Pläne zu den vorhandenen dazu. Eigene Bilder sind in der Datei nicht enthalten.</p>`,
-    onOpen: el => { el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
+    onOpen: el => { topicOpen(el); el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
     onSubmit: fd => {
       const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
-      const plans = parsePlans(text), replace = fd.get('replace') === 'on', topic = String(fd.get('topic') || '').trim().slice(0, 60);
-      plans.forEach(p => { if (!p.topic) p.topic = topic; });
+      const plans = parsePlans(text), replace = fd.get('replace') === 'on', topic = readTopic(fd);
+      plans.forEach(p => { p.topic = p.topic ? topicName(p.topic) : topic; });
       if (!replace) checkLimit(plans.length);
       let replaced = 0;
       sel = [];
       store.update(s => {
         const titles = new Set(s.sport.halls.map(x => x.title));
+        plans.forEach(p => addTopic(s, p.topic));   // Themen aus der Datei kommen in die Themenliste
         for (const p of plans) {
           const k = replace ? s.sport.halls.findIndex(x => x.title === p.title) : -1;
           if (k >= 0) { const old = s.sport.halls[k]; p.id = old.id; if (!p.topic) p.topic = old.topic; if (!p.lesson && old.lesson) { p.lesson = old.lesson; p.phase = old.phase; } history.delete(p.id); s.sport.halls[k] = p; replaced++; continue; }
