@@ -6,6 +6,7 @@ import { mixGroups, minimumTables, uid, swapMembers, TABLE_LAYOUTS } from './eng
 import { enableDrag } from './drag.js';
 import { esc, icon, toast, palStyle, toggleFullscreen, rulesDialog, confirmDialog } from './ui.js';
 import { tournamentDialog } from './turniere.js';
+import * as rooms from './room.js';
 
 const LAYOUTS = [
   { id: 'omnibus', name: 'Omnibus', hint: 'Zweiertische in Reihen' },
@@ -14,6 +15,7 @@ const LAYOUTS = [
   { id: 'stehkreis', name: 'Stehkreis', hint: 'Stehplätze im Kreis' },
   { id: 'uform', name: 'U-Form', hint: 'Blick zur offenen Mitte' },
   { id: 'arena', name: 'Arena / Kino', hint: 'Sitzreihen ohne Tische' },
+  { id: 'raum', name: 'Eigener Raum', hint: 'Mit dem Raumplaner: Tür, Fenster, Tafel, Pult, Tische und Werkbänke wie im echten Raum' },
 ];
 const LAYOUT_PICS = {
   omnibus: '<rect x="4" y="5" width="7" height="3" rx="1"/><rect x="13" y="5" width="7" height="3" rx="1"/><rect x="4" y="11" width="7" height="3" rx="1"/><rect x="13" y="11" width="7" height="3" rx="1"/><rect x="4" y="17" width="7" height="3" rx="1"/><rect x="13" y="17" width="7" height="3" rx="1"/>',
@@ -22,6 +24,7 @@ const LAYOUT_PICS = {
   stehkreis: '<circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/><circle cx="12" cy="4" r="1.3"/><circle cx="20" cy="12" r="1.3"/><circle cx="12" cy="20" r="1.3"/><circle cx="4" cy="12" r="1.3"/>',
   uform: '<path d="M4 4v16h16V4"/><path d="M8 4v12h8V4"/>',
   arena: '<path d="M3 9q9-6 18 0M3 14q9-6 18 0M3 19q9-6 18 0"/>',
+  raum: '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M7 5.5h10"/><rect x="6" y="10" width="5" height="3"/><rect x="13" y="10" width="5" height="3"/><rect x="6" y="15.5" width="5" height="3"/><path d="M21 15v4M18.5 19a2.5 2.5 0 0 1 2.5-2.5"/>',
 };
 
 // Ansicht je Lerngruppe merken: Sport-Gruppen öffnen mit „Teams“, alle anderen mit „Sitzordnung“
@@ -49,8 +52,9 @@ export function mount(el) {
   addEventListener('resize', onResize);
   // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan, Gruppenliste)
   const offDrag = enableDrag(el, { item: '[data-pid]', target: '[data-pid],[data-seat],[data-tray]', onDrop: (a, b) => drop(a, b) });
+  const offRoom = rooms.attach(el, () => draw());
   render();
-  return () => { off(); offDrag(); removeEventListener('resize', onResize); el.onclick = el.onchange = el.oninput = null; root = null; };
+  return () => { off(); offDrag(); offRoom(); removeEventListener('resize', onResize); el.onclick = el.onchange = el.oninput = null; root = null; };
 }
 
 // Einteilung der gezeigten Ansicht aktuell halten (js/groups.js): mischen, wenn noch keine da ist oder die Anzahl
@@ -105,14 +109,37 @@ function stdOf(c) {
   const last = seats.findLastIndex(Boolean), layout = LAYOUTS.some(l => l.id === d.layout) ? d.layout : 'omnibus';
   const tables = Math.min(40, Math.max(1, Math.round(Number(d.tables)) || 1, Math.ceil((last + 1) / 2)));
   seats = seats.slice(0, tables * 2); while (seats.length < tables * 2) seats.push(null);
-  return { layout, tables, groups: Math.min(20, Math.max(1, Math.round(Number(d.groups)) || 4)), cols: Number(d.cols) || 0, seats, missing: c.students.filter(p => !seen.has(p.id)) };
+  // Eigener Raum: Plätze als „Tisch:Nummer“ → Kind; nur Plätze, die es im Raum gibt
+  const r = layout === 'raum' ? rooms.byId(d.room) : null, slots = {};
+  if (r) { const keys = new Set(rooms.slotKeys(r)), got = new Set(); for (const [k, id] of Object.entries(d.slots || {})) if (keys.has(k) && ids.has(id) && !got.has(id)) { got.add(id); slots[k] = id; } }
+  const placed = layout === 'raum' ? new Set(Object.values(slots)) : seen;
+  return { layout, room: d.room || null, slots, tables, groups: Math.min(20, Math.max(1, Math.round(Number(d.groups)) || 4)), cols: Number(d.cols) || 0, icols: Number(d.icols) || 0, seats, missing: c.students.filter(p => !placed.has(p.id)) };
 }
+// Plätze lesen und setzen – im eigenen Raum über „Tisch:Nummer“, sonst über die Platznummer
+const isRaum = d => d.layout === 'raum';
+const getS = (d, k) => (isRaum(d) ? d.slots[k] || null : d.seats[Number(k)] ?? null);
+const setS = (d, k, v) => { if (isRaum(d)) { if (v) d.slots[k] = v; else delete d.slots[k]; } else d.seats[Number(k)] = v; };
+const keyOf = (d, pid) => (isRaum(d) ? Object.keys(d.slots).find(k => d.slots[k] === pid) : (i => (i >= 0 ? String(i) : undefined))(d.seats.indexOf(pid)));
+// Wechsel zwischen eigenem Raum und den anderen Organisationsformen: die Reihenfolge der Plätze bleibt
+function toFlat(d, r) {
+  const flat = rooms.slotsToFlat(r, d.slots);
+  while (flat.length && !flat[flat.length - 1]) flat.pop();
+  if (flat.length % 2) flat.push(null);
+  d.tables = Math.min(40, Math.max(1, d.tables, flat.length / 2)); d.seats = flat; while (d.seats.length < d.tables * 2) d.seats.push(null);
+}
+const icolsOf = (v, n) => (v >= 1 && v <= 6 ? Math.min(v, Math.max(1, n)) : n <= 4 ? 2 : 3);
 // Standardsitzplan ändern (immer über die bereinigte Fassung)
 function updStd(g, fn) {
   store.update(s => { const p = groups.seatPart(s, g.id), d = stdOf(p); if (!d) return; fn(d); const { missing, ...keep } = d; p.standard = { ...keep, savedAt: new Date().toISOString() }; });
 }
 // Kinder ohne Platz auf die ersten freien Plätze setzen; reichen sie nicht, kommen Tische dazu
 function seatMissing(d, people) {
+  if (isRaum(d)) {
+    const r = rooms.byId(d.room), keys = r ? rooms.slotKeys(r) : []; let n = 0;
+    for (const p of people) { const k = keys.find(x => !d.slots[x]); if (k) d.slots[k] = p.id; else n++; }
+    if (n) toast(`${n === 1 ? '1 Kind hat' : n + ' Kinder haben'} keinen Platz – im Raumplaner Tische ergänzen.`, { kind: 'warn' });
+    return;
+  }
   for (const p of people) { let k = d.seats.indexOf(null); if (k < 0) { k = d.seats.length; d.seats.push(null, null); d.tables++; } d.seats[k] = p.id; }
 }
 
@@ -134,7 +161,7 @@ function islandsOf(c, d) {
 const turn = t => ({ ...t, seats: t.seats.slice().reverse() });   // Tisch von der anderen Seite gesehen
 
 function seatBox(c, x, off) {
-  const k = x.k !== undefined ? ` data-seat="${x.k}"` : '';
+  const k = x.k !== undefined ? ` data-seat="${esc(x.k)}"` : '';
   if (!x.id) return `<div class="seat free"${k}><span>${x.k !== undefined ? 'frei' : ''}</span></div>`;
   const name = nameOf(c, x.id), away = off?.has(x.id);
   return `<div class="seat ${away ? 'away' : ''} ${name.length > 11 ? 'xlong' : name.length > 8 ? 'long' : ''}" data-pid="${esc(x.id)}"${k} style="${x.g >= 0 ? palStyle(x.g) : ''}" title="${esc(name)}${away ? ' – fehlt heute' : ''}"><span>${esc(name)}</span>${away ? '<small>fehlt</small>' : ''}</div>`;
@@ -147,6 +174,17 @@ const legend = c => c.plan.groups.length > 1
 // c = Sitzordnung der Lerngruppe, d = Standardsitzplan (oder null für die gemischten Gruppen), off = heute abwesend
 function room(c, d, off) {
   const L = d ? d.layout : c.settings.layout, std = !!d;
+  if (L === 'raum') {
+    const r = rooms.byId(d ? d.room : c.settings.room);
+    if (!r) return `<div class="room-empty"><p><b>Noch kein Raum gewählt.</b><br>Rechts einen Raum wählen oder einen neuen anlegen – mit Tür, Fenstern, Tafel, Pult und Tischen.</p><div class="tools"><button class="btn primary" data-act="room-new">${icon('plus', 16)} Neuer Raum</button></div></div>`;
+    if (d) return `<div class="room v2 raum std ${flip ? 'flip' : ''}">${rooms.roomHtml(r, { flip, seat: k => seatBox(c, { id: d.slots[k] || null, g: -1, k }, off), itemClass: () => ['plain', ''] })}</div>`;
+    // gemischte Gruppen: jede Gruppe an eigenen Tischen, Tisch in der Farbe seiner Gruppe
+    const { map, over } = rooms.mixSlots(r, c.plan.groups), tg = new Map();
+    for (const [k, v] of map) { const it = k.split(':')[0]; if (!tg.has(it)) tg.set(it, v.g); }
+    return `<div class="room v2 raum mix ${flip ? 'flip' : ''}">${legend(c)}${over ? `<p class="notice">Im Raum fehlen ${over} ${over === 1 ? 'Platz' : 'Plätze'} – im Raumplaner Tische ergänzen.</p>` : ''}${rooms.roomHtml(r, { flip,
+      seat: k => { const v = map.get(k); return seatBox(c, { id: v?.id ?? null, g: v ? v.g : -1 }, off); },
+      itemClass: it => (tg.has(it.id) ? ['grouped', palStyle(tg.get(it.id))] : ['plain', '']) })}</div>`;
+  }
   const front = `<div class="front"><span class="board">Tafel</span><div class="desk">Pult</div></div>`, back = `<div class="back">${flip ? 'Hinten (Blick von der Tafel)' : 'Hinten'}</div>`;
   const wrap = (cls, body, style = '') => `<div class="room v2 ${cls} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}" style="${style}">${flip ? back + body + front : front + body + back}</div>`;
   if (L === 'omnibus') {
@@ -158,7 +196,7 @@ function room(c, d, off) {
     // Gruppentisch aus zusammengeschobenen Zweiertischen; ein übrig bleibender Tisch steht quer an der Stirnseite
     let isl = islandsOf(c, d);
     if (flip) isl = isl.slice().reverse().map(i => ({ ...i, tables: i.tables.slice().reverse().map(turn) }));
-    return wrap('gruppen', `<div class="islands" style="--cols:${isl.length <= 4 ? 2 : 3}">${isl.map(i => {
+    return wrap('gruppen', `<div class="islands" style="--cols:${icolsOf(d ? d.icols : c.settings.icols, isl.length)}">${isl.map(i => {
       const ts = i.tables.slice(), end = ts.length > 1 && ts.length % 2 ? (flip ? ts.shift() : ts.pop()) : null, half = Math.ceil(ts.length / 2);
       const desk = t => deskHtml(c, t, off, false);
       return `<div class="island" style="${palStyle(i.g)}"><small><b class="gtag">${std ? i.g + 1 : 'G' + (i.g + 1)}</b>${i.title} · ${i.n}</small><div class="cluster${end ? ' has-end' : ''}"><div class="side top">${ts.slice(0, half).map(desk).join('')}</div>${ts.length > half ? `<div class="side bottom">${ts.slice(half).map(desk).join('')}</div>` : ''}${end ? `<div class="end">${desk(end)}</div>` : ''}</div></div>`;
@@ -188,13 +226,24 @@ function room(c, d, off) {
 }
 const groupList = c => `<div class="group-list">${c.plan.groups.map((g, gi) => `<div class="group-card" style="${palStyle(gi)}"><h4><span class="gdot"></span>Gruppe ${gi + 1} <span class="badge">${g.length}</span></h4><ol>${g.map(id => `<li data-pid="${esc(id)}">${esc(nameOf(c, id))}</li>`).join('')}</ol></div>`).join('')}</div>`;
 
-const stepper = (label, k, val, { min = true, max = true, text = val, disabled = false } = {}) => `<label ${disabled ? 'class="disabled"' : ''}>${label}<span class="stepper"><button data-act="step" data-k="${k}" data-d="-1" ${!disabled && min ? '' : 'disabled'}>−</button><output>${text}</output><button data-act="step" data-k="${k}" data-d="1" ${!disabled && max ? '' : 'disabled'}>+</button></span></label>`;
+const stepper = (label, k, val, { min = true, max = true, text = val, disabled = false } = {}) => `<label ${disabled ? 'class="disabled"' : ''}>${label}<span class="stepper"><button data-act="step" data-k="${k}" data-d="-1" data-base="${val}" ${!disabled && min ? '' : 'disabled'}>−</button><output>${text}</output><button data-act="step" data-k="${k}" data-d="1" data-base="${val}" ${!disabled && max ? '' : 'disabled'}>+</button></span></label>`;
 const layoutCard = cur => `<div class="card">
         <h3>${icon('sliders', 16)} Organisationsform</h3>
         <div class="layout-grid">${LAYOUTS.map(l => `<button class="layout-opt ${l.id === cur ? 'on' : ''}" data-act="layout" data-id="${l.id}" title="${esc(l.hint)}"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.4">${LAYOUT_PICS[l.id]}</svg><span>${esc(l.name)}</span></button>`).join('')}</div>
       </div>`;
 
+// Raum wählen, bearbeiten oder neu anlegen (Organisationsform „Eigener Raum“)
+function roomCard(id) {
+  const r = rooms.byId(id), all = rooms.list();
+  return `<div class="card">
+        <h3>${icon('grid', 16)} Raum</h3>
+        ${all.length ? `<select id="room-pick" class="select" aria-label="Raum wählen">${r ? '' : '<option value="">Bitte wählen …</option>'}${all.map(x => `<option value="${esc(x.id)}" ${x.id === id ? 'selected' : ''}>${esc(x.name)} (${rooms.seatCount(x)} Plätze)</option>`).join('')}</select>` : ''}
+        <div class="tools room-tools">${r ? `<button class="btn ghost sm" data-act="room-edit">${icon('edit', 15)} Raum bearbeiten</button>` : ''}<button class="btn ghost sm" data-act="room-new">${icon('plus', 15)} Neuer Raum</button></div>
+        <p class="muted small-text">Im Raumplaner legst du Tür, Fenster, Tafel, Pult, Schränke, Tische, Werkbänke und Stühle fest. Einen Raum können mehrere Lerngruppen nutzen.</p>
+      </div>`;
+}
 function seatHtml(g) {
+  if (rooms.editor.id && rooms.byId(rooms.editor.id)) return `<div class="work-grid">${rooms.editorHtml()}<aside class="side no-print">${rooms.editorSide()}</aside></div>`;
   const c = groups.seatView(g), off = groups.absent(g.id), present = groups.presentCount(g), mode = modeFor(g), d = mode === 'std' ? stdOf(c) : null;
   const L = d ? d.layout : c.settings.layout, layout = LAYOUTS.find(l => l.id === L) || LAYOUTS[0];
   const usesTables = TABLE_LAYOUTS.includes(L), minT = minimumTables(present, c.settings.groups);
@@ -206,11 +255,12 @@ function seatHtml(g) {
 
   // ----- Standardsitzplan -----
   if (mode === 'std') {
-    const used = d ? Math.ceil((d.seats.findLastIndex(Boolean) + 1) / 2) : 0, seated = d ? d.seats.filter(Boolean).length : 0;
+    const used = d ? Math.ceil((d.seats.findLastIndex(Boolean) + 1) / 2) : 0, seated = d ? (isRaum(d) ? Object.keys(d.slots).length : d.seats.filter(Boolean).length) : 0;
+    const nIsl = d && L === 'gruppen' ? islandsOf(c, d).length : 0, ic = icolsOf(d?.icols, nIsl), rName = L === 'raum' ? rooms.byId(d?.room)?.name : '';
     return `<div class="work-grid">
     <div class="card room-card print-area">
       <div class="card-head">
-        <div><p class="eyebrow">Dein Raum · ${esc(layout.name)}</p><h2>Standardsitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
+        <div><p class="eyebrow">Dein Raum · ${esc(rName || layout.name)}</p><h2>Standardsitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
         <div class="tools no-print">${d ? flipBtn : ''}${head}</div>
       </div>
       ${title}
@@ -222,12 +272,13 @@ function seatHtml(g) {
           <p class="muted small-text">Danach ordnest du die Kinder durch Ziehen an ihre Plätze.</p></div></div>`}
     </div>
     <aside class="side no-print">
-      ${d ? `<div class="card">
+      ${d && L === 'raum' ? roomCard(d.room) : ''}
+      ${d && L !== 'raum' ? `<div class="card">
         <h3>${icon('grid', 16)} Raum</h3>
         <div class="num-row">
           ${stepper('Anzahl Tische', 'tables', d.tables, { min: d.tables > Math.max(1, used), max: d.tables < 40, disabled: !usesTables })}
           ${L === 'omnibus' ? stepper('Tische nebeneinander', 'cols', colsOf(d.cols, d.tables), { min: colsOf(d.cols, d.tables) > 2, max: colsOf(d.cols, d.tables) < 5 }) : ''}
-          ${L === 'gruppen' ? stepper('Tischgruppen', 'groups', d.groups, { min: d.groups > 1, max: d.groups < Math.min(20, d.tables) }) : ''}
+          ${L === 'gruppen' ? stepper('Tischgruppen', 'groups', d.groups, { min: d.groups > 1, max: d.groups < Math.min(20, d.tables) }) + stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
         </div>
         <p class="muted small-text">${usesTables ? 'Ein Tisch hat zwei Plätze. Leere Tische am Ende lassen sich wieder entfernen.' : 'Diese Organisationsform braucht keine Tische; die Reihenfolge der Plätze bleibt.'}</p>
       </div>` : ''}
@@ -243,7 +294,7 @@ function seatHtml(g) {
   }
 
   // ----- Gemischte Gruppen -----
-  const cols = colsOf(c.settings.cols, c.settings.tables);
+  const cols = colsOf(c.settings.cols, c.settings.tables), nIsl = c.plan?.groups.length || c.settings.groups, ic = icolsOf(c.settings.icols, nIsl);
   return `<div class="work-grid">
     <div class="card room-card print-area">
       <div class="card-head">
@@ -270,9 +321,11 @@ function seatHtml(g) {
           ${stepper('Anzahl Gruppen', 'groups', c.settings.groups)}
           ${stepper('Anzahl Tische', 'tables', c.settings.tables, { min: c.settings.tables > minT, disabled: !usesTables })}
           ${L === 'omnibus' ? stepper('Tische nebeneinander', 'cols', cols, { min: cols > 2, max: cols < 5 }) : ''}
+          ${L === 'gruppen' ? stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
         </div>
-        <p class="muted small-text">${usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Organisationsform braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
+        <p class="muted small-text">${L === 'raum' ? `Die Plätze kommen aus dem Raumplaner (${rooms.seatCount(rooms.byId(c.settings.room))} Plätze); jede Gruppe bekommt eigene Tische.` : usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Organisationsform braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
       </div>
+      ${L === 'raum' ? roomCard(c.settings.room) : ''}
       ${layoutCard(L)}
       ${groups.peopleCardHtml(g, search)}
       <div class="card">
@@ -341,12 +394,11 @@ function drop(aEl, bEl) {
   const g = groups.active(); if (!g) return;
   if (viewFor(g) !== 'sitz' || modeFor(g) !== 'std') { if (bEl.dataset.pid) swap(aEl.dataset.pid, bEl.dataset.pid); return; }
   const from = aEl.dataset.seat, to = bEl.dataset.seat, pid = aEl.dataset.pid;
-  if (bEl.hasAttribute('data-tray') || (to === undefined && !bEl.closest('.room'))) { if (from !== undefined) updStd(g, d => { d.seats[Number(from)] = null; }); return; }
+  if (bEl.hasAttribute('data-tray') || (to === undefined && !bEl.closest('.room'))) { if (from !== undefined) updStd(g, d => setS(d, from, null)); return; }
   if (to === undefined) return;
   updStd(g, d => {
-    const j = Number(to);
-    if (from !== undefined) [d.seats[Number(from)], d.seats[j]] = [d.seats[j], d.seats[Number(from)]];
-    else { const old = d.seats.indexOf(pid); if (old >= 0) d.seats[old] = null; d.seats[j] = pid; }   // wer dort saß, steht danach bei „ohne Platz“
+    if (from !== undefined) { const a = getS(d, from), b = getS(d, to); setS(d, from, b); setS(d, to, a); }
+    else { const old = keyOf(d, pid); if (old !== undefined) setS(d, old, null); setS(d, to, pid); }   // wer dort saß, steht danach bei „ohne Platz“
   });
 }
 function swap(a, b) {
@@ -361,9 +413,31 @@ function swap(a, b) {
   });
 }
 
+// Raum für die gezeigte Fassung wählen; im Standardsitzplan bleibt die Reihenfolge der Plätze erhalten
+function useRoom(g, id, mode = modeFor(g)) {
+  if (mode === 'std') updStd(g, d => { const old = isRaum(d) ? rooms.slotsToFlat(rooms.byId(d.room), d.slots) : d.seats; d.layout = 'raum'; d.room = id; d.slots = rooms.flatToSlots(rooms.byId(id), old); });
+  else store.update(s => { const st = groups.seatPart(s, g.id).settings; st.layout = 'raum'; st.room = id; });
+}
+// Raum gelöscht: Lerngruppen, die ihn nutzen, wechseln zu Omnibus (Reihenfolge der Plätze bleibt)
+function roomDeleted(r) {
+  store.update(s => { for (const c of s.technik.classes) {
+    if (c.settings?.room === r.id) { if (c.settings.layout === 'raum') c.settings.layout = 'omnibus'; delete c.settings.room; }
+    const d = c.standard; if (d?.room !== r.id) continue;
+    if (d.layout === 'raum') { toFlat(d, r); d.layout = 'omnibus'; }
+    delete d.room; delete d.slots;
+  } });
+}
+function newRoom(g) {
+  const c = groups.seatView(g), d = modeFor(g) === 'std' ? stdOf(c) : null;
+  rooms.roomDialog({ tables: d ? d.tables : c.settings.tables, cols: colsOf(d ? d.cols : c.settings.cols, d ? d.tables : c.settings.tables),
+    onDone: r => { useRoom(g, r.id); rooms.open(r.id); draw(); toast('Raum angelegt – jetzt Tür, Tische und mehr verschieben.'); } });
+}
+
 // ---------- Aktionen ----------
 function onChange(e) {
+  if (rooms.change(e)) return;
   const t = e.target, g = groups.active();
+  if (t.id === 'room-pick' && g && t.value) { useRoom(g, t.value); return; }
   if (t.id === 'lg-select') { search = ''; groups.setActive(t.value); }
   else if (t.id === 'team-count' && g) store.update(s => { groups.sportPart(s, g.id).teamCount = Number(t.value); });
 }
@@ -373,7 +447,10 @@ async function onClick(e) {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, g = groups.active(); if (!g) return;
   const absent = groups.absent(g.id);
+  if (rooms.click(act, b, roomDeleted)) return;
   switch (act) {
+    case 'room-new': newRoom(g); break;
+    case 'room-edit': { const c = groups.seatView(g), id = modeFor(g) === 'std' ? stdOf(c)?.room : c.settings.room; if (rooms.byId(id)) { rooms.open(id); draw(); scrollTo(0, 0); } break; }
     case 'view': viewOf.set(g.id, b.dataset.v); search = ''; draw(); break;
     case 'list-mode': listMode = b.dataset.v; draw(); break;
     case 'print': window.print(); break;
@@ -387,7 +464,12 @@ async function onClick(e) {
       const per = Math.max(...c.plan.groups.map(x => Math.ceil(x.length / 2)), 1), island = c.settings.layout === 'gruppen';
       const seats = c.plan.groups.flatMap(x => { const r = x.slice(); const n = island ? per * 2 : Math.ceil(r.length / 2) * 2; while (r.length < n) r.push(null); return r; });
       const tables = Math.max(seats.length / 2, TABLE_LAYOUTS.includes(c.settings.layout) && !island ? c.settings.tables : 0);
-      store.update(s => { groups.seatPart(s, g.id).standard = { layout: c.settings.layout, tables, groups: c.plan.groups.length, cols: c.settings.cols || 0, seats, savedAt: new Date().toISOString() }; });
+      const r = c.settings.layout === 'raum' ? rooms.byId(c.settings.room) : null;
+      if (r) {
+        const slots = Object.fromEntries([...rooms.mixSlots(r, c.plan.groups).map].map(([k, v]) => [k, v.id])), flat = rooms.slotsToFlat(r, slots);
+        if (flat.length % 2) flat.push(null);
+        store.update(s => { groups.seatPart(s, g.id).standard = { layout: 'raum', room: r.id, slots, tables: Math.max(1, flat.length / 2), groups: c.plan.groups.length, cols: 0, seats: flat, savedAt: new Date().toISOString() }; });
+      } else store.update(s => { groups.seatPart(s, g.id).standard = { layout: c.settings.layout, tables, groups: c.plan.groups.length, cols: c.settings.cols || 0, icols: c.settings.icols || 0, seats, savedAt: new Date().toISOString() }; });
       // Kinder, die heute fehlen, stehen danach bei „ohne Platz“
       modeOf.set(g.id, 'std'); draw(); toast('Als Standardsitzplan gespeichert.');
       break;
@@ -407,10 +489,17 @@ async function onClick(e) {
       toast('Standardsitzplan gelöscht.', { action: 'Rückgängig', onAction: () => store.update(s => { groups.seatPart(s, g.id).standard = old; }) });
       break;
     }
-    case 'layout':
-      if (modeFor(g) === 'std') updStd(g, d => { d.layout = b.dataset.id; });
-      else store.update(s => { groups.seatPart(s, g.id).settings.layout = b.dataset.id; });
+    case 'layout': {
+      const to = b.dataset.id, mode = modeFor(g), c = groups.seatView(g);
+      if (to === 'raum') {
+        const cur = (mode === 'std' ? c.standard?.room : null) || c.settings.room, pick = rooms.byId(cur) ? cur : rooms.list()[0]?.id;
+        if (pick) useRoom(g, pick, mode); else newRoom(g);
+        break;
+      }
+      if (mode === 'std') updStd(g, d => { if (isRaum(d)) toFlat(d, rooms.byId(d.room)); d.layout = to; });
+      else store.update(s => { groups.seatPart(s, g.id).settings.layout = to; });
       break;
+    }
     case 'step': {
       const k = b.dataset.k, d = Number(b.dataset.d);
       if (modeFor(g) === 'std') {
@@ -418,9 +507,11 @@ async function onClick(e) {
           if (k === 'tables') { const used = Math.ceil((x.seats.findLastIndex(Boolean) + 1) / 2); x.tables = Math.min(40, Math.max(1, used, x.tables + d)); x.seats = x.seats.slice(0, x.tables * 2); while (x.seats.length < x.tables * 2) x.seats.push(null); }
           else if (k === 'cols') x.cols = Math.min(5, Math.max(2, colsOf(x.cols, x.tables) + d));
           else if (k === 'groups') x.groups = Math.min(20, Math.max(1, x.groups + d));
+          else if (k === 'icols') x.icols = Math.min(6, Math.max(1, Number(b.dataset.base) + d));
         });
         break;
       }
+      if (k === 'icols') { store.update(s => { groups.seatPart(s, g.id).settings.icols = Math.min(6, Math.max(1, Number(b.dataset.base) + d)); }); break; }
       if (k === 'cols') { store.update(s => { const st = groups.seatPart(s, g.id).settings; st.cols = Math.min(5, Math.max(2, colsOf(st.cols, st.tables) + d)); }); break; }
       const minT = k === 'tables' ? minimumTables(groups.presentCount(g), groups.seatView(g).settings.groups) : 1;
       store.update(s => { const st = groups.seatPart(s, g.id).settings; st[k] = Math.min(k === 'tables' ? 40 : 20, Math.max(minT, 1, st[k] + d)); });

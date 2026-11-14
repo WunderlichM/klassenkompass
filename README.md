@@ -2,6 +2,14 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.7.0
+
+- **Raumplaner (`js/room.js`):** neue Organisationsform „Eigener Raum“ in der Sitzordnung. Ein Raum hat Breite (Tafelwand) und Tiefe in Metern und besteht aus Teilen: Zweier-, Einzel- und Gruppentisch, Werkbank, Stuhl, Tafel, Pult, Tür, Fenster und Schrank. „Neuer Raum“ legt einen Raum mit Tafel, Pult, Tür, Fenstern und Tischreihen an (Reihen, Tische je Reihe, Tischart, Lage der Tür); danach im Editor ziehen (5-cm-Raster), an der Ecke die Größe ändern, drehen, kopieren, löschen, Plätze je Tisch (1–12) und Beschriftung einstellen; Pfeiltasten verschieben um 10 cm (Alt: 1 cm), Entf löscht. „Tische in Reihen neu anordnen“ ersetzt nur die Tische.
+- **Sitzen im Raum:** Im Standardsitzplan sind die Plätze über `"<Tisch-Kennung>:<Nummer>"` zugeordnet (`standard.room`, `standard.slots`); Verschieben eines Tisches nimmt seine Kinder mit. Beim Wechsel zwischen „Eigener Raum“ und anderen Organisationsformen bleibt die Reihenfolge der Plätze (Lesereihenfolge: Reihen von vorn nach hinten, darin von links). Bei „Gemischt“ (`settings.room`) bekommt jede Gruppe eigene Tische in Lesereihenfolge; reicht das nicht, werden die Plätze ohne Tischgrenzen gefüllt, fehlende Plätze nennt ein Hinweis. „Blick von der Tafel“ dreht auch den eigenen Raum.
+- **Räume** liegen in `technik.rooms` (höchstens 30 Räume, je 300 Teile) und gehören keiner Lerngruppe. Wird ein Raum gelöscht, wechseln Lerngruppen, die ihn nutzen, zu Omnibus; die Reihenfolge der Plätze bleibt.
+- **Tischgruppen nebeneinander:** bei Gruppentischen 1 bis 6 Tischinseln je Reihe (`settings.icols` bzw. `standard.icols`; ohne Angabe 2, ab fünf Inseln 3).
+- **Datenstand 7.**
+
 ## Neu in 2.6.0
 
 - **Standardsitzplan (`js/gruppen.js`):** Die Sitzordnung hat zwei Fassungen – „Standardsitzplan“ (wer normalerweise wo sitzt) und „Gemischt“ (Gruppen nach Anwesenheit, wie bisher). Gibt es einen Standardsitzplan, öffnet die Sitzordnung damit. Anlegen: „Jetzige Verteilung übernehmen“ oder „Alphabetisch füllen“. Ordnen durch Ziehen: auf ein Kind = tauschen, auf einen freien Platz = umziehen, auf die Leiste „ohne Platz“ = Platz freigeben. Der Standardsitzplan wird nie von selbst gemischt; wer heute fehlt, erscheint grau („fehlt“), der Platz bleibt. Neue Kinder der Lerngruppe stehen in der Leiste „ohne Platz“ („Auf freie Plätze setzen“). Organisationsform, Tischzahl, Tische nebeneinander und Tischgruppen sind für den Standardsitzplan eigens gespeichert.
