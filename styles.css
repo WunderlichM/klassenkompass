@@ -361,6 +361,23 @@ textarea.input { resize: vertical; min-height: 80px; }
 .sc-btns { display: flex; gap: 8px; } .sc-btns .round-btn { font-size: 22px; font-weight: 700; line-height: 1; }
 .sc-mid { display: grid; justify-items: center; gap: 6px; } .sc-mid .time { font-size: clamp(22px, min(8cqw, 16cqh), 90px); }
 .sc-colon { font-size: clamp(40px, 16cqw, 160px); font-weight: 800; color: var(--muted); line-height: 1; }
+/* Tafel */
+.widget.board .w-body { align-items: stretch; justify-content: flex-start; gap: 8px; padding: 8px 10px 10px; cursor: default; }
+.bd-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bd-col { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--card); background: var(--c); box-shadow: 0 0 0 1px var(--line); padding: 0; }
+.bd-col.on { box-shadow: 0 0 0 2.5px var(--accent); }
+.bd-size { width: 32px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; padding: 0 6px; }
+.bd-size i { display: block; width: 100%; border-radius: 99px; background: var(--ink); }
+.bd-size.on, .bd-tool.on { border-color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent); }
+.bd-tool { height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 12.5px; padding: 0 10px; }
+.bd-sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; } .bd-grow { flex: 1; }
+.bd-svg { flex: 1; min-height: 160px; width: 100%; display: block; border-radius: 10px; border: 1px solid var(--line); background: #fff; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.bd-svg.erasing { cursor: cell; }
+.bd-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.bd-svg.bg-green { background: #2f5d4a; border-color: #8a6a44; border-width: 4px; }
+.bd-svg.bg-lines { background: repeating-linear-gradient(#fff 0 39px, #b9c6dc 39px 40px); }
+.bd-svg.bg-grid { background: linear-gradient(#cfd8e6 1px, transparent 1px) 0 0 / 25px 25px, linear-gradient(90deg, #cfd8e6 1px, transparent 1px) 0 0 / 25px 25px, #fff; }
+.stage-wrap.stack .bd-svg { height: 320px; flex: none; }
 /* Stationen */
 .stn { flex: 1; width: 100%; min-height: 0; display: grid; gap: 12px; }
 .stn.with-plan { grid-template-columns: minmax(220px, 1fr) 1.4fr; }

@@ -1,5 +1,5 @@
 // Weitere Objekte für den Unterrichtsbildschirm (seit 2.5.0): Zufallsauswahl, Arbeitsform mit Lautstärke-Ampel,
-// Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel und Stationen.
+// Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 // js/screen.js bindet sie ein: Rahmen, Ziehen, Größe und Speichern liegen dort, Inhalt und Bedienung hier.
 import * as store from './store.js';
 import { uid, shuffle } from './engine.js';
@@ -19,9 +19,10 @@ export const ADD = [
   { kind: 'queue', label: 'Hilfe-Warteliste', ic: 'hand' },
   { kind: 'score', label: 'Anzeigetafel', ic: 'score' },
   { kind: 'stations', label: 'Stationen', ic: 'route' },
+  { kind: 'board', label: 'Tafel', ic: 'edit' },
 ];
 export const TYPES = ADD.map(a => a.kind);
-export const MIN = { pick: [240, 220], mode: [240, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330] };
+export const MIN = { pick: [240, 220], mode: [240, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330], board: [300, 240] };
 
 const arr = v => (Array.isArray(v) ? v : []);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -40,6 +41,7 @@ export function create(kind) {
     case 'duty': return { type: 'duty', ...src, duties: [{ name: 'Kehren', n: 2 }, { name: 'Werkzeug prüfen', n: 2 }, { name: 'Tische wischen', n: 1 }], offset: 0, width: 400, height: 300 };
     case 'queue': return { type: 'queue', ...src, items: [], width: 300, height: 360 };
     case 'score': return { type: 'score', a: { name: 'Team A', pts: 0 }, b: { name: 'Team B', pts: 0 }, timed: true, durationMs: 600000, remainingMs: 600000, endsAt: null, sound: true, tone: 'whistle', volume: 90, repeats: 2, warn: 0, width: 560, height: 320 };
+    case 'board': return { type: 'board', bg: 'white', color: '#25272e', size: 4, tool: 'pen', strokes: [], width: 700, height: 440 };
     case 'stations': return { type: 'stations', trainMs: 180000, pauseMs: 30000, sets: 4, rounds: 1, roundPauseMs: 0, groupsN: 4, names: '', planId: null, volume: 70, tones: { ...DEFAULT_INTERVAL_TONES }, elapsedMs: 0, startedAt: null, width: 420, height: 440 };
   }
   return null;
@@ -135,6 +137,64 @@ function dutyPlan(w) {
 // ---------- Stationen ----------
 const stationNames = w => { const l = lines(w.names, 12, 40), n = clamp(Number(w.sets) || 1, 1, 12); return Array.from({ length: n }, (_, i) => l[i] || `Station ${i + 1}`); };
 
+// ---------- Tafel: Schreiben und Malen mit Stift, Finger oder Maus ----------
+// Striche liegen als Punktlisten im Objekt (in Pixeln der Zeichenfläche): { c: Farbe, w: Breite, p: [x, y, x, y, …] }.
+const BOARD_BG = { white: 'Weiß', green: 'Tafelgrün', lines: 'Liniert', grid: 'Kariert' };
+const BOARD_COLORS = ['#25272e', '#2f6fd0', '#d0453a', '#3f9a5c', '#e3a312'];
+const BOARD_SIZES = [[2.5, 'fein'], [4, 'mittel'], [9, 'dick']];
+const MAX_STROKES = 500, MAX_POINTS = 60000;
+const inkOf = (w, c) => (w.bg === 'green' && c === BOARD_COLORS[0] ? '#f4f1e6' : c);   // auf Tafelgrün schreibt „Schwarz“ als Kreide
+function strokePath(p) {
+  if (p.length < 4) return `M${p[0]} ${p[1]}h.01`;
+  // weiche Linie: Punkte als Stützpunkte, Kurven durch die Mitten
+  let d = `M${p[0]} ${p[1]}`;
+  for (let i = 2; i < p.length - 2; i += 2) d += `Q${p[i]} ${p[i + 1]} ${(p[i] + p[i + 2]) / 2} ${(p[i + 1] + p[i + 3]) / 2}`;
+  return d + `L${p[p.length - 2]} ${p[p.length - 1]}`;
+}
+const strokeSvg = (w, s, i) => `<path data-s="${i}" d="${strokePath(arr(s.p))}" stroke="${esc(inkOf(w, s.c))}" stroke-width="${Number(s.w) || 4}"/>`;
+let pen = null;   // laufender Strich: { id, pts, path } bzw. Radierer: { id, erase: true }
+const boardPos = (svg, e) => { const r = svg.getBoundingClientRect(); return [Math.round((e.clientX - r.left) * (svg.clientWidth / r.width) * 10) / 10, Math.round((e.clientY - r.top) * (svg.clientHeight / r.height) * 10) / 10]; };
+const boardSvgOf = id => document.querySelector(`[data-wid="${CSS.escape(id)}"] .bd-svg`);
+function eraseAt(id, x, y) {
+  const w = store.get().screen.widgets.find(v => v.id === id); if (!w) return;
+  const hit = arr(w.strokes).findIndex(s => { const p = arr(s.p), r = 10 + (Number(s.w) || 4) / 2; for (let i = 0; i < p.length; i += 2) if (Math.abs(p[i] - x) < r && Math.abs(p[i + 1] - y) < r) return true; return false; });
+  if (hit >= 0) patch(id, v => { v.strokes = arr(v.strokes).filter((_, i) => i !== hit); });
+}
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest?.('.bd-svg'); if (!svg || e.button > 0) return;
+  const id = svg.closest('[data-wid]')?.dataset.wid, w = store.get().screen.widgets.find(v => v.id === id); if (!w) return;
+  e.preventDefault();
+  const [x, y] = boardPos(svg, e);
+  if (w.tool === 'eraser') { pen = { id, erase: true }; eraseAt(id, x, y); return; }
+  pen = { id, pts: [x, y], c: BOARD_COLORS.includes(w.color) ? w.color : BOARD_COLORS[0], w: Number(w.size) || 4, path: null };
+});
+document.addEventListener('pointermove', e => {
+  if (!pen) return;
+  const svg = boardSvgOf(pen.id); if (!svg) return;
+  const evs = e.getCoalescedEvents?.() || [e];
+  for (const ev of evs.length ? evs : [e]) {
+    const [x, y] = boardPos(svg, ev);
+    if (pen.erase) { eraseAt(pen.id, x, y); continue; }
+    const n = pen.pts.length; if (Math.hypot(x - pen.pts[n - 2], y - pen.pts[n - 1]) < 1.5) continue;
+    pen.pts.push(x, y);
+  }
+  if (pen.erase) return;
+  // Wurde inzwischen neu gezeichnet (z. B. weil ein Timer ablief), hängt der Strich an der neuen Fläche weiter
+  if (!pen.path?.isConnected) { pen.path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); const w = store.get().screen.widgets.find(v => v.id === pen.id); pen.path.setAttribute('stroke', inkOf(w || {}, pen.c)); pen.path.setAttribute('stroke-width', pen.w); svg.querySelector('.bd-ink').append(pen.path); }
+  pen.path.setAttribute('d', strokePath(pen.pts));
+});
+function penUp() {
+  const p = pen; pen = null; if (!p || p.erase) return;
+  patch(p.id, w => {
+    const list = arr(w.strokes); list.push({ c: p.c, w: p.w, p: p.pts.slice(0, 4000) });
+    // Grenzen: die ältesten Striche weichen, wenn die Tafel sehr voll wird
+    while (list.length > MAX_STROKES || list.reduce((a, s) => a + arr(s.p).length, 0) > MAX_POINTS) list.shift();
+    w.strokes = list;
+  });
+}
+document.addEventListener('pointerup', penUp);
+document.addEventListener('pointercancel', penUp);
+
 // ======================================================================
 // Darstellung (Rückgabe: Inhalt und CSS-Klassen für den Rahmen aus screen.js)
 // ======================================================================
@@ -185,6 +245,14 @@ export function html(w, { ctrl }) {
       const side = k => { const t = w[k] || {}; return `<div class="sc-side sc-${k}"><p class="sc-name">${esc(t.name || (k === 'a' ? 'Team A' : 'Team B'))}</p><p class="sc-pts">${Number(t.pts) || 0}</p>
         <div class="sc-btns no-present"><button class="round-btn" data-act="x-score" data-k="${k}" data-d="-1" aria-label="Punkt abziehen">−</button><button class="round-btn primary" data-act="x-score" data-k="${k}" data-d="1" aria-label="Punkt dazu">+</button></div></div>`; };
       return [`<div class="sc">${side('a')}<div class="sc-mid">${w.timed ? `<div class="time" data-live="time"></div>${ctrl(w, w.endsAt !== null)}<p class="w-state" data-live="state"></p>` : '<span class="sc-colon">:</span>'}</div>${side('b')}</div>`, 'score'];
+    }
+    case 'board': {
+      const er = w.tool === 'eraser', cur = BOARD_COLORS.includes(w.color) ? w.color : BOARD_COLORS[0], size = Number(w.size) || 4, n = arr(w.strokes).length;
+      return [`<div class="bd-bar">${BOARD_COLORS.map(c => `<button class="bd-col ${!er && c === cur ? 'on' : ''}" data-act="x-board-color" data-c="${c}" style="--c:${inkOf(w, c)}" aria-label="Farbe wählen"></button>`).join('')}
+        <span class="bd-sep"></span>${BOARD_SIZES.map(([v, l]) => `<button class="bd-size ${!er && v === size ? 'on' : ''}" data-act="x-board-size" data-v="${v}" title="Strich ${l}" aria-label="Strich ${l}"><i style="height:${Math.max(2, v)}px"></i></button>`).join('')}
+        <span class="bd-sep"></span><button class="bd-tool ${er ? 'on' : ''}" data-act="x-board-eraser" title="Radierer: Striche antippen oder darüberfahren" aria-pressed="${er}">Radierer</button>
+        <span class="bd-grow"></span><button class="icon-btn xs" data-act="x-board-undo" title="Letzten Strich zurücknehmen" aria-label="Letzten Strich zurücknehmen" ${n ? '' : 'disabled'}>${icon('reset', 15)}</button><button class="icon-btn xs" data-act="x-board-clear" title="Tafel wischen" aria-label="Tafel wischen" ${n ? '' : 'disabled'}>${icon('trash', 15)}</button></div>
+        <svg class="bd-svg bg-${BOARD_BG[w.bg] ? w.bg : 'white'} ${er ? 'erasing' : ''}"><g class="bd-ink">${arr(w.strokes).map((s, i) => strokeSvg(w, s, i)).join('')}</g></svg>`, 'board'];
     }
     case 'stations': {
       const p = w.planId ? hall.planById(w.planId) : null, n = clamp(Number(w.groupsN) || 1, 1, 12);
@@ -275,6 +343,11 @@ export function click(act, w, b) {
         onOpen: el => el.querySelectorAll('[data-n]').forEach(btn => btn.onclick = () => { queueAdd(id, btn.dataset.n); btn.disabled = true; }) });
       return true;
     }
+    case 'x-board-color': patch(id, x => { x.color = b.dataset.c; x.tool = 'pen'; }); return true;
+    case 'x-board-size': patch(id, x => { x.size = Number(b.dataset.v); x.tool = 'pen'; }); return true;
+    case 'x-board-eraser': patch(id, x => { x.tool = x.tool === 'eraser' ? 'pen' : 'eraser'; }); return true;
+    case 'x-board-undo': patch(id, x => { x.strokes = arr(x.strokes).slice(0, -1); }); return true;
+    case 'x-board-clear': { const old = arr(w.strokes); patch(id, x => { x.strokes = []; }); toast('Tafel gewischt.', { action: 'Rückgängig', onAction: () => patch(id, x => { x.strokes = old; }) }); return true; }
     case 'x-score': patch(id, x => { const t = x[b.dataset.k] ||= { name: '', pts: 0 }; t.pts = clamp((Number(t.pts) || 0) + Number(b.dataset.d), 0, 999); }); return true;
   }
   return false;
@@ -318,6 +391,9 @@ export function settings(w, { durField, readDur, toneFields, readTone }) {
       ${toneFields(w)}<label class="check"><input type="checkbox" name="zero"> Punkte auf 0 : 0 setzen</label>`,
       apply: (fd, x) => { readTone(fd, x); x.a = { name: String(fd.get('an')).trim().slice(0, 24) || 'Team A', pts: fd.get('zero') ? 0 : Number(x.a?.pts) || 0 }; x.b = { name: String(fd.get('bn')).trim().slice(0, 24) || 'Team B', pts: fd.get('zero') ? 0 : Number(x.b?.pts) || 0 };
         x.timed = fd.get('timed') === 'on'; const d = clamp(readDur(fd, 'dur'), 1000, 24 * 3600000); if (d !== x.durationMs || !x.timed) { x.durationMs = d; x.remainingMs = d; x.endsAt = null; } } };
+    case 'board': return { body: `<label class="field">Hintergrund<select name="bg" class="select">${Object.entries(BOARD_BG).map(([k, v]) => `<option value="${k}" ${w.bg === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <p class="muted small-text">Schreiben mit Stift, Finger oder Maus. Verschieben lässt sich die Tafel an ihrer Kopfzeile. Das Tafelbild wird wie alle Objekte gespeichert und bleibt nach dem Neuladen stehen.</p>`,
+      apply: (fd, x) => { x.bg = BOARD_BG[fd.get('bg')] ? String(fd.get('bg')) : 'white'; } };
     case 'stations': {
       const plans = hall.planList();
       return { wide: true, body: `<div class="two">${durField('train', 'Zeit je Station', w.trainMs)}${durField('pause', 'Zeit zum Wechseln', w.pauseMs)}</div>

@@ -207,8 +207,8 @@ function normSport(g) {
     tournaments, series };
 }
 // Objekte des Bildschirms: Zeit (bis 2.4.0) und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf,
-// Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel und Stationen (js/widgets.js)
-const WIDGET_TYPES = ['timer', 'qr', 'stopwatch', 'interval', 'hall', 'pick', 'mode', 'task', 'agenda', 'signal', 'duty', 'queue', 'score', 'stations'];
+// Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel (js/widgets.js)
+const WIDGET_TYPES = ['timer', 'qr', 'stopwatch', 'interval', 'hall', 'pick', 'mode', 'task', 'agenda', 'signal', 'duty', 'queue', 'score', 'stations', 'board'];
 const normWidgets = list => (Array.isArray(list) ? list : []).filter(w => w && WIDGET_TYPES.includes(w.type)).slice(0, 30).map(w => ({ ...w, id: String(w.id || uid()),
   x: int(w.x, 0, SCREEN_W_WIDE - 60, 40), y: int(w.y, 0, SCREEN_H - 60, 40), width: int(w.width, 120, SCREEN_W_WIDE, 300), height: int(w.height, 120, SCREEN_H, 260), label: str(w.label, 60) }));
 const BACKGROUNDS = ['mint', 'paper', 'night'];

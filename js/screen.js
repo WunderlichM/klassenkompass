@@ -423,7 +423,7 @@ document.addEventListener('submit', e => {
 function onPointerDown(e) {
   const wEl = e.target.closest('[data-wid]'); if (!wEl || e.button > 0 || isStack()) return;
   const resize = e.target.closest('[data-resize]');
-  const onFree = e.target.closest('[data-drag]') || (e.pointerType !== 'touch' && e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label'));
+  const onFree = e.target.closest('[data-drag]') || (e.pointerType !== 'touch' && e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label,.bd-svg,.bd-bar'));
   if (!resize && !onFree) return;
   if (e.target.closest('button')) return;
   e.preventDefault();
@@ -572,7 +572,7 @@ function layoutsDialog() {
 function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
-      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel und Stationen.</li>
+      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.</li>
       <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und den Endton einstellen: Klangschale (Standard), Glockenspiel, Windspiel, Gong, Wecker oder Pfiff – mit Probehören, Lautstärke, Wiederholungen und leisem Vorwarnton. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
@@ -586,6 +586,7 @@ function helpDialog() {
       <li><b>Hilfe-Warteliste:</b> Du trägst ein, wer Hilfe braucht; der Haken entfernt das Kind, die nächsten rücken auf.</li>
       <li><b>Anzeigetafel:</b> Spielstand für zwei Teams, auf Wunsch mit Spielzeit und Schlusspfiff.</li>
       <li><b>Stationen:</b> Zeit je Station und Wechselzeit; die Tabelle zeigt, welche Gruppe an welcher Station ist und wohin sie wechselt – auf Wunsch mit Hallenplan daneben.</li>
+      <li><b>Tafel:</b> Schreiben und Malen mit Stift, Finger oder Maus – fünf Farben, drei Strichstärken, Radierer (Striche antippen), „zurück“ und „wischen“. Hintergrund am Zahnrad: Weiß, Tafelgrün, liniert oder kariert. Verschieben an der Kopfzeile.</li>
       <li><b>Vorlagen:</b> Unten „Vorlagen“ speichert die jetzige Anordnung unter einem Namen (z. B. Ankommen, Arbeitsphase, Aufräumen) und lädt sie wieder.</li>
       <li><b>Hallenplan:</b> Zeigt einen Plan aus dem Bereich Hallenpläne, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
       <li><b>Intervalltimer:</b> Trainingszeit, Satzpause, Sätze, Runden, Rundenpause, Lautstärke und Töne einstellen. Die Phasen wechseln automatisch.</li>

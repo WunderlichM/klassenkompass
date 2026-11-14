@@ -1,6 +1,6 @@
 # KlassenKompass
 
-Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel und Stationen.
+Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
 ## Neu in 2.5.0
 
@@ -14,6 +14,7 @@ Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung 
   - *Dienste* – verteilt Dienste (z. B. „Kehren 2“) reihum; „Weiter“ gibt sie an die nächsten Kinder.
   - *Hilfe-Warteliste* – die Lehrkraft trägt ein, wer Hilfe braucht; der Haken entfernt das Kind.
   - *Anzeigetafel* – Spielstand für zwei Teams, auf Wunsch mit Spielzeit und Schlusspfiff.
+  - *Tafel* – Schreiben und Malen mit Stift, Finger oder Maus: fünf Farben, drei Strichstärken, Radierer (entfernt ganze Striche), „zurück“ und „wischen“; Hintergrund Weiß, Tafelgrün, liniert oder kariert. Das Tafelbild wird als Strichliste im Objekt gespeichert (höchstens 500 Striche; die ältesten weichen).
   - *Stationen* – Zeit je Station und Wechselzeit; die Tabelle zeigt, welche Gruppe wo ist und wohin sie wechselt, auf Wunsch mit Hallenplan daneben. Töne wie beim Intervalltimer.
 - **Vorlagen für den Bildschirm:** „Vorlagen“ in der unteren Leiste speichert die jetzige Anordnung unter einem Namen (bis zu 12, z. B. Ankommen, Arbeitsphase, Aufräumen) und lädt sie wieder; Timer beginnen dabei von vorn.
 - **Mehrpersonen-Stoppuhr:** Zeiten als Tabelle (CSV).
