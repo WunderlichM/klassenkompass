@@ -5,6 +5,7 @@ import { uid } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen } from './ui.js';
 import { qrSvg } from './qr.js';
 import * as hall from './hall.js';
+import { petIndex, petSvg, petText } from './hatch.js';
 import { play, scheduleAlarm, ALARM_SECONDS, TONES, DEFAULT_INTERVAL_TONES, INTERVAL_TONE_LABELS } from './sound.js';
 
 const MAX_WIDGETS = 30, MAX_RESULTS = 200;
@@ -167,13 +168,12 @@ function widgetHtml(w) {
 }
 
 function eggSvg() {
-  // eigenes, schlichtes Motiv: Ei bekommt mit der Zeit immer mehr Risse und bricht am Ende auf
+  // eigenes, schlichtes Motiv: Ei bekommt mit der Zeit immer mehr Risse und bricht am Ende auf;
+  // heraus schaut jedes Mal ein anderes Tier (js/hatch.js)
   return `<svg viewBox="0 0 120 120" class="egg-svg">
     <g class="egg-whole"><path d="M60 12c20 0 34 32 34 54a34 34 0 0 1-68 0c0-22 14-54 34-54z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
       <g class="cracks" data-live="cracks"><path class="crack" pathLength="1" data-crack="0.02,0.4" d="M61 58l-6 6-5-6-6 6-6-5-6 6-5-2"/><path class="crack" pathLength="1" data-crack="0.12,0.52" d="M61 58l6 6 6-6 6 6 6-5 6 3"/><path class="crack" pathLength="1" data-crack="0.3,0.66" d="M50 58l2-8-4-6 1-7"/><path class="crack" pathLength="1" data-crack="0.42,0.76" d="M73 58l-1-9 5-5-2-8"/><path class="crack" pathLength="1" data-crack="0.52,0.84" d="M38 64l3 8-4 7"/><path class="crack" pathLength="1" data-crack="0.6,0.88" d="M79 64l-2 8 4 7"/><path class="crack" pathLength="1" data-crack="0.72,0.94" d="M49 37l-6-4-1-7"/><path class="crack" pathLength="1" data-crack="0.78,0.97" d="M76 41l6-5 0-7"/></g></g>
-    <g class="egg-open"><g class="egg-chick"><circle cx="60" cy="56" r="20" fill="#f7d659"/><circle cx="53" cy="52" r="2.4" fill="#3b3226"/><circle cx="67" cy="52" r="2.4" fill="#3b3226"/><path d="M56 59l4 4 4-4z" fill="#e8913a"/>
-      <circle cx="47" cy="59" r="3" fill="#f4a9a0" opacity=".7"/><circle cx="73" cy="59" r="3" fill="#f4a9a0" opacity=".7"/>
-      <path d="M58 36q2-6 6-4" stroke="#e6b93f" stroke-width="2.5" fill="none" stroke-linecap="round"/></g>
+    <g class="egg-open"><g transform="translate(0 -4)"><g class="egg-chick" data-live="pet"></g></g>
       <path class="egg-bottom" d="M30 76l8-8 8 8 8-8 8 8 8-8 8 8 8-8 4 4a34 34 0 0 1-68 4z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
       <path class="egg-cap" d="M28 64c2-24 15-52 32-52s30 28 32 52l-5-4-6 6-6-6-6 6-6-6-6 6-6-6-6 6-6-6-6 6z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2" stroke-linejoin="round"/>
       <path class="egg-sparks" d="M22 30l4 0M24 28l0 4M96 24l5 0M98.5 21.5l0 5M100 52l4 0M102 50l0 4" stroke="#e0a43c" stroke-width="2.5" stroke-linecap="round"/></g></svg>`;
@@ -262,7 +262,9 @@ function updateLive(now, withSound) {
       setText(q('time'), mmss(rem));
       el.classList.toggle('done', done);
       el.classList.toggle('low', !done && w.endsAt !== null && rem <= 10000);
-      setText(q('state'), done ? 'Zeit abgelaufen' : w.endsAt !== null ? 'läuft' : rem === w.durationMs ? 'Bereit' : 'pausiert');
+      const pet = done && w.style === 'egg' ? petIndex(w.id, w.endsAt) : -1;
+      setText(q('state'), pet >= 0 ? petText(pet) : done ? 'Zeit abgelaufen' : w.endsAt !== null ? 'läuft' : rem === w.durationMs ? 'Bereit' : 'pausiert');
+      const petEl = q('pet'); if (petEl && pet >= 0 && petEl.dataset.pet !== String(pet)) { petEl.dataset.pet = pet; petEl.innerHTML = petSvg(pet); }
       const bar = q('bar'); if (bar) bar.style.width = clamp(frac * 100, 0, 100) + '%';
       const pie = q('pie'); if (pie) pie.setAttribute('d', piePath(frac));
       const cracks = q('cracks'); if (cracks) setCracks(cracks, rem === w.durationMs ? 0 : 1 - frac);
@@ -485,7 +487,7 @@ function helpDialog() {
       <li><b>Hinzufügen:</b> Unten Timer, Stoppuhr, Intervalltimer oder QR-Code wählen (bis zu 30 Objekte).</li>
       <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
-      <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
+      <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und Signalton einstellen. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter.</li>
       <li><b>Hallenplan:</b> Zeigt einen Plan aus dem Bereich Hallenpläne, z. B. neben dem Intervalltimer. Am Zahnrad den Plan wählen.</li>
       <li><b>Intervalltimer:</b> Trainingszeit, Satzpause, Sätze, Runden, Rundenpause, Lautstärke und Töne einstellen. Die Phasen wechseln automatisch.</li>

@@ -12,9 +12,11 @@ import * as cloudimages from './cloudimages.js';
 import * as images from './images.js';
 import * as theme from './theme.js';
 import * as lock from './lock.js';
+import * as importer from './importer.js';
+import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.3.0';
+export const VERSION = '2.4.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
@@ -96,11 +98,10 @@ function menuDialog() {
         <div class="seg" role="group" aria-label="Design">${[['auto', 'Automatisch'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button type="button" data-theme-opt="${v}" class="${theme.get() === v ? 'on' : ''}" aria-pressed="${theme.get() === v}">${l}</button>`).join('')}</div></div>
       <button type="button" class="menu-item" data-m="music">${icon('volume')}<span><b>Musik bei Signalen · ${esc(MUSIC_MODES[musicMode()].name)}</b><small>Läuft auf diesem Gerät Musik (z. B. Spotify, YouTube), kann die App sie bei Timer-Signalen leiser stellen oder kurz anhalten. Testen und auswählen.</small></span></button>
       <button type="button" class="menu-item" data-m="export">${icon('download')}<span><b>Daten exportieren</b><small>Mit Passwort verschlüsselte Sicherungsdatei herunterladen – für ein anderes Gerät oder als Backup.</small></span></button>
-      <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Daten importieren</b><small>Sicherung oder Export der früheren KlassenKompass-App einlesen.</small></span></button>
+      <button type="button" class="menu-item" data-m="import">${icon('upload')}<span><b>Importieren</b><small>Fragensätze, Hallenpläne, Lerngruppen oder eine Sicherung – Datei, eingefügter Text oder Zwischenablage.</small></span></button>
       <button type="button" class="menu-item" data-m="help">${icon('help')}<span><b>Hilfe &amp; Datenschutz</b><small>Kurzanleitung und Hinweise zur Datenspeicherung.</small></span></button>
       <button type="button" class="menu-item danger" data-m="reset">${icon('trash')}<span><b>Alles zurücksetzen</b><small>Alle Daten auf diesem Gerät löschen und mit der Demo neu beginnen.</small></span></button>
-    </div>
-    <input type="file" id="import-file" accept="application/json,.json" hidden>`,
+    </div>`,
     onOpen: (el, close) => {
       el.querySelector('[data-m=export]').onclick = () => { close(); exportDialog(); };
       el.querySelectorAll('[data-theme-opt]').forEach(b => b.onclick = () => {
@@ -111,9 +112,7 @@ function menuDialog() {
       el.querySelector('[data-m=lock]').onclick = () => { close(); lockDialog(); };
       el.querySelector('[data-m=music]').onclick = () => { close(); musicDialog(); };
       const ab = el.querySelector('[data-m=account]'); if (ab) ab.onclick = () => { close(); accountDialog(); };
-      const file = el.querySelector('#import-file');
-      el.querySelector('[data-m=import]').onclick = () => file.click();
-      file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); importFile(f); };
+      el.querySelector('[data-m=import]').onclick = () => { close(); openImport(); };
       el.querySelector('[data-m=reset]').onclick = async () => {
         close();
         if (!(await confirmDialog('Alles zurücksetzen', 'Alle Lerngruppen, Turniere, Ranglisten, Hallenpläne, Quizfragen und -ergebnisse und der Bildschirm werden auf diesem Gerät gelöscht. Exportiere vorher eine Sicherung, wenn du die Daten noch brauchst.', 'Alles löschen'))) return;
@@ -223,11 +222,14 @@ function askBackupPassword(raw) {
   });
 }
 
-async function importFile(f) {
+// Gemeinsamer Import (js/importer.js); eine Sicherung der ganzen App landet in importBackup
+const openImport = (o = {}) => importer.open({ ...o, onBackup: importBackup });
+hooks.importDialog = openImport;
+importer.listen(importBackup);
+
+async function importBackup(text) {
   let incoming;
   try {
-    if (f.size > 60 * 1024 * 1024) throw new Error('Die Datei ist zu groß.');
-    let text = await f.text();
     const raw = JSON.parse(text);
     if (backup.isEncrypted(raw)) { text = await askBackupPassword(raw); if (text == null) return; }
     incoming = store.parseImport(text);
@@ -265,7 +267,8 @@ function helpDialog() {
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
-      <li><b>Ohne Konto, mehrere Geräte:</b> Zahnrad → „Daten exportieren“ (mit Passwort verschlüsselt) und auf dem anderen Gerät „Daten importieren“.</li>
+      <li><b>Ohne Konto, mehrere Geräte:</b> Zahnrad → „Daten exportieren“ (mit Passwort verschlüsselt) und auf dem anderen Gerät „Importieren“.</li>
+      <li><b>Importieren:</b> Zahnrad → „Importieren“ (auch der Pfeil im Quiz und in den Hallenplänen) liest Fragensätze, Hallenpläne und Lerngruppen – als Datei, eingefügter Text oder aus der Zwischenablage, auch mehrere Dinge in einer Datei. Die Vorschau zeigt vor dem Übernehmen, was erkannt wurde. Am PC genügt es, die Datei ins Fenster zu ziehen oder den Text mit Strg+V einzufügen.</li>
       <li><b>Als App nutzen:</b> Oben rechts auf ${icon('install', 14)} tippen – dort steht die Anleitung für iPhone, Android und PC. Danach funktioniert KlassenKompass auch ohne Internet.</li>
     </ul>
     <h3>Datenschutz</h3>
@@ -276,7 +279,7 @@ function helpDialog() {
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Bedarf die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Das Quiz kennt keine Namen, nur Kartennummern und Tiere; die Zuordnung Tier ↔ Kind steht nur auf deinem Papierblatt. Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Karte. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
-      <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Daten importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
+      <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
     <h3>Datenschutzhinweise im Einzelnen</h3>

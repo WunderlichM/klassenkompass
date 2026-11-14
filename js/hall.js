@@ -8,7 +8,7 @@ import * as store from './store.js';
 import * as images from './images.js';
 import { uid } from './engine.js';
 import * as gear from './hallgear.js';
-import { esc, icon, dialog, confirmDialog, toast, downloadFile } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, downloadFile, hooks } from './ui.js';
 
 import { BW, BH, HALL, FLOOR, K, MARKS, badmintonCourts } from './hallfloor.js';
 import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, itemAt, parsePlans, exportPlans, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
@@ -585,36 +585,29 @@ function copyPlan(p, phase) {
 
 // Dateiname aus dem Plantitel (ohne Zeichen, die Windows nicht erlaubt)
 const fileName = t => String(t).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 70) || 'Hallenplan';
-// Hallenpläne aus Datei oder eingefügtem Text übernehmen (Format: hallplan.js). Nichts wird überschrieben, außer es ist angekreuzt.
-export function importPlansDialog() {
-  dialog({ title: 'Hallenpläne importieren', submit: 'Importieren', body: `
-    <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
-    <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "plans": [ { "title": "…", "items": [ … ] } ] }'></textarea></label>
-    ${topicField('', '– für Pläne ohne Thema in der Datei')}
-    <label class="check"><input type="checkbox" name="replace"> Vorhandene Pläne mit gleichem Namen ersetzen</label>
-    <p class="muted small-text">Ohne Haken kommen die Pläne zu den vorhandenen dazu. Eigene Bilder sind in der Datei nicht enthalten.</p>`,
-    onOpen: el => { topicOpen(el); el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
-    onSubmit: fd => {
-      const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
-      const plans = parsePlans(text), replace = fd.get('replace') === 'on', topic = readTopic(fd);
-      plans.forEach(p => { p.topic = p.topic ? topicName(p.topic) : topic; });
-      if (!replace) checkLimit(plans.length);
-      let replaced = 0;
-      sel = [];
-      store.update(s => {
-        const titles = new Set(s.sport.halls.map(x => x.title));
-        plans.forEach(p => addTopic(s, p.topic));   // Themen aus der Datei kommen in die Themenliste
-        for (const p of plans) {
-          const k = replace ? s.sport.halls.findIndex(x => x.title === p.title) : -1;
-          if (k >= 0) { const old = s.sport.halls[k]; p.id = old.id; if (!p.topic) p.topic = old.topic; if (!p.lesson && old.lesson) { p.lesson = old.lesson; p.phase = old.phase; } history.delete(p.id); s.sport.halls[k] = p; replaced++; continue; }
-          const base = p.title; let n = 2; while (titles.has(p.title)) p.title = `${base.slice(0, 74)} (${n++})`;
-          titles.add(p.title); s.sport.halls.push(p);
-        }
-        s.sport.activeHall = plans[0].id;
-      });
-      toast(`${plans.length === 1 ? '1 Hallenplan' : plans.length + ' Hallenpläne'} importiert${replaced ? `, davon ${replaced} ersetzt` : ''}.`);
-    } });
+// Hallenpläne importieren: gemeinsamer Dialog (js/importer.js); applyPlans übernimmt die geprüften Pläne (Format: hallplan.js).
+// Nichts wird überschrieben, außer replace ist gesetzt. topic gilt für Pläne ohne Thema in der Datei.
+export const importPlansDialog = () => hooks.importDialog?.();
+export function applyPlans(plans, { replace = false, topic = '' } = {}) {
+  plans.forEach(p => { p.topic = topicName(p.topic || topic); });
+  const names = new Set(sp().halls.map(x => x.title));
+  checkLimit(replace ? plans.filter(p => !names.has(p.title)).length : plans.length);
+  let replaced = 0;
+  sel = [];
+  store.update(s => {
+    const titles = new Set(s.sport.halls.map(x => x.title));
+    plans.forEach(p => addTopic(s, p.topic));   // Themen aus der Datei kommen in die Themenliste
+    for (const p of plans) {
+      const k = replace ? s.sport.halls.findIndex(x => x.title === p.title) : -1;
+      if (k >= 0) { const old = s.sport.halls[k]; p.id = old.id; if (!p.topic) p.topic = old.topic; if (!p.lesson && old.lesson) { p.lesson = old.lesson; p.phase = old.phase; } history.delete(p.id); s.sport.halls[k] = p; replaced++; continue; }
+      const base = p.title; let n = 2; while (titles.has(p.title)) p.title = `${base.slice(0, 74)} (${n++})`;
+      titles.add(p.title); s.sport.halls.push(p);
+    }
+    s.sport.activeHall = plans[0].id;
+  });
+  return replaced;
 }
+export const topicList = () => topics();
 
 async function importImages(files) {
   const list = files.filter(f => /^image\//.test(f.type)); if (!list.length) return toast('Keine Bilddateien ausgewählt.', { kind: 'warn' });

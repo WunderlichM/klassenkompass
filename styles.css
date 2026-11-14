@@ -268,6 +268,9 @@ textarea.input { resize: vertical; min-height: 80px; }
 .egg-chick { transform-box: fill-box; transform-origin: 50% 100%; }
 .egg-timer.hatched .egg-chick { animation: egg-chick-up .5s .2s ease-out both; }
 @keyframes egg-chick-up { from { transform: translateY(14px) scale(.8); } }
+.egg-timer.hatched .egg-chick > * { animation: egg-pet-bob 2.4s 1s ease-in-out infinite; }
+@keyframes egg-pet-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+@media (prefers-reduced-motion: reduce) { .egg-timer.hatched .egg-chick > *, .egg-timer.wobble .egg-whole { animation: none; } }
 .egg-timer.hatched .egg-sparks { animation: pod-fade .4s .5s both; }
 .timer.egg .time { font-size: min(20cqw, 15cqh); color: #a85f3d; }
 .qr-box { width: min(86cqw, 72cqh); aspect-ratio: 1; } .qr-box svg { width: 100%; height: 100%; display: block; }
@@ -1179,3 +1182,52 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 .topic-manage li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 6px; align-items: center; }
 .topic-add { display: flex; gap: 8px; align-items: center; } .topic-add .input { flex: 1; min-width: 0; }
 li.drag-ghost, .hall-lib-item.drag-ghost { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; font-size: 14px; color: var(--ink); border: 2px solid var(--accent); }
+
+/* ===== 2.4.0: Kopfzeile ohne Überlappung (Tablett, Handy quer), Bildschirm im Querformat, Import-Dialog ===== */
+.brand, .top-tools { flex: none; }
+.nav { min-width: 0; overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
+/* Wird es eng, spart die Kopfzeile zuerst den Untertitel, dann den Namen; im Hochformat des Tabletts stehen die Bereiche in einer zweiten Zeile */
+@media (max-width: 1280px) { .brand small { display: none; } .topbar { gap: 10px; } }
+@media (max-width: 1100px) and (min-width: 901px) { .brand b { display: none; } #install-btn .lbl { display: none; } .nav a { padding: 7px 11px; } }
+@media (max-width: 900px) and (min-width: 761px) {
+  .topbar { flex-wrap: wrap; gap: 8px; }
+  .nav { order: 3; width: 100%; margin: 0; }
+  .nav a { flex: 1; justify-content: center; }
+  .top-tools { margin-left: auto; }
+}
+@media (max-width: 1100px) { .add-row { flex-wrap: wrap; overflow: visible; } .add-btn { flex: 1 1 23%; } }
+/* Handy quer (wenig Höhe): eine schmale Kopfzeile, die mitscrollt; Überschrift klein; Bildschirm-Objekte nebeneinander */
+@media (orientation: landscape) and (max-height: 520px) {
+  .topbar { position: static; flex-wrap: nowrap; gap: 8px; padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 6px; }
+  .brand b, .brand small, #install-btn .lbl, .nav a .ic { display: none; }
+  .brand .logo { width: 34px; height: 34px; }
+  .nav { order: 0; width: auto; flex: 1 1 auto; margin: 0; }
+  .nav a { flex: 1 0 auto; justify-content: center; padding: 6px 9px; font-size: 13px; min-height: 36px; }
+  main { padding-top: 10px; }
+  .page-head { flex-direction: row; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+  .page-head .eyebrow, .page-head .sub { display: none; }
+  h1 { font-size: 22px; }
+  .stage-wrap.stack .stage { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  body:not(.presenting) .stage-wrap.stack .stage { align-items: start; }
+  body.presenting .stage-wrap.stack .circle-timer { width: min(80cqw, 40cqh); }
+  body.presenting .stage-wrap.stack .egg-timer { width: min(62cqw, 33cqh); }
+  body.presenting .stage-wrap.stack .timer.egg .time { font-size: min(20cqw, 12cqh); }
+  body.presenting .stage-wrap.stack .w-body { padding-top: 6px; padding-bottom: 8px; gap: 6px; }
+  .stage-wrap.stack .circle-timer { width: min(66cqw, 46dvh); }
+  .stage-wrap.stack .egg-timer { width: min(48cqw, 38dvh); }
+  .stage-wrap.stack .qr-box { width: min(70cqw, 62dvh); }
+  dialog.modal, dialog.modal.wide, dialog.modal form { max-height: 98vh; max-height: 98dvh; }
+  dialog.modal header { padding-top: 10px; padding-bottom: 8px; } dialog.modal footer { padding-top: 8px; }
+}
+/* Gemeinsamer Import */
+.imp-drop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.imp-text { font-weight: 400; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.45; }
+.imp-preview p { display: flex; gap: 6px; align-items: flex-start; margin: 6px 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.imp-preview .ic { flex: none; margin-top: 2px; }
+.imp-ok { color: #2f7a4f; } .imp-err { color: #b23b3b; font-weight: 600; }
+.imp-check { align-self: end; padding-bottom: 10px; }
+.imp-help { margin-top: 10px; }
+.imp-help pre { margin: 6px 0 10px; padding: 10px 12px; max-height: 38vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; line-height: 1.45; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; }
+dialog.import-dlg form.drag { outline: 3px dashed var(--accent); outline-offset: -8px; }
+@media (hover: none) { .imp-hint { display: none; } }
+@media screen { [data-theme="dark"] .imp-ok { color: #6cc48a; } [data-theme="dark"] .imp-err { color: #ee6f6f; } }

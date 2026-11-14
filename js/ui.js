@@ -51,6 +51,9 @@ const ICONS = {
 export const logo = (size = 24) => `<svg width="${size}" height="${size}" viewBox="8 8 48 48" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#f2b84b"/><circle cx="32" cy="32" r="2.4" fill="var(--accent)"/></svg>`;
 export const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
+// Haken, die app.js füllt (vermeidet gegenseitige Importe): hooks.importDialog öffnet den gemeinsamen Import
+export const hooks = {};
+
 let toastTimer;
 export function toast(message, { action, onAction, kind = '' } = {}) {
   let el = document.getElementById('toast');

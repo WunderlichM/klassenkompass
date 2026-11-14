@@ -147,6 +147,41 @@ export function parsePeople(text) {
 }
 const MAX = 80;
 
+// Lerngruppen aus dem gemeinsamen Import (js/importformat.js): Gibt es eine Lerngruppe mit gleichem Namen, kommen nur
+// fehlende Kinder dazu (nichts wird gelöscht); sonst entsteht eine neue. quiz: Quiz-Klasse mit gleicher Kennung und Kinderzahl.
+export function importGroups(incoming, { quiz = false } = {}) {
+  const res = { created: 0, updated: 0, added: 0, firstId: null };
+  for (const g of incoming) {
+    const old = list().find(x => x.name.toLowerCase() === g.name.toLowerCase());
+    let id = old?.id;
+    if (old) {
+      const key = p => (p.name + '|' + (p.className || '')).toLowerCase(), have = new Set(old.students.map(key));
+      const fresh = g.students.filter(p => !have.has(key(p)) && !(!p.className && old.students.some(o => o.name.toLowerCase() === p.name.toLowerCase())))
+        .slice(0, Math.max(0, MAX - old.students.length)).map(p => ({ id: uid(), ...p }));
+      if (fresh.length) { if (fresh.some(p => p.className)) store.update(s => { sportPart(s, id); }); addPeople(id, fresh); res.added += fresh.length; }
+      res.updated++;
+    } else {
+      id = uid();
+      const ppl = g.students.slice(0, MAX).map(p => ({ id: uid(), ...p })), subject = g.subject || 'Technik', name = g.name;
+      const sport = () => ({ id, name, subject, students: ppl.map(p => ({ ...p })), teamCount: 4, rules: [], teams: [], tournaments: [], series: [] });
+      store.update(s => {
+        if (subject === 'Sport') s.sport.groups.push(sport());
+        else s.technik.classes.push({ id, name, subject, students: ppl.map(p => ({ id: p.id, name: p.name })), settings: { layout: 'omnibus', tables: Math.max(8, Math.ceil(ppl.length / 2)), groups: 4 }, rules: [], plan: null });
+        if (subject !== 'Sport' && ppl.some(p => p.className)) s.sport.groups.push(sport());
+      });
+      res.created++;
+    }
+    res.firstId ??= id;
+    if (quiz || g.quiz) store.update(s => {
+      const n = Math.min(40, build(s, id).students.length), c = s.quiz.classes.find(x => x.id === id) || s.quiz.classes.find(x => x.name.toLowerCase() === g.name.toLowerCase());
+      if (c) { if (c.count < n) { c.count = n; c.students = store.quizStudents(c.id, n, c.students); } }
+      else s.quiz.classes.push({ id, name: g.name, demo: false, count: n, resetAt: 0, students: store.quizStudents(id, n) });
+    });
+  }
+  if (res.firstId) setActive(res.firstId);
+  return res;
+}
+
 // ---------- Oberfläche ----------
 // Auswahl der Lerngruppe im Kopf der Bereiche Gruppen und Turniere, nach Fach gegliedert
 export function pickerHtml(g, label = 'Deine Lerngruppe') {

@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as account from './account.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks } from './ui.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
@@ -402,7 +402,7 @@ function onClick(e) {
     case 'rank-csv': return rankCsv(cls());
     case 'rank-reset': return rankReset(cls());
     case 'set-new': return setDialog();
-    case 'set-import': return importSetsDialog();
+    case 'set-import': return hooks.importDialog?.();
     case 'set-edit': return setDialog(qset());
     case 'q-add': return questionDialog(qset());
     case 'q-edit': return questionDialog(qset(), i);
@@ -797,42 +797,21 @@ function exportSets(sets) {
   return JSON.stringify({ app: 'KlassenKompass', kind: SETS_KIND, v: 1, sets: sets.map(t => ({ title: t.title,
     questions: t.questions.map(x => ({ text: x.text, options: x.options, correct: x.correct === null ? null : LETTERS[x.correct] })) })) }, null, 2);
 }
-// Liest eine Datei mit einem oder mehreren Fragensätzen. Erlaubt: { sets: [...] }, eine Liste von Sätzen oder ein einzelner Satz.
-// „correct“ darf ein Buchstabe (A–D), eine Zahl ab 0 oder null (Umfrage) sein.
-export function parseSets(text) {
-  let raw;
-  try { raw = JSON.parse(String(text).replace(/^\uFEFF/, '')); } catch { throw new Error('Das ist keine gültige Fragensatz-Datei (JSON).'); }
-  if (raw?.app === 'KlassenKompass' && raw.kind && raw.kind !== SETS_KIND) throw new Error('Das ist eine Sicherung der ganzen App – bitte über „Daten importieren“ einlesen.');
-  const list = Array.isArray(raw) ? raw : Array.isArray(raw?.sets) ? raw.sets : raw && Array.isArray(raw.questions) ? [raw] : null;
-  if (!list || !list.length) throw new Error('In der Datei wurde kein Fragensatz gefunden.');
-  const txt = (v, n) => String(v ?? '').trim().slice(0, n);
-  return list.slice(0, 50).map((t, k) => {
-    const questions = (Array.isArray(t?.questions) ? t.questions : []).slice(0, 100).map((x, i) => {
-      const options = (Array.isArray(x?.options) ? x.options : []).map(o => txt(o, 120)).slice(0, 4);
-      if (options.length < 2) throw new Error(`Satz ${k + 1}, Frage ${i + 1}: Es braucht 2 bis 4 Antworten.`);
-      let c = x?.correct;
-      if (typeof c === 'string') c = c.trim() === '' ? null : LETTERS.indexOf(c.trim().toUpperCase());
-      if (c !== null && c !== undefined && !(Number.isInteger(c) && c >= 0 && c < options.length)) throw new Error(`Satz ${k + 1}, Frage ${i + 1}: „correct“ passt nicht zu den Antworten.`);
-      return { id: uid(), text: txt(x?.text, 400), options, correct: c ?? null };
-    });
-    if (!questions.length) throw new Error(`Satz ${k + 1} enthält keine Fragen.`);
-    return { id: uid(), title: txt(t?.title, 80) || 'Importierter Fragensatz', questions };
+// Fragensätze lesen: js/importformat.js (parseSets bleibt hier erreichbar). Importiert wird im gemeinsamen Dialog (js/importer.js).
+export { parseSets } from './importformat.js';
+// Übernimmt geprüfte Fragensätze. classId: Klasse für Sätze ohne eigene Angabe; className im Satz (aus der Datei) hat Vorrang.
+export function applySets(sets, classId = Q().activeClassId ?? '') {
+  const titles = new Set(Q().sets.map(x => x.title));
+  const out = sets.map(({ className, ...t }) => {
+    const base = t.title; let n = 2; while (titles.has(t.title)) t.title = `${base} (${n++})`.slice(0, 80); titles.add(t.title);
+    const own = className === '*' ? '*' : className ? Q().classes.find(c => c.name.toLowerCase() === className.toLowerCase())?.id : null;
+    return { ...t, classId: own ?? classId ?? '' };
   });
-}
-function importSetsDialog() {
-  dialog({ title: 'Fragensätze importieren', submit: 'Importieren', body: `
-    <label class="field">Datei <small class="muted">(.json, z. B. aus „Exportieren“ beim Bearbeiten eines Fragensatzes)</small><input type="file" class="input" accept=".json,.txt,application/json,text/plain" data-m="file"></label>
-    <label class="field">… oder Inhalt einfügen<textarea name="json" class="input" rows="7" spellcheck="false" placeholder='{ "sets": [ { "title": "…", "questions": [ { "text": "…", "options": ["…", "…"], "correct": "A" } ] } ] }'></textarea></label>
-    <p class="muted small-text">Die Fragensätze kommen zu den vorhandenen dazu und gehören zur gerade gewählten Klasse${cls() ? ` (<b>${esc(cls().name)}</b>)` : ''}; nichts wird überschrieben. Bilder sind in der Datei nicht enthalten.</p>`,
-    onOpen: el => { el.querySelector('[data-m=file]').onchange = async e => { const f = e.target.files?.[0]; if (f) el.querySelector('[name=json]').value = await f.text(); }; },
-    onSubmit: fd => {
-      const text = String(fd.get('json') || '').trim(); if (!text) throw new Error('Bitte eine Datei wählen oder den Inhalt einfügen.');
-      const sets = parseSets(text), titles = new Set(Q().sets.map(x => x.title));
-      sets.forEach(t => { const base = t.title; let n = 2; while (titles.has(t.title)) t.title = `${base} (${n++})`.slice(0, 80); titles.add(t.title); });
-      const c = cls(); sets.forEach(t => { t.classId = c?.id ?? ''; });
-      store.update(s => { s.quiz.sets.push(...sets); s.quiz.activeSetId = sets[0].id; });
-      toast(`${sets.length === 1 ? '1 Fragensatz' : sets.length + ' Fragensätze'} mit ${sets.reduce((a, t) => a + t.questions.length, 0)} Fragen importiert${c ? ` – für „${c.name}“` : ''}.`);
-    } });
+  store.update(s => {
+    s.quiz.sets.push(...out);
+    const show = out.find(t => fits(t, s.quiz.activeClassId)); if (show) s.quiz.activeSetId = show.id;
+  });
+  return out;
 }
 function questionDialog(t, index = -1) {
   if (!t) return;
