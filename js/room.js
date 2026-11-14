@@ -18,7 +18,7 @@ import { art, chairs, facing, ART_KINDS } from './roomart.js';
 export const TABLE_W = 1.3, TABLE_H = 0.65;
 export const PRESETS = [
   { id: 'table2', kind: 'table', name: 'Schülertisch', w: TABLE_W, h: TABLE_H, seats: 2 },
-  { id: 'bench', kind: 'bench', name: 'Werkbank', w: 2.0, h: 0.9, seats: 4 },
+  { id: 'bench', kind: 'bench', name: 'Werkbank', w: 1.5, h: 0.7, seats: 2 },
   { id: 'chair', kind: 'chair', name: 'Stuhl', w: 0.55, h: 0.55, seats: 1 },
   { id: 'spot', kind: 'spot', name: 'Stehplatz', w: 0.55, h: 0.55, seats: 1 },
   { id: 'board', kind: 'board', name: 'Tafel', w: 3.6, h: 0.2 },
@@ -197,7 +197,7 @@ export function roomHtml(room, opts = {}) {
 }
 
 // ---------- Vorlagen: Grundriss und Tischreihen ----------
-const KINDS_GEN = { table2: 'Schülertische (2 Plätze)', bench: 'Werkbänke (4 Plätze)' };
+const KINDS_GEN = { table2: 'Schülertische (2 Plätze)', bench: 'Werkbänke (2 Plätze)' };
 const DOORS = { vl: 'vorne links', vr: 'vorne rechts', hl: 'hinten links', hr: 'hinten rechts' };
 export function generateBase({ w, h, door }) {
   const items = [], it = (k, x, y, iw, ih) => items.push({ id: uid(), kind: k, x: r2(x), y: r2(y), w: iw, h: ih }), left = door[1] === 'l';

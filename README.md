@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.1
+
+- **Werkbank wie im Technikraum (`js/roomart.js`, `js/room.js`):** Die Werkbank ist ein Zweiertisch aus Holz (1,50 m × 0,70 m, Maße angenommen) mit zwei Hockern an einer Längsseite und dem Schraubstock an der Stirnseite links vom Sitzenden. Hocker stehen wie die Stühle an der freien Längsseite; „Drehen“ stellt die Bank hochkant. Bereits gespeicherte Werkbänke behalten Größe und Plätze, bekommen aber die neue Zeichnung.
+
 ## Neu in 2.9.0
 
 - **Raum realistischer (`js/roomart.js`, `js/room.js`, `styles.css`):** Die Teile des Raums sind als Draufsicht gezeichnet statt als beschriftete Flächen – **Schreibtisch** (bisher „Pult“) mit Bildschirm, Tastatur, Maus, Heft, Stift, Stiftebecher und Stuhl, **Schrank** mit Türen und Griffen, **Tafel** als grüne Kreidetafel mit Ablage, **Tür** mit Zarge, offenem Türblatt und Öffnungsbogen, **Fenster** mit Rahmen und Scheiben. Die Vorderseite zeigt von der nächsten Wand weg in den Raum (`facing`), auch bei „Blick von der Tafel“. Eine eigene Beschriftung (z. B. am Schrank) steht weiter auf dem Teil.

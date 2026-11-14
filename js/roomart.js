@@ -90,16 +90,16 @@ export function art(kind, w, h, f = 's', o = {}) {
 export function chairs(w, h, sides, { stool = false, vise = false } = {}) {
   const W = w * 100, H = h * 100;
   const g = sides.map(({ side, n }, k) => {
-    const len = side === 's' || side === 'n' ? W : H, cw = Math.min(40, (len / n) * 0.62);
-    const m = { s: `matrix(1 0 0 1 0 ${n1(H)})`, n: `matrix(-1 0 0 -1 ${n1(W)} 0)`, e: `matrix(0 1 1 0 ${n1(W)} 0)`, w: 'matrix(0 1 -1 0 0 0)' }[side];
+    const len = side === 's' || side === 'n' ? W : H, dep = side === 's' || side === 'n' ? H : W, cw = Math.min(40, (len / n) * 0.62);
+    const m = { s: `matrix(1 0 0 1 0 ${n1(H)})`, n: `matrix(-1 0 0 -1 ${n1(W)} 0)`, e: `matrix(0 -1 1 0 ${n1(W)} ${n1(H)})`, w: 'matrix(0 1 -1 0 0 0)' }[side];
     let s = '';
     for (let i = 0; i < n; i++) {
       const cx = (len * (i + 0.5)) / n;
-      s += stool ? C(cx, 13, Math.min(15, cw / 2), '#8b6b45', 'stroke="#5f4526" stroke-width="1.2"') + C(cx, 13, Math.min(15, cw / 2) * 0.45, 'none', 'stroke="rgba(60,40,15,.3)" stroke-width=".8"')
+      s += stool ? C(cx, 22, Math.min(17, cw / 2), '#c9a877', 'stroke="#7d5c36" stroke-width="1.4"') + C(cx, 22, Math.min(17, cw / 2) * 0.5, 'none', 'stroke="rgba(90,60,25,.3)" stroke-width=".8"')
         : R(cx - cw / 2, -12, cw, 36, CHAIR, 'rx="6"') + R(cx - cw / 2 - 1.5, 19, cw + 3, 7, CHAIR_BACK, 'rx="3.5"');
     }
-    // Schraubstock an der Werkbank: Backen an der Kante, Spindel mit Knebel
-    if (vise && k === 0 && len >= 120) s += R(10, -1, 26, 9, '#59616a', 'stroke="#3b424b" stroke-width=".8" rx="1"') + LN(23, 8, 23, 17, '#3b424b', 2.4) + LN(16, 17, 30, 17, '#3b424b', 1.8, 'stroke-linecap="round"');
+    // Schraubstock an der Werkbank: an der Stirnseite links vom Sitzenden (a < 0), Backen quer zur Bank
+    if (vise && k === 0) s += R(-13, -dep * 0.85, 15, dep * 0.7, '#8d949b', 'stroke="#4a5058" stroke-width="1.2" rx="1.5"') + LN(-6, -dep * 0.85, -6, -dep * 0.15, '#4a5058', 1);
     return `<g transform="${m}">${s}</g>`;
   }).join('');
   return `<svg class="rp-art rp-chairs" viewBox="0 0 ${n1(W)} ${n1(H)}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;
