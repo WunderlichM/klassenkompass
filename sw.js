@@ -1,5 +1,5 @@
 // Service Worker: speichert die App für den Offline-Betrieb.
-const VERSION = 'kk-2.8.1';
+const VERSION = 'kk-2.8.2';
 const FILES = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/store.js', 'js/engine.js', 'js/ui.js', 'js/groups.js', 'js/gruppen.js', 'js/turniere.js', 'js/hallen.js', 'js/screen.js', 'js/qr.js', 'js/sound.js', 'js/backup.js', 'js/account.js', 'js/config.js',
   'js/quiz.js', 'js/scan.js', 'js/detect.js', 'js/cards.js', 'js/images.js', 'js/cloudimages.js', 'js/theme.js', 'js/hall.js', 'js/hallgear.js', 'js/hallfloor.js', 'js/hallplan.js', 'js/animals.js', 'js/lock.js', 'js/drag.js', 'js/hatch.js', 'js/importformat.js', 'js/importer.js', 'js/widgets.js', 'js/room.js',

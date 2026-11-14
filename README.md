@@ -2,9 +2,13 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.8.2
+
+- **Technik-Gruppen öffnen sicher mit „Sitzordnung“:** 2.8.1 hatte auch das Fach des Sportteils geprüft; Technik-Gruppen mit älterem Sportteil öffneten dadurch mit „Teams“. Jetzt zählt nur das Fach der Lerngruppe.
+
 ## Neu in 2.8.1
 
-- **Sport-Lerngruppen öffnen mit „Teams“ (`js/groups.js`, `js/gruppen.js`):** Wird eine Lerngruppe ausgewählt (in Gruppen oder Turnieren), zeigt Gruppen wieder ihre Standardansicht – bei Sport „Teams“, sonst „Sitzordnung“. Bisher blieb eine einmal gewählte Ansicht bis zum Neuladen gemerkt. Als Sport gilt eine Lerngruppe, wenn ihr Fach oder das Fach ihres Sportteils „Sport“ ist (Groß-/Kleinschreibung egal).
+- **Sport-Lerngruppen öffnen mit „Teams“ (`js/groups.js`, `js/gruppen.js`):** Wird eine Lerngruppe ausgewählt (in Gruppen oder Turnieren), zeigt Gruppen wieder ihre Standardansicht – bei Sport „Teams“, sonst „Sitzordnung“. Bisher blieb eine einmal gewählte Ansicht bis zum Neuladen gemerkt. Alle anderen Fächer (z. B. Technik) öffnen beim Auswählen mit „Sitzordnung“. Maßgeblich ist das Fach, unter dem die Lerngruppe in der Auswahl steht (Groß-/Kleinschreibung egal).
 
 ## Neu in 2.8.0
 
