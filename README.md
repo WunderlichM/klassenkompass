@@ -2,6 +2,12 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.2
+
+- **Tischart je Raum (`js/room.js`, `js/store.js`):** Im Raumplaner steht unter „Raum“ die Auswahl **Tische in diesem Raum: Schülertische / Werkbänke**. Bei „Werkbänke“ (`room.tables = 'bench'`) stellt die automatische Anordnung in allen Organisationsformen Werkbänke (1,50 m × 0,70 m, zwei Hocker) statt Schülertischen; zwischen Werkbänken bleibt an der Stirnseite Platz für den Schraubstock. Beim Umstellen werden die Tische bereits angepasster Anordnungen ersetzt – gleiche Stelle, gleiche Platznummern, die Sitzpläne bleiben. Ein neuer Raum mit Werkbank-Reihen bekommt die Einstellung von selbst.
+- **Schraubstock aus Holz** statt grau (`js/roomart.js`).
+- **Datenstand 10** (`room.tables`): Geräte mit älterer Fassung speichern nichts mehr, bis sie die neue Version geladen haben.
+
 ## Neu in 2.9.1
 
 - **Werkbank wie im Technikraum (`js/roomart.js`, `js/room.js`):** Die Werkbank ist ein Zweiertisch aus Holz (1,50 m × 0,70 m, Maße angenommen) mit zwei Hockern an einer Längsseite und dem Schraubstock an der Stirnseite links vom Sitzenden. Hocker stehen wie die Stühle an der freien Längsseite; „Drehen“ stellt die Bank hochkant. Bereits gespeicherte Werkbänke behalten Größe und Plätze, bekommen aber die neue Zeichnung.

@@ -98,8 +98,8 @@ export function chairs(w, h, sides, { stool = false, vise = false } = {}) {
       s += stool ? C(cx, 22, Math.min(17, cw / 2), '#c9a877', 'stroke="#7d5c36" stroke-width="1.4"') + C(cx, 22, Math.min(17, cw / 2) * 0.5, 'none', 'stroke="rgba(90,60,25,.3)" stroke-width=".8"')
         : R(cx - cw / 2, -12, cw, 36, CHAIR, 'rx="6"') + R(cx - cw / 2 - 1.5, 19, cw + 3, 7, CHAIR_BACK, 'rx="3.5"');
     }
-    // Schraubstock an der Werkbank: an der Stirnseite links vom Sitzenden (a < 0), Backen quer zur Bank
-    if (vise && k === 0) s += R(-13, -dep * 0.85, 15, dep * 0.7, '#8d949b', 'stroke="#4a5058" stroke-width="1.2" rx="1.5"') + LN(-6, -dep * 0.85, -6, -dep * 0.15, '#4a5058', 1);
+    // Schraubstock (Holzzange) an der Werkbank: an der Stirnseite links vom Sitzenden (a < 0), Backen quer zur Bank
+    if (vise && k === 0) s += R(-13, -dep * 0.85, 15, dep * 0.7, '#b98a55', 'stroke="#7d5c36" stroke-width="1.4" rx="1.5"') + LN(-6, -dep * 0.85, -6, -dep * 0.15, 'rgba(90,60,25,.55)', 1);
     return `<g transform="${m}">${s}</g>`;
   }).join('');
   return `<svg class="rp-art rp-chairs" viewBox="0 0 ${n1(W)} ${n1(H)}" preserveAspectRatio="none" aria-hidden="true">${g}</svg>`;

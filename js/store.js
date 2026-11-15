@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 9;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0)
+export const SCHEMA = 10;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -197,7 +197,7 @@ function normRooms(list) {
     if (r.layouts && typeof r.layouts === 'object') { for (const L of LAYOUTS) if (Array.isArray(r.layouts[L])) layouts[L] = normItems(r.layouts[L], w, h, true); }
     // Stand 7: Tische und Stühle lagen im Grundriss – sie werden die Anordnung für Omnibus
     else { const old = normItems(r.items, w, h, true); if (old.length) layouts.omnibus = old; }
-    return { id: ID_RE.test(r.id) ? String(r.id) : uid(), name: str(r.name, 40) || 'Raum', w, h, items: normItems(r.items, w, h, false), layouts };
+    return { id: ID_RE.test(r.id) ? String(r.id) : uid(), name: str(r.name, 40) || 'Raum', w, h, items: normItems(r.items, w, h, false), layouts, ...(r.tables === 'bench' ? { tables: 'bench' } : {}) };
   });
 }
 // Plätze eines Raums (Stand 7) in Lesereihenfolge: Reihen von vorn nach hinten, darin von links (wie js/room.js)

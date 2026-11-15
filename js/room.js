@@ -15,10 +15,12 @@ import { art, chairs, facing, ART_KINDS } from './roomart.js';
 
 // Schülertische sind einheitlich Zweiertische (seit 2.9.0); ältere Einzel- und Gruppentische bleiben in gespeicherten
 // Räumen erhalten. Die Teile werden als Draufsicht gezeichnet (js/roomart.js).
-export const TABLE_W = 1.3, TABLE_H = 0.65;
+export const TABLE_W = 1.3, TABLE_H = 0.65, BENCH_W = 1.5, BENCH_H = 0.7;
+// Tischart eines Raums (room.tables, seit 2.9.2): 'bench' = die automatische Anordnung stellt Werkbänke statt Schülertischen
+export const benchRoom = r => r?.tables === 'bench';
 export const PRESETS = [
   { id: 'table2', kind: 'table', name: 'Schülertisch', w: TABLE_W, h: TABLE_H, seats: 2 },
-  { id: 'bench', kind: 'bench', name: 'Werkbank', w: 1.5, h: 0.7, seats: 2 },
+  { id: 'bench', kind: 'bench', name: 'Werkbank', w: BENCH_W, h: BENCH_H, seats: 2 },
   { id: 'chair', kind: 'chair', name: 'Stuhl', w: 0.55, h: 0.55, seats: 1 },
   { id: 'spot', kind: 'spot', name: 'Stehplatz', w: 0.55, h: 0.55, seats: 1 },
   { id: 'board', kind: 'board', name: 'Tafel', w: 3.6, h: 0.2 },
@@ -99,7 +101,9 @@ function place(r, parts, needW, needH, valign = 0.3) {
 // spec: tables (Omnibus, U-Form), cols (Tische nebeneinander), islands (Plätze je Tischgruppe), icols, n (Plätze in Kreis
 // und Arena). Rückgabe: die Plätze der Organisationsform als Teile des Raums (ohne Grundriss).
 export function arrange(r, L, spec = {}) {
-  const TW = TABLE_W, TH = TABLE_H, T = (x, y, w = TW, h = TH, seats = 2, grp) => ({ kind: 'table', x, y, w, h, seats, grp });
+  // Werkbänke brauchen an der Stirnseite Platz für den Schraubstock (gap)
+  const bench = benchRoom(r), TW = bench ? BENCH_W : TABLE_W, TH = bench ? BENCH_H : TABLE_H, gap = bench ? 0.2 : 0;
+  const T = (x, y, w = TW, h = TH, seats = 2, grp) => ({ kind: bench ? 'bench' : 'table', x, y, w, h, seats, grp });
   if (L === 'omnibus') {
     const n = Math.max(1, spec.tables || 1), cols = clamp(spec.cols || 3, 1, 8), rows = Math.ceil(n / cols), gx = 0.8, gy = 0.8;
     const parts = Array.from({ length: n }, (_, i) => T((i % cols) * (TW + gx), Math.floor(i / cols) * (TH + gy)));
@@ -110,10 +114,10 @@ export function arrange(r, L, spec = {}) {
     // Stirnseite (Reihenfolge der Tische wie in der Sitzordnung ohne Raum: obere Reihe, untere Reihe, Stirnseite)
     const isl = (spec.islands?.length ? spec.islands : [4]).map((n, k) => {
       const t = Math.max(1, Math.ceil(n / 2)), end = t > 1 && t % 2 ? 1 : 0, rest = t - end, half = Math.ceil(rest / 2), tabs = [];
-      for (let i = 0; i < half; i++) tabs.push({ x: i * TW, y: 0, w: TW, h: TH });
-      for (let i = 0; i < rest - half; i++) tabs.push({ x: i * TW, y: TH, w: TW, h: TH });
-      if (end) tabs.push({ x: half * TW, y: 0, w: TH, h: TW });
-      return { k, tabs, w: half * TW + end * TH, h: rest > half ? 2 * TH : TH };
+      for (let i = 0; i < half; i++) tabs.push({ x: i * (TW + gap), y: 0, w: TW, h: TH });
+      for (let i = 0; i < rest - half; i++) tabs.push({ x: i * (TW + gap), y: TH, w: TW, h: TH });
+      if (end) tabs.push({ x: half * (TW + gap), y: (2 * TH - TW) / 2, w: TH, h: TW });
+      return { k, tabs, w: half * TW + (half - 1) * gap + end * (TH + gap), h: rest > half ? 2 * TH : TH };
     });
     const cols = clamp(spec.icols || 2, 1, 6), gx = 1.1, gy = 1.1, cw = Math.max(...isl.map(i => i.w)), parts = [];
     const rowsH = []; isl.forEach((i, j) => { const row = Math.floor(j / cols); rowsH[row] = Math.max(rowsH[row] || 0, i.h); });
@@ -126,7 +130,7 @@ export function arrange(r, L, spec = {}) {
   }
   if (L === 'uform') {
     const n = Math.max(1, spec.tables || 1), side = Math.ceil(n / 3), left = Math.min(side, n), right = Math.min(side, n - left), bottom = n - left - right;
-    const pitch = TW + 0.1, sideLen = Math.max(left, right) * pitch - 0.1, bw = Math.max(bottom * pitch - 0.1, 0);
+    const pitch = TW + 0.1 + gap, sideLen = Math.max(left, right) * pitch - 0.1, bw = Math.max(bottom * pitch - 0.1, 0);
     const needW = Math.max(bw + 2 * (TH + 0.9), 2 * TH + 2.4), by = sideLen + 0.25, parts = [];
     for (let i = 0; i < left; i++) parts.push(T(0, i * pitch, TH, TW));
     const bx = (needW - bw) / 2; for (let i = 0; i < bottom; i++) parts.push(T(bx + i * pitch, by));
@@ -240,6 +244,7 @@ export function roomDialog({ tables = 14, cols = 3, onDone } = {}) {
       if (list().length >= 30) throw new Error('Höchstens 30 Räume.');
       const w = clamp(Number(fd.get('w')) || 8, 3, 30), h = clamp(Number(fd.get('h')) || 7, 3, 30), spec = readRows(fd);
       const r = { id: uid(), name: String(fd.get('name') || '').trim().slice(0, 40) || `Raum ${list().length + 1}`, w, h, items: generateBase({ w, h, door: String(fd.get('door') || 'vr') }), layouts: {} };
+      if (spec.kind === 'bench') r.tables = 'bench';
       if (spec.kind !== 'auto') r.layouts.omnibus = generateRows(r, spec);
       store.update(s => { (s.technik.rooms ||= []).push(r); });
       onDone?.(r);
@@ -299,6 +304,8 @@ export function editorSide() {
       <label class="field">Name<input class="input" data-rp="name" maxlength="40" value="${esc(r.name)}"></label>
       <div class="two">${num('rw', 'Breite (m)', r.w, 0.1, 3)}${num('rh', 'Tiefe (m)', r.h, 0.1, 3)}</div>
       <p class="muted small-text">Breite = Wand mit der Tafel, Tiefe = von der Tafel bis zur Rückwand.</p>
+      <label class="field">Tische in diesem Raum<select class="select" data-rp="tables"><option value="table" ${benchRoom(r) ? '' : 'selected'}>Schülertische</option><option value="bench" ${benchRoom(r) ? 'selected' : ''}>Werkbänke (Hocker, Schraubstock)</option></select></label>
+      <p class="muted small-text">Gilt für alle Organisationsformen: Die automatische Anordnung stellt diese Tische, vorhandene werden ersetzt (Plätze bleiben).</p>
       ${base ? '' : `<button class="btn ghost full" data-act="rp-gen">${icon('grid', 15)} Tische in Reihen anordnen …</button>`}
     </div>
     <div class="card">
@@ -376,6 +383,19 @@ export function change(e) {
   const fit = (it, r) => { it.w = Math.min(it.w, r.w); it.h = Math.min(it.h, r.h); it.x = r2(clamp(it.x, 0, r.w - it.w)); it.y = r2(clamp(it.y, 0, r.h - it.h)); };
   if (k === 'name') patchRoom(r => { r.name = v.trim().slice(0, 40) || r.name; });
   else if (k === 'rw' || k === 'rh') patchRoom(r => { const key = k === 'rw' ? 'w' : 'h'; r[key] = r2(clamp(num, 3, 30)); for (const it of [...r.items, ...Object.values(r.layouts || {}).flat()]) fit(it, r); });
+  else if (k === 'tables') patchRoom(r => {
+    // Tischart des Raums: vorhandene Tische aller Organisationsformen ersetzen; die Platznummern (id:Nr.) bleiben
+    const to = v === 'bench' ? 'bench' : 'table', from = to === 'bench' ? 'table' : 'bench', [fw, fh, tw, th] = to === 'bench' ? [TABLE_W, TABLE_H, BENCH_W, BENCH_H] : [BENCH_W, BENCH_H, TABLE_W, TABLE_H];
+    if (to === 'bench') r.tables = 'bench'; else delete r.tables;
+    const near = (a, b) => Math.abs(a - b) < 0.03;
+    for (const it of Object.values(r.layouts || {}).flat()) {
+      if (it.kind !== from) continue;
+      it.kind = to;
+      const hor = near(it.w, fw) && near(it.h, fh), vert = near(it.w, fh) && near(it.h, fw);
+      if (seatsOf(it) === 2 && (hor || vert)) { const [nw, nh] = hor ? [tw, th] : [th, tw]; it.x = r2(it.x - (nw - it.w) / 2); it.y = r2(it.y - (nh - it.h) / 2); it.w = nw; it.h = nh; }
+      fit(it, r);
+    }
+  });
   else if (k === 'label') patchItem(editor.sel, it => { const t = v.trim().slice(0, 24); if (t) it.label = t; else delete it.label; });
   else if (k === 'w' || k === 'h') patchItem(editor.sel, (it, r) => { it[k] = r2(clamp(num, 0.1, k === 'w' ? r.w - it.x : r.h - it.y)); });
   return true;
