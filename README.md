@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.4
+
+- **Namen im Raum vollständig lesbar, auch auf dem Handy (`js/room.js`, `js/gruppen.js`, `styles.css`):** Statt „…“ passt `fitSeats()` jeden Namen in seinen Platz ein – zuerst etwas kleiner (bis 7,5 px), sonst auf zwei Zeilen umgebrochen (bis 6,5 px). Auf schmalen Bildschirmen (bis 900 px) behält der maßstäbliche Raum eine Mindestgröße von etwa 66 px je Meter und lässt sich seitlich wischen, statt so klein zu werden, dass Namen nicht mehr passen; Vollbild („Ansicht vergrößern“) und Druck sind davon ausgenommen. Ziehen zum Tauschen geht per Finger weiter mit kurzem Halten. Kein neuer Datenstand.
+
 ## Neu in 2.9.3
 
 - **Tische um 180° drehen (`js/room.js`, `js/store.js`):** Tische und Werkbänke merken sich, an welcher Seite die Stühle bzw. Hocker stehen (`side`: `s`, `n`, `e`, `w` in Raumkoordinaten, Tafel oben). **Drehen** dreht um 90° im Uhrzeigersinn und durchläuft so vier Stellungen; der neue Knopf **180°** stellt Stühle und Schraubstock auf die andere Seite, ohne den Tisch zu verschieben – wichtig für Gruppentische. Ohne gewählte Seite gilt wie bisher die Automatik (`sideOf`).

@@ -174,6 +174,19 @@ export function sideOf(it, tops, W) {
   const pref = hor ? ['s', 'n'] : (it.x + it.w / 2 < W / 2 ? ['w', 'e'] : ['e', 'w']);
   return blocked(pref[0]) && !blocked(pref[1]) ? pref[1] : pref[0];
 }
+// Namen auf den Plätzen vollständig zeigen (seit 2.9.4): zu lange Namen zuerst kleiner setzen (bis 7,5 px), sonst auf
+// zwei Zeilen umbrechen und so weit verkleinern, dass sie in den Platz passen (bis 6,5 px)
+export function fitSeats(root) {
+  root?.querySelectorAll('.rp .seat > span').forEach(sp => {
+    sp.style.fontSize = ''; sp.classList.remove('two');
+    if (sp.scrollWidth <= sp.clientWidth + 0.5) return;
+    const seat = sp.parentElement, fs = parseFloat(getComputedStyle(sp).fontSize), one = fs * (sp.clientWidth / sp.scrollWidth) * 0.97;
+    if (one >= 7.5) { sp.style.fontSize = one.toFixed(2) + 'px'; return; }
+    sp.classList.add('two');
+    const room = () => seat.clientHeight - (seat.querySelector('small')?.offsetHeight || 0) - 2;
+    for (let f = Math.min(fs, 11); f >= 6.5; f -= 0.5) { sp.style.fontSize = f + 'px'; if (sp.scrollWidth <= sp.clientWidth + 0.5 && sp.scrollHeight <= Math.max(room(), sp.clientHeight) + 0.5) return; }
+  });
+}
 export function roomHtml(room, opts = {}) {
   const { flip = false, edit = false } = opts, W = room.w, H = room.h, sel = edit ? editor.sel : null;
   const shown = room.items.map(it => ({ it, x: flip ? W - it.x - it.w : it.x, y: flip ? H - it.y - it.h : it.y, w: it.w, h: it.h }));

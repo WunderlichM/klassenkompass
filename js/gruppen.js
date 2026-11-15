@@ -57,6 +57,7 @@ export function mount(el) {
   el.oninput = e => { if (e.target.id === 'lg-search') { search = e.target.value; drawPeople(); } };
   const onResize = () => fitRoom();
   addEventListener('resize', onResize);
+  document.fonts?.ready.then(() => { if (root) fitRoom(); });
   // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan, Gruppenliste)
   const offDrag = enableDrag(el, { item: '[data-pid]', target: '[data-pid],[data-seat],[data-tray]', onDrop: (a, b) => drop(a, b) });
   const offRoom = rooms.attach(el, () => draw());
@@ -414,10 +415,12 @@ function fitPresent() {
 }
 // Sitzplan auf schmalen Bildschirmen (Handy) verkleinern statt waagerecht scrollen
 function fitRoom() {
-  if (fitPresent()) return;
+  if (fitPresent()) return rooms.fitSeats(root);
   root?.querySelectorAll('.team-grid, .rp').forEach(e => { e.style.zoom = ''; e.style.maxWidth = ''; });
   const wrap = root?.querySelector('.room-wrap'), r = wrap?.querySelector('.room'); if (!r) return;
   r.style.zoom = '';
+  // Raum: maßstäblich mit Mindestgröße (seitlich wischen), Namen einpassen statt verkleinern
+  if (r.querySelector('.rp')) return rooms.fitSeats(root);
   const cs = getComputedStyle(wrap), avail = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   let lo = Infinity, hi = -Infinity;
   r.querySelectorAll('.seat, .art-desk, .table, .island').forEach(el => { const b = el.getBoundingClientRect(); lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); });
