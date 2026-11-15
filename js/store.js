@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 10;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2)
+export const SCHEMA = 11;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -188,7 +188,7 @@ function normItems(list, w, h, seated) {
     const iw = num(i.w, 0.1, w, 1), ih = num(i.h, 0.1, h, 0.6);
     return { id, kind: i.kind, x: num(i.x, 0, w - iw, 0), y: num(i.y, 0, h - ih, 0), w: iw, h: ih,
       ...(['table', 'bench'].includes(i.kind) ? { seats: int(i.seats, 1, 12, 2) } : {}), ...(seated && Number.isFinite(Number(i.o)) && i.o !== null && i.o !== '' ? { o: int(i.o, 0, 999, 0) } : {}),
-      ...(str(i.label, 24) ? { label: str(i.label, 24) } : {}) };
+      ...(['table', 'bench'].includes(i.kind) && ['s', 'n', 'e', 'w'].includes(i.side) ? { side: i.side } : {}), ...(str(i.label, 24) ? { label: str(i.label, 24) } : {}) };
   });
 }
 function normRooms(list) {

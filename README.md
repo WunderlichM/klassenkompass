@@ -2,6 +2,11 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.3
+
+- **Tische um 180° drehen (`js/room.js`, `js/store.js`):** Tische und Werkbänke merken sich, an welcher Seite die Stühle bzw. Hocker stehen (`side`: `s`, `n`, `e`, `w` in Raumkoordinaten, Tafel oben). **Drehen** dreht um 90° im Uhrzeigersinn und durchläuft so vier Stellungen; der neue Knopf **180°** stellt Stühle und Schraubstock auf die andere Seite, ohne den Tisch zu verschieben – wichtig für Gruppentische. Ohne gewählte Seite gilt wie bisher die Automatik (`sideOf`).
+- **Datenstand 11** (`side`): Geräte mit älterer Fassung speichern nichts mehr, bis sie die neue Version geladen haben.
+
 ## Neu in 2.9.2
 
 - **Tischart je Raum (`js/room.js`, `js/store.js`):** Im Raumplaner steht unter „Raum“ die Auswahl **Tische in diesem Raum: Schülertische / Werkbänke**. Bei „Werkbänke“ (`room.tables = 'bench'`) stellt die automatische Anordnung in allen Organisationsformen Werkbänke (1,50 m × 0,70 m, zwei Hocker) statt Schülertischen; zwischen Werkbänken bleibt an der Stirnseite Platz für den Schraubstock. Beim Umstellen werden die Tische bereits angepasster Anordnungen ersetzt – gleiche Stelle, gleiche Platznummern, die Sitzpläne bleiben. Ein neuer Raum mit Werkbank-Reihen bekommt die Einstellung von selbst.

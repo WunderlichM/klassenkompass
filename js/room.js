@@ -160,21 +160,30 @@ export function arrange(r, L, spec = {}) {
 // opts: flip (Blick von der Tafel: Raum um 180° gedreht), edit, seat(key, item, i) → HTML eines Platzes,
 // itemClass(item) → [Klasse, Stil] für Tische (z. B. Gruppenfarbe), tag(item) → kleine Marke in der Ecke,
 // dim(item) → im Editor blass und nicht wählbar
+// Seite eines Tisches, an der die Stühle stehen (Raumkoordinaten, Tafel oben): fest gewählt (it.side, seit 2.9.3, durch
+// „Drehen“ gesetzt) oder von selbst – von der Tafel weg bzw. außen; steht dort ein anderer Tisch (zusammengeschobene
+// Tische), an der anderen Seite. tops = alle Tische und Werkbänke der Anordnung.
+const OPP = { s: 'n', n: 's', e: 'w', w: 'e' }, TURN = { s: 'w', w: 'n', n: 'e', e: 's' };
+export function sideOf(it, tops, W) {
+  const hor = it.w >= it.h;
+  if (it.side && (it.side === 's' || it.side === 'n') === hor) return it.side;
+  const blocked = side => {
+    const z = { s: [it.x, it.y + it.h, it.w, 0.3], n: [it.x, it.y - 0.3, it.w, 0.3], e: [it.x + it.w, it.y, 0.3, it.h], w: [it.x - 0.3, it.y, 0.3, it.h] }[side];
+    return tops.some(o => o !== it && z[0] < o.x + o.w - 0.02 && z[0] + z[2] > o.x + 0.02 && z[1] < o.y + o.h - 0.02 && z[1] + z[3] > o.y + 0.02);
+  };
+  const pref = hor ? ['s', 'n'] : (it.x + it.w / 2 < W / 2 ? ['w', 'e'] : ['e', 'w']);
+  return blocked(pref[0]) && !blocked(pref[1]) ? pref[1] : pref[0];
+}
 export function roomHtml(room, opts = {}) {
   const { flip = false, edit = false } = opts, W = room.w, H = room.h, sel = edit ? editor.sel : null;
   const shown = room.items.map(it => ({ it, x: flip ? W - it.x - it.w : it.x, y: flip ? H - it.y - it.h : it.y, w: it.w, h: it.h }));
-  // Stühle stehen an der freien Längsseite eines Tisches: von der Tafel weg bzw. außen; steht dort ein anderer Tisch
-  // (zusammengeschobene Tische), an der anderen Seite
-  const tops = shown.filter(s => s.it.kind === 'table' || s.it.kind === 'bench');
-  const blocked = (s, side) => {
-    const z = { s: [s.x, s.y + s.h, s.w, 0.3], n: [s.x, s.y - 0.3, s.w, 0.3], e: [s.x + s.w, s.y, 0.3, s.h], w: [s.x - 0.3, s.y, 0.3, s.h] }[side];
-    return tops.some(o => o !== s && z[0] < o.x + o.w - 0.02 && z[0] + z[2] > o.x + 0.02 && z[1] < o.y + o.h - 0.02 && z[1] + z[3] > o.y + 0.02);
-  };
+  const tops = room.items.filter(it => it.kind === 'table' || it.kind === 'bench');
   const sidesOf = (s, n, rows, cols) => {
-    const hor = s.w >= s.h;
-    if (rows === 2) return hor ? [{ side: 'n', n: cols }, { side: 's', n: n - cols }] : [{ side: 'w', n: cols }, { side: 'e', n: n - cols }];
-    const pref = hor ? (flip ? ['n', 's'] : ['s', 'n']) : (s.x + s.w / 2 < W / 2 ? ['w', 'e'] : ['e', 'w']);
-    return [{ side: blocked(s, pref[0]) && !blocked(s, pref[1]) ? pref[1] : pref[0], n }];
+    const hor = s.w >= s.h, real = sideOf(s.it, tops, W), side = flip ? OPP[real] : real;
+    if (rows === 1) return [{ side, n }];
+    // zwei Reihen: Stühle an beiden Längsseiten; die gewählte Seite zuerst (dort sitzt der Schraubstock links)
+    const both = hor ? [{ side: 'n', n: cols }, { side: 's', n: n - cols }] : [{ side: 'w', n: cols }, { side: 'e', n: n - cols }];
+    return both[0].side === side ? both : both.reverse();
   };
   // Lehne einzelner Stühle: im Kreis nach außen, sonst von der Tafel weg
   const loose = shown.filter(s => s.it.kind === 'chair'), mid = loose.length ? [loose.reduce((a, s) => a + s.x + s.w / 2, 0) / loose.length, loose.reduce((a, s) => a + s.y + s.h / 2, 0) / loose.length] : [0, 0];
@@ -317,7 +326,7 @@ export function editorSide() {
       ${['table', 'bench'].includes(it.kind) ? `<div class="num-row"><label>Plätze<span class="stepper"><button data-act="rp-seats" data-d="-1" ${n > 1 ? '' : 'disabled'}>−</button><output>${n}</output><button data-act="rp-seats" data-d="1" ${n < 12 ? '' : 'disabled'}>+</button></span></label></div>` : ''}
       <div class="two">${num('w', 'Breite (m)', it.w)}${num('h', 'Tiefe (m)', it.h)}</div>
       ${n ? '' : `<label class="field">Beschriftung<input class="input" data-rp="label" maxlength="24" value="${esc(it.label || '')}" placeholder="${it.kind === 'worktable' ? 'z. B. Werkzeugtisch' : esc(NAMES[it.kind])}"></label>`}
-      <div class="tools"><button class="btn ghost sm" data-act="rp-rot">${icon('repeat', 15)} Drehen</button><button class="btn ghost sm" data-act="rp-copy">${icon('plus', 15)} Kopieren</button><button class="btn ghost sm danger-text" data-act="rp-del">${icon('trash', 15)} Löschen</button></div>
+      <div class="tools"><button class="btn ghost sm" data-act="rp-rot" title="Um 90° drehen">${icon('repeat', 15)} Drehen</button>${['table', 'bench'].includes(it.kind) ? `<button class="btn ghost sm" data-act="rp-flip" title="Um 180° drehen: Stühle auf die andere Seite">${icon('repeat', 15)} 180°</button>` : ''}<button class="btn ghost sm" data-act="rp-copy">${icon('plus', 15)} Kopieren</button><button class="btn ghost sm danger-text" data-act="rp-del">${icon('trash', 15)} Löschen</button></div>
     </div>` : `<div class="card"><p class="muted small-text">Ein Teil im Raum antippen, um ${base ? 'Größe oder Beschriftung' : 'Plätze oder Größe'} zu ändern, es zu drehen, zu kopieren oder zu löschen.</p></div>`}
     <div class="card"><button class="btn ghost full danger-text" data-act="rp-delroom">${icon('trash', 15)} Raum löschen</button></div>`;
 }
@@ -353,7 +362,15 @@ export function click(act, b, onRoomDeleted) {
       break;
     }
     case 'rp-seats': patchItem(sel, it => { it.seats = clamp(seatsOf(it) + Number(b.dataset.d), 1, 12); }); break;
-    case 'rp-rot': patchItem(sel, (it, x) => { const cx = it.x + it.w / 2, cy = it.y + it.h / 2; [it.w, it.h] = [it.h, it.w]; it.x = r2(clamp(cx - it.w / 2, 0, x.w - it.w)); it.y = r2(clamp(cy - it.h / 2, 0, x.h - it.h)); }); break;
+    // Drehen um 90° im Uhrzeigersinn; Tische und Werkbänke merken sich dabei die Seite der Stühle (vier Stellungen)
+    case 'rp-rot': patchItems((items, x) => {
+      const it = items.find(i => i.id === sel); if (!it) return;
+      const top = it.kind === 'table' || it.kind === 'bench', cur = top ? sideOf(it, items.filter(i => i.kind === 'table' || i.kind === 'bench'), x.w) : null;
+      const cx = it.x + it.w / 2, cy = it.y + it.h / 2; [it.w, it.h] = [it.h, it.w]; it.x = r2(clamp(cx - it.w / 2, 0, x.w - it.w)); it.y = r2(clamp(cy - it.h / 2, 0, x.h - it.h));
+      if (top && it.w !== it.h) it.side = TURN[cur];
+    }); break;
+    // Umdrehen um 180°: Stühle (und Schraubstock) auf die andere Seite, der Tisch bleibt an seiner Stelle
+    case 'rp-flip': patchItems((items, x) => { const it = items.find(i => i.id === sel); if (it) it.side = OPP[sideOf(it, items.filter(i => i.kind === 'table' || i.kind === 'bench'), x.w)]; }); break;
     case 'rp-copy': {
       const items = partItems(r), it = items.find(x => x.id === sel); if (!it) break;
       if (items.length >= MAX_ITEMS) { toast(`Höchstens ${MAX_ITEMS} Teile.`); break; }
