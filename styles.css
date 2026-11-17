@@ -1438,11 +1438,10 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .rp-seats { display: grid; gap: max(2px, calc(var(--m) * .04)); width: 100%; height: 100%; }
 .room.v2 .rp-it .seat { width: 100%; height: 100%; min-height: 0; padding: 0 2px; font-size: var(--sf); border-radius: max(3px, calc(var(--m) * .05)); border-width: 1.5px; }
 /* Namen im Raum (seit 2.9.4): vollständig zeigen statt „…“ – fitSeats() in js/room.js verkleinert zu lange Namen
-   und bricht sie notfalls auf zwei Zeilen um. Auf schmalen Bildschirmen behält der Raum eine Mindestgröße
-   (etwa 66 px je Meter) und lässt sich seitlich wischen, damit die Namen lesbar bleiben. */
+   und bricht sie notfalls auf zwei Zeilen um. Seit 2.9.5 passt fitRoom() (js/gruppen.js) den ganzen Raum ohne
+   Scrollen ins Fenster – auch auf dem Handy, deshalb gibt es keine Mindestgröße mehr. */
 .room.v2 .rp-it .seat > span { max-width: 100%; text-overflow: clip; letter-spacing: -.01em; }
 .room.v2 .rp-it .seat > span.two { white-space: normal; overflow-wrap: anywhere; hyphens: auto; line-height: 1.05; text-align: center; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-@media screen and (max-width: 900px) { body:not(.presenting) .room-wrap > .room.raum .rp { min-width: calc(var(--W) * 66px + 8px); } body:not(.presenting) .room-wrap:has(.rp) { -webkit-overflow-scrolling: touch; } }
 .room.v2 .rp-it .seat.free { font-size: calc(var(--sf) * .7); }
 .room.v2 .rp-it .seat small { font-size: .55em; }
 .rp-label { display: inline-flex; align-items: center; gap: 4px; font-size: clamp(8px, calc(var(--m) * .13), 15px); font-weight: 650; letter-spacing: .04em; overflow: hidden; white-space: nowrap; max-width: 100%; padding: 0 3px; }

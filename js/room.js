@@ -175,7 +175,8 @@ export function sideOf(it, tops, W) {
   return blocked(pref[0]) && !blocked(pref[1]) ? pref[1] : pref[0];
 }
 // Namen auf den Plätzen vollständig zeigen (seit 2.9.4): zu lange Namen zuerst kleiner setzen (bis 7,5 px), sonst auf
-// zwei Zeilen umbrechen und so weit verkleinern, dass sie in den Platz passen (bis 6,5 px)
+// zwei Zeilen umbrechen und so weit verkleinern, dass sie in den Platz passen (bis 5 px – seit 2.9.5 passt der ganze
+// Raum ohne Scrollen ins Fenster, auf dem Handy werden die Plätze dadurch klein)
 export function fitSeats(root) {
   root?.querySelectorAll('.rp .seat > span').forEach(sp => {
     sp.style.fontSize = ''; sp.classList.remove('two');
@@ -184,7 +185,7 @@ export function fitSeats(root) {
     if (one >= 7.5) { sp.style.fontSize = one.toFixed(2) + 'px'; return; }
     sp.classList.add('two');
     const room = () => seat.clientHeight - (seat.querySelector('small')?.offsetHeight || 0) - 2;
-    for (let f = Math.min(fs, 11); f >= 6.5; f -= 0.5) { sp.style.fontSize = f + 'px'; if (sp.scrollWidth <= sp.clientWidth + 0.5 && sp.scrollHeight <= Math.max(room(), sp.clientHeight) + 0.5) return; }
+    for (let f = Math.min(fs, 11); f >= 5; f -= 0.5) { sp.style.fontSize = f + 'px'; if (sp.scrollWidth <= sp.clientWidth + 0.5 && sp.scrollHeight <= Math.max(room(), sp.clientHeight) + 0.5) return; }
   });
 }
 export function roomHtml(room, opts = {}) {

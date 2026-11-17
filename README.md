@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.5
+
+- **Ganzer Raum ohne Scrollen (`js/gruppen.js`, `js/room.js`, `styles.css`):** Die Sitzordnung – mit und ohne Raum, in allen Organisationsformen, im Standardsitzplan und bei „Gemischt“ – passt auf Handy, Tablet und PC immer ganz ins Fenster, weder seitlich noch nach unten muss gescrollt werden. `fitRoom()` misst die freie Fensterhöhe (ohne feste Kopfleiste und Rahmen) und begrenzt den maßstäblichen Raum entsprechend in der Breite; die übrigen Darstellungen werden über `zoom` in Breite und Höhe eingepasst. Die Mindestgröße mit seitlichem Wischen aus 2.9.4 entfällt; damit Namen auf kleinen Plätzen trotzdem ganz zu sehen sind, setzt `fitSeats()` sie notfalls bis 5 px klein. Dreht man das Handy oder ändert die Fenstergröße, wird neu eingepasst. Kein neuer Datenstand.
+
 ## Neu in 2.9.4
 
 - **Namen im Raum vollständig lesbar, auch auf dem Handy (`js/room.js`, `js/gruppen.js`, `styles.css`):** Statt „…“ passt `fitSeats()` jeden Namen in seinen Platz ein – zuerst etwas kleiner (bis 7,5 px), sonst auf zwei Zeilen umgebrochen (bis 6,5 px). Auf schmalen Bildschirmen (bis 900 px) behält der maßstäbliche Raum eine Mindestgröße von etwa 66 px je Meter und lässt sich seitlich wischen, statt so klein zu werden, dass Namen nicht mehr passen; Vollbild („Ansicht vergrößern“) und Druck sind davon ausgenommen. Ziehen zum Tauschen geht per Finger weiter mit kurzem Halten. Kein neuer Datenstand.

@@ -413,19 +413,41 @@ function fitPresent() {
   }
   return true;
 }
-// Sitzplan auf schmalen Bildschirmen (Handy) verkleinern statt waagerecht scrollen
+// Höhe, die der Sitzplan im Fenster hat (seit 2.9.5): Fensterhöhe ohne Kopfleiste und die Ränder des Raumrahmens
+function availHeight(wrap) {
+  const bar = document.querySelector('.topbar'), cs = getComputedStyle(wrap);
+  const top = bar && getComputedStyle(bar).position !== 'static' ? bar.getBoundingClientRect().height : 0;
+  const frame = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((a, k) => a + (parseFloat(cs[k]) || 0), 0);
+  return Math.max(160, (window.visualViewport?.height || innerHeight) - top - frame - 12);
+}
+// Sitzplan immer ganz zeigen (seit 2.9.5): auf Handy, Tablet und PC so verkleinern, dass der ganze Raum ohne Scrollen
+// (weder seitlich noch nach unten) ins Fenster passt. Räume (maßstäblich) werden schmaler, alle anderen Darstellungen
+// über zoom (mehrere Schritte, weil sich die Darstellung bei kleinerer Breite neu umbricht).
 function fitRoom() {
   if (fitPresent()) return rooms.fitSeats(root);
   root?.querySelectorAll('.team-grid, .rp').forEach(e => { e.style.zoom = ''; e.style.maxWidth = ''; });
   const wrap = root?.querySelector('.room-wrap'), r = wrap?.querySelector('.room'); if (!r) return;
   r.style.zoom = '';
-  // Raum: maßstäblich mit Mindestgröße (seitlich wischen), Namen einpassen statt verkleinern
-  if (r.querySelector('.rp')) return rooms.fitSeats(root);
+  const maxH = availHeight(wrap), rp = r.querySelector('.rp');
+  // Raum: maßstäblich; Breite so begrenzen, dass Raum samt Legende und Hinweisen in die Fensterhöhe passt
+  if (rp) {
+    for (let i = 0; i < 3; i++) {
+      const h = r.getBoundingClientRect().height, o = h - maxH; if (o <= 1) break;
+      const b = rp.getBoundingClientRect(); if (b.height < 40) break;
+      rp.style.maxWidth = Math.max(140, (b.width * (b.height - o)) / b.height) + 'px';
+    }
+    return rooms.fitSeats(root);
+  }
   const cs = getComputedStyle(wrap), avail = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
   let lo = Infinity, hi = -Infinity;
   r.querySelectorAll('.seat, .art-desk, .table, .island').forEach(el => { const b = el.getBoundingClientRect(); lo = Math.min(lo, b.left); hi = Math.max(hi, b.right); });
   const need = Math.max(r.scrollWidth, hi - lo + 8);
-  if (need > avail + 1) r.style.zoom = String(Math.max(0.5, avail / need));
+  if (need > avail + 1) r.style.zoom = String(Math.max(0.3, avail / need));
+  // danach in der Höhe einpassen (mehrere Schritte, weil sich die Darstellung neu umbricht)
+  for (let i = 0; i < 6; i++) {
+    const h = r.getBoundingClientRect().height, o = h - maxH; if (o <= 1 || h < 40) break;
+    r.style.zoom = String(Math.max(0.2, (parseFloat(r.style.zoom) || 1) * Math.max(0.5, (h - o - 2) / h)));
+  }
 }
 
 // ---------- Teams ----------
