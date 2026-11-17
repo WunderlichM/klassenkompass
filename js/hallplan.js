@@ -2,7 +2,8 @@
 // document noch Speicher und läuft deshalb auch in Node (tools/hallplan.mjs erzeugt damit Schüleransicht und PNG).
 import { uid } from './engine.js';
 import * as gear from './hallgear.js';
-import { BW, BH, K, FLOOR, HALL, MARKS, fp, floorPoints, marksSvg } from './hallfloor.js';
+import { BW, BH, K, MARKS, STD, geo, marksSvg, GYM_LEN, GYM_DEP } from './hallfloor.js';
+export { geo, STD };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -25,14 +26,14 @@ export const KINDS = {
 
 // ---------- Zeichnen (auch für den Bildschirm, dort nur ansehen) ----------
 export const num = v => Math.round(v * 10) / 10;
-function floorSvg(p) {
+function floorSvg(p, g = STD) {
   if (p.floor === 'leer') return '';
   let lines = '';
   if (p.floor === 'linien') {
-    const a = fp(HALL.len / 2, 0), b = fp(HALL.len / 2, HALL.dep), c = Array.from({ length: 40 }, (_, i) => { const t = i / 40 * 2 * Math.PI; return fp(HALL.len / 2 + 2.2 * Math.cos(t), HALL.dep / 2 + 2.2 * Math.sin(t)).map(num).join(','); }).join(' ');
+    const r = Math.min(2.2, g.dep / 6.8), a = g.fp(g.len / 2, 0), b = g.fp(g.len / 2, g.dep), c = Array.from({ length: 40 }, (_, i) => { const t = i / 40 * 2 * Math.PI; return g.fp(g.len / 2 + r * Math.cos(t), g.dep / 2 + r * Math.sin(t)).map(num).join(','); }).join(' ');
     lines = `<line x1="${num(a[0])}" y1="${num(a[1])}" x2="${num(b[0])}" y2="${num(b[1])}" class="hf-line"/><polygon points="${c}" class="hf-line"/>`;
   }
-  return `<polygon points="${floorPoints()}" class="hf-floor"/>${lines}${marksSvg(p.lines)}`;
+  return `<polygon points="${g.floorPoints()}" class="hf-floor"/>${lines}${marksSvg(p.lines, g)}`;
 }
 function para(w, h, k = K) { const d = h * k; return `${num(d)},0 ${num(w)},0 ${num(w - d)},${num(h)} 0,${num(h)}`; }
 // Bereichsformen (seit 1.22.0): Rechteck oder U-, L-Form und Rahmen. tx, ty = Randbreite als Anteil von Breite bzw. Tiefe (0,04–0,48).
@@ -197,41 +198,66 @@ export function shape(i) {
   }
   return '';
 }
-const itemSvg = i => `<g class="hi" data-hid="${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
+// Feste Geräte der Halle (seit 2.10.0): liegen unter den Elementen des Plans und lassen sich dort nicht anfassen
+const baseSvg = i => `<g class="hb" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
+const itemSvg = i => `<g class="hi" data-hid=""${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
 export const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0L16 16M16 0L0 16" stroke="#9aa3b2" stroke-width="1.5"/></pattern><pattern id="h-grid" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V14" stroke="#7d8794" stroke-width="1.6"/></pattern></defs>';
 // Ausschnitt um Hallenfläche und Elemente (für das Bildschirm-Objekt, damit wenig Rand bleibt)
-export function contentBox(p) {
+// Halle eines Plans: in der App übergibt hall.js die gespeicherte Halle (gym), Dateien bringen sie als gymDef mit
+const gymFor = (p, gym) => (gym !== undefined ? gym : p?.gymDef) || null;
+export const baseItems = (p, gym) => (p?.base ? [] : gymFor(p, gym)?.items || []);
+export function contentBox(p, gym) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
-  if (p.floor !== 'leer') add(FLOOR.left, FLOOR.top, FLOOR.left + FLOOR.width + FLOOR.height * K, FLOOR.bottom);
-  p.items.forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
+  const g = geo(gymFor(p, gym));
+  if (p.floor !== 'leer') add(g.left, g.top, g.left + g.width + g.height * K, g.bottom);
+  [...baseItems(p, gym), ...p.items].forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
   if (!Number.isFinite(x0)) return `0 0 ${BW} ${BH}`;
   const pad = 24; return `${num(x0 - pad)} ${num(y0 - pad)} ${num(x1 - x0 + 2 * pad)} ${num(y1 - y0 + 2 * pad)}`;
 }
-export function boardSvg(p, { edit = false, cls = '', crop = false } = {}) {
+export function boardSvg(p, { edit = false, cls = '', crop = false, gym } = {}) {
   if (!p) return '';
-  return `<svg class="hall-svg ${cls}" viewBox="${crop ? contentBox(p) : `0 0 ${BW} ${BH}`}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hallenplan ${esc(p.title)}">${defs}
-    <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p)}${p.items.map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
+  const base = baseItems(p, gym);
+  return `<svg class="hall-svg ${cls}" viewBox="${crop ? contentBox(p, gym) : `0 0 ${BW} ${BH}`}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hallenplan ${esc(p.title)}">${defs}
+    <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p, geo(gymFor(p, gym)))}${base.length ? `<g class="h-base">${base.map(baseSvg).join('')}</g>` : ''}${p.items.map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
 }
+
+// Plan in eine andere Halle legen (seit 2.10.0): Jedes Element behält seinen Platz im Verhältnis zur Hallenfläche
+// (Anteil der Länge und Tiefe); Bereiche wachsen und schrumpfen mit der Fläche, Geräte bleiben maßstäblich,
+// Kinder, Hütchen, Bälle und Kleingeräte behalten ihre Größe. a, b = Geometrie vorher und nachher (geo).
+export function refitItem(i, a, b) {
+  if (a.key === b.key) return i;
+  const sx = b.width / a.width, sy = b.height / a.height;
+  let w = i.w, h = i.h;
+  if (i.kind === 'zone') { const nh = h * sy; w = Math.max(16, (w - h * K) * sx + nh * K); h = Math.max(16, nh); }
+  else if (i.kind === 'gear') { const f = gear.scaleOf(i.gear, b) / gear.scaleOf(i.gear, a); w *= f; h *= f; }
+  else if (i.kind === 'arrow' || i.kind === 'path') { const r = (i.rot || 0) * Math.PI / 180; w = Math.max(30, w * Math.hypot(sx * Math.cos(r), sy * Math.sin(r))); }
+  // Bezugspunkt: Fußpunkt bei Geräten und Figuren, sonst die Mitte
+  const ay = i.kind === 'gear' ? 0.85 : i.kind === 'kid' || i.kind === 'teacher' ? 0.7 : 0.5;
+  const [u, v] = a.uv(i.x + i.w / 2, i.y + i.h * ay), [x, y] = b.at(u, v);
+  return { ...i, x: Math.round(x - w / 2), y: Math.round(y - h * ay), w: Math.round(w), h: Math.round(h) };
+}
+export const refitItems = (items, a, b) => items.map(i => refitItem(i, a, b));
 
 // ---------- Maße in Metern ----------
 // Vorlagen: Maße in Metern auf dem Hallenboden (x von links, y von vorn nach hinten)
-export const zoneAt = (x0, x1, y0, y1, color, text) => { const a = fp(x0, y0), b = fp(x0, y1), h = a[1] - b[1]; return { id: uid(), kind: 'zone', x: Math.round(a[0]), y: Math.round(b[1]), w: Math.round((x1 - x0) / HALL.len * FLOOR.width + h * K), h: Math.round(h), rot: 0, color, text }; };
+// g = Geometrie der Halle (hallfloor.geo), ohne Angabe die Standardhalle 27 m × 15 m
+export const zoneAt = (x0, x1, y0, y1, color, text, g = STD) => { const a = g.fp(x0, y0), b = g.fp(x0, y1), h = a[1] - b[1]; return { id: uid(), kind: 'zone', x: Math.round(a[0]), y: Math.round(b[1]), w: Math.round((x1 - x0) / g.len * g.width + h * K), h: Math.round(h), rot: 0, color, text }; };
 // Gerät maßstäblich so setzen, dass der Punkt (ax, ay) seines Rahmens (Anteile 0…1) auf dem Bodenpunkt liegt; L = Länge in m bei dehnbaren Geräten
-export function gearAt(id, view, x, y, { ax = 0.5, ay = 0.9, L } = {}) {
-  const s = gear.gearSize(id, view, L), f = gear.scaleOf(id), p = fp(x, y), h = Math.round(s.h * f), w = Math.round(s.w * f);
+export function gearAt(id, view, x, y, { ax = 0.5, ay = 0.9, L, g = STD } = {}) {
+  const s = gear.gearSize(id, view, L), f = gear.scaleOf(id, g), p = g.fp(x, y), h = Math.round(s.h * f), w = Math.round(s.w * f);
   return { id: uid(), kind: 'gear', gear: id, view, x: Math.round(p[0] - w * ax), y: Math.round(p[1] - h * ay), w, h, rot: 0 };
 }
 // Element über einen Bodenpunkt in Metern setzen (x von links 0…27, y von vorn nach hinten 0…15); size = Größenfaktor.
 // Kind steht mit den Füßen auf dem Punkt, alles andere liegt mittig darauf.
-export function itemAt(kind, x, y, { size = 1, color, text } = {}) {
-  const k = KINDS[kind], p = fp(x, y), t = text ?? (kind === 'zone' ? '' : k.text);
+export function itemAt(kind, x, y, { size = 1, color, text, g = STD } = {}) {
+  const k = KINDS[kind], p = g.fp(x, y), t = text ?? (kind === 'zone' ? '' : k.text);
   const h = Math.round(k.h * size), w = Math.round(kind === 'text' ? Math.max(60, String(t || '').length * h * 0.45 + 30) : k.w * size);
   return { id: uid(), kind, x: Math.round(p[0] - w / 2), y: Math.round(p[1] - (kind === 'kid' || kind === 'teacher' ? h * 0.7 : h / 2)), w, h, rot: 0, ...(color || k.color ? { color: color || k.color } : {}), ...(t ? { text: String(t) } : {}) };
 }
 // Laufweg (arrow) oder Weg nach Freigabe (path) zwischen zwei Bodenpunkten in Metern
-export function lineAt(kind, from, to, { size = 1, color } = {}) {
-  const a = fp(from[0], from[1]), b = fp(to[0], to[1]), w = Math.max(30, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]))), h = Math.round(KINDS[kind].h * size);
+export function lineAt(kind, from, to, { size = 1, color, g = STD } = {}) {
+  const a = g.fp(from[0], from[1]), b = g.fp(to[0], to[1]), w = Math.max(30, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]))), h = Math.round(KINDS[kind].h * size);
   let rot = Math.round(Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI); if (rot > 180) rot -= 360;
   return { id: uid(), kind, x: Math.round((a[0] + b[0]) / 2 - w / 2), y: Math.round((a[1] + b[1]) / 2 - h / 2), w, h, rot, color: color || KINDS[kind].color };
 }
@@ -273,7 +299,7 @@ const num2 = v => Math.round(v * 1000) / 1000;
 const int = (v, a, b, d) => (isNum(v) ? clamp(Math.round(v), a, b) : d);
 const str = (v, n) => String(v ?? '').trim().slice(0, n);
 
-function readItem(raw, where) {
+function readItem(raw, where, G = STD) {
   if (!raw || typeof raw !== 'object') throw new Error(`${where}: kein Element.`);
   const kind = raw.kind;
   if (!PLAN_KINDS.includes(kind)) throw new Error(`${where}: unbekannte Art „${str(kind, 30)}“.`);
@@ -284,18 +310,18 @@ function readItem(raw, where) {
     if (!g) throw new Error(`${where}: Gerät „${str(raw.gear, 30)}“ gibt es nicht.`);
     const view = raw.view === undefined ? g.views[0] : raw.view;
     if (!g.views.includes(view)) throw new Error(`${where}: ${g.name} hat die Ansicht „${str(view, 30)}“ nicht (möglich: ${g.views.join(', ')}).`);
-    if (raw.at) { const [x, y] = pair(raw.at, where); i = gearAt(g.id, view, x, y, { ...(isNum(raw.ax) ? { ax: raw.ax } : {}), ...(isNum(raw.ay) ? { ay: raw.ay } : {}), ...(isNum(raw.L) && g.stretch ? { L: clamp(raw.L, 0.4, 14) } : {}) }); }
+    if (raw.at) { const [x, y] = pair(raw.at, where); i = gearAt(g.id, view, x, y, { ...(isNum(raw.ax) ? { ax: raw.ax } : {}), ...(isNum(raw.ay) ? { ay: raw.ay } : {}), ...(isNum(raw.L) && g.stretch ? { L: clamp(raw.L, 0.4, 14) } : {}), g: G }); }
     else i = { kind, gear: g.id, view };
   } else if (kind === 'img') {
     if (!IMG_RE.test(raw.img)) throw new Error(`${where}: Bildkennung fehlt.`);
     i = { kind, img: raw.img };
   } else if (kind === 'zone' && raw.m) {
     if (!Array.isArray(raw.m) || raw.m.length !== 4 || !raw.m.every(isNum) || raw.m[1] <= raw.m[0] || raw.m[3] <= raw.m[2]) throw new Error(`${where}: „m“ braucht [x0, x1, y0, y1] in Metern mit x1 > x0 und y1 > y0.`);
-    i = zoneAt(raw.m[0], raw.m[1], raw.m[2], raw.m[3], color || KINDS.zone.color, '');
+    i = zoneAt(raw.m[0], raw.m[1], raw.m[2], raw.m[3], color || KINDS.zone.color, '', G);
   } else if ((kind === 'arrow' || kind === 'path') && raw.from) {
-    i = lineAt(kind, pair(raw.from, where), pair(raw.to, where), { size, color });
+    i = lineAt(kind, pair(raw.from, where), pair(raw.to, where), { size, color, g: G });
   } else if (raw.at) {
-    const [x, y] = pair(raw.at, where); i = itemAt(kind, x, y, { size, color, text: raw.text === undefined ? undefined : str(raw.text, 60) });
+    const [x, y] = pair(raw.at, where); i = itemAt(kind, x, y, { size, color, text: raw.text === undefined ? undefined : str(raw.text, 60), g: G });
   } else i = { kind };
   if (!raw.at && !raw.m && !raw.from) {
     if (![raw.x, raw.y, raw.w, raw.h].every(isNum)) throw new Error(`${where}: Es fehlen x, y, w, h (oder eine Angabe in Metern: at, m, from/to).`);
@@ -331,11 +357,24 @@ export function parsePlans(text) {
     const unknown = (Array.isArray(p.lines) ? p.lines : []).filter(m => !MARKS.some(x => x.id === m));
     if (unknown.length) throw new Error(`Plan ${k + 1} („${title}“): Spielfeldlinien „${unknown.join(', ')}“ gibt es nicht (möglich: ${MARKS.map(m => m.id).join(', ')}).`);
     const lesson = str(p.lesson, 80), phase = lesson ? int(p.phase, 1, 20, 1) : 0;
-    const rules = normRules(p.rules);
-    return { id: uid(), title, topic: str(p.topic, 60), lesson, phase, demo: false, ...(rules ? { rules } : {}), floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n))) };
+    const rules = normRules(p.rules), gymDef = readGym(p.gym, `Plan ${k + 1} („${title}“), Halle`), G = geo(gymDef);
+    return { id: uid(), title, topic: str(p.topic, 60), lesson, phase, demo: false, ...(rules ? { rules } : {}), ...(gymDef ? { gymDef } : {}), floor: p.floor || 'halle', v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p.lines) && p.lines.includes(m)), items: p.items.slice(0, 400).map((i, n) => readItem(i, where(n), G)) };
   });
 }
-export function exportPlans(plans) {
-  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, ...(p.topic ? { topic: p.topic } : {}), ...(p.lesson ? { lesson: p.lesson, phase: p.phase || 1 } : {}), ...(p.rules?.items?.length ? { rules: p.rules } : {}), floor: p.floor, lines: p.lines || [],
+// Halle eines Plans in der Datei (seit 2.10.0, optional): { "name": "Dreifeldhalle", "len": 45, "dep": 27, "items": [ feste Geräte ] }
+// len = Länge (von links nach rechts), dep = Breite (von vorn nach hinten) in m; die festen Geräte wie die Elemente eines Plans.
+// Ohne Angabe gilt die Standardhalle 27 m × 15 m.
+function readGym(raw, where) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'object') throw new Error(`${where}: „gym“ braucht { "name", "len", "dep" }.`);
+  const ok = (v, [a, b]) => isNum(v) && v >= a && v <= b;
+  if (!ok(raw.len, GYM_LEN) || !ok(raw.dep, GYM_DEP)) throw new Error(`${where}: „len“ (${GYM_LEN[0]}–${GYM_LEN[1]} m) und „dep“ (${GYM_DEP[0]}–${GYM_DEP[1]} m) fehlen oder passen nicht.`);
+  const G = geo(raw), items = Array.isArray(raw.items) ? raw.items.slice(0, 200).map((i, n) => readItem(i, `${where}, festes Gerät ${n + 1}`, G)) : [];
+  return { name: str(raw.name, 40) || `Halle ${G.len} × ${G.dep} m`, len: G.len, dep: G.dep, items };
+}
+// gymOf(p) liefert die Halle eines Plans aus der App ({ name, len, dep, items }); Dateien bringen sie als gymDef mit
+export function exportPlans(plans, gymOf = p => p.gymDef) {
+  const gymOut = g => (g ? { gym: { name: g.name, len: g.len, dep: g.dep, items: (g.items || []).map(({ id, ...i }) => i) } } : {});
+  return JSON.stringify({ app: 'KlassenKompass', kind: PLANS_KIND, v: 1, plans: plans.map(p => ({ title: p.title, ...(p.topic ? { topic: p.topic } : {}), ...(p.lesson ? { lesson: p.lesson, phase: p.phase || 1 } : {}), ...(p.rules?.items?.length ? { rules: p.rules } : {}), ...gymOut(gymOf(p)), floor: p.floor, lines: p.lines || [],
     items: p.items.map(({ id, ...i }) => i) })) }, null, 2);
 }

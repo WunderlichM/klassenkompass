@@ -9,10 +9,10 @@ import * as images from './images.js';
 import { uid } from './engine.js';
 import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast, downloadFile, hooks } from './ui.js';
+import * as groups from './groups.js';
 
-import { BW, BH, HALL, FLOOR, K, MARKS, badmintonCourts } from './hallfloor.js';
-import { KINDS, clamp, num, shape, defs, boardSvg, zoneAt, gearAt, itemAt, parsePlans, exportPlans, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
-export { boardSvg };
+import { BW, BH, K, MARKS, badmintonCourts, geo, STD, GYM_LEN, GYM_DEP } from './hallfloor.js';
+import { KINDS, clamp, num, shape, defs, boardSvg as drawBoard, zoneAt, gearAt, itemAt, parsePlans, exportPlans, refitItems, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
@@ -43,7 +43,30 @@ let snap = pref('hallSnap', '0') === '1', palHidden = pref('hallPalette', '1') =
 const libOpen = new Set(['g:' + gear.GROUPS[0]]); // geöffnete Gruppen der Leiste
 const history = new Map(); // Plan-ID → { undo: [], redo: [] }
 const sp = () => store.get().sport;
-const plan = () => sp().halls.find(h => h.id === sp().activeHall) || sp().halls[0] || null;
+// ---------- Hallen (seit 2.10.0) ----------
+// Eigene Sporthallen in sport.gyms: Name, Länge × Breite in m und feste Geräte (Tore, Körbe, Türen …), die in jedem Plan
+// dieser Halle unter den Elementen liegen. Ein Plan ohne Halle zeigt die Standardhalle 27 m × 15 m.
+export const gyms = () => sp().gyms || [];
+export const gymById = id => (id && gyms().find(g => g.id === id)) || null;
+export const gymOf = p => gymById(p?.gym);
+const m = v => String(Math.round(v * 10) / 10).replace('.', ',');
+export const gymSize = g => `${m(g ? g.len : STD.len)} × ${m(g ? g.dep : STD.dep)} m`;
+export const gymLabel = g => (g ? `${g.name} (${gymSize(g)})` : `Standardhalle (${gymSize(null)})`);
+// Zeichnung eines Plans mit seiner Halle (Fläche, Linien und feste Geräte)
+export const boardSvg = (p, o = {}) => drawBoard(p, { gym: gymOf(p), ...o });
+// Feste Geräte einer Halle bearbeiten: Der Editor arbeitet dann auf der Halle statt auf einem Plan
+let baseEdit = null;
+const gymPlan = g => ({ id: 'gym:' + g.id, title: g.name, items: g.items, floor: 'halle', lines: [], gym: g.id, base: true });
+const plan = () => {
+  const g = baseEdit && gymById(baseEdit); if (g) return gymPlan(g);
+  baseEdit = null;
+  return sp().halls.find(h => h.id === sp().activeHall) || sp().halls[0] || null;
+};
+const G = (p = plan()) => geo(gymOf(p));   // Geometrie der Halle des bearbeiteten Plans
+export const currentPlan = () => plan();
+export const editingGym = () => (baseEdit && gymById(baseEdit)) || null;
+export function editGym(id) { if (!gymById(id)) return; baseEdit = id; sel = []; store.update(() => {}); }
+export function stopGymEdit() { baseEdit = null; sel = []; store.update(() => {}); }
 const itemOf = (p, id) => p?.items.find(i => i.id === id);
 const libEntry = id => sp().hallLib.find(e => e.id === id);
 const primary = () => sel.at(-1) ?? null;
@@ -54,6 +77,7 @@ function hist(id) { if (!history.has(id)) history.set(id, { undo: [], redo: [] }
 function commit(fn) {
   const p = plan(); if (!p) return;
   const h = hist(p.id); h.undo.push(JSON.stringify(p)); if (h.undo.length > 60) h.undo.shift(); h.redo = [];
+  if (p.base) return store.update(s => { const g = s.sport.gyms.find(y => y.id === p.gym); if (g) { const x = gymPlan(g); fn(x); g.items = x.items; } });
   store.update(s => { const x = s.sport.halls.find(y => y.id === p.id); if (x) { fn(x); x.demo = false; } });
 }
 function undo(redo = false) {
@@ -63,6 +87,7 @@ function undo(redo = false) {
   to.push(JSON.stringify(p));
   const prev = JSON.parse(from.pop());
   sel = sel.filter(id => itemOf(prev, id));
+  if (p.base) return store.update(s => { const g = s.sport.gyms.find(y => y.id === p.gym); if (g) g.items = prev.items; });
   store.update(s => { const i = s.sport.halls.findIndex(y => y.id === p.id); if (i >= 0) s.sport.halls[i] = prev; });
 }
 
@@ -86,7 +111,7 @@ export function sortPlans(list) {
 // Pläne derselben Stunde (seit 2.3.0 über alle Themen hinweg) in der Reihenfolge der Phasen
 export const lessonPlans = p => (p?.lesson ? sp().halls.filter(x => x.lesson === p.lesson).sort((a, b) => a.phase - b.phase) : []);
 export const nextPhase = lesson => Math.max(0, ...sp().halls.filter(x => x.lesson === lesson).map(x => x.phase || 0)) + 1;
-export function openPlan(id) { sel = []; store.update(s => { s.sport.activeHall = id; }); }
+export function openPlan(id) { sel = []; baseEdit = null; store.update(s => { s.sport.activeHall = id; }); }
 
 // ---------- Editor ----------
 export function attach(el) {
@@ -99,9 +124,36 @@ export function attach(el) {
   if (p) { hydrateSvg(el.querySelector('.hall-board')); hydrateSvg(el.querySelector('.hall-print')); images.hydrate(el.querySelector('.hall-palette')); drawSel(); }
 }
 
+// Leiste beim Bearbeiten der festen Geräte einer Halle
+function gymBarHtml(p) {
+  const h = hist(p.id), g = gymById(p.gym), n = sp().halls.filter(x => x.gym === p.gym).length;
+  return `<div class="hall-bar hall-gymbar no-print">
+      <b class="hall-title">${icon('edit', 15)} Halle „${esc(g.name)}“</b><span class="badge">${gymSize(g)}</span>
+      <span class="small-text muted">Feste Geräte (Tore, Körbe, Türen, Geräteraum …) – stehen in ${n === 1 ? 'dem Plan' : `allen ${n} Plänen`} dieser Halle und sind dort nicht verschiebbar.</span>
+      <button class="btn ghost sm" data-h="gym-props" title="Name, Maße und Lerngruppen dieser Halle">${icon('sliders', 15)} Name, Maße, Lerngruppen</button>
+      <span class="hall-sep"></span>
+      <button class="btn ghost sm ${snap ? 'on' : ''}" data-h="snap" aria-pressed="${snap}" title="Beim Verschieben auf ein Raster von 0,5 m ausrichten">${icon('grid', 15)} Raster</button>
+      <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
+      <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${icon('forward', 16)}</button>
+      <button class="btn primary sm" data-h="gym-done" title="Zurück zum Hallenplan">${icon('check', 15)} Fertig</button>
+    </div>`;
+}
 function editorHtml(p) {
   const h = hist(p.id), presenting = document.body.classList.contains('presenting');
   const phases = lessonPlans(p), k = phases.findIndex(x => x.id === p.id);
+  if (p.base) return `<div class="hall gym-edit ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
+    ${gymBarHtml(p)}
+    <div class="hall-bar hall-marks no-print"><button class="btn ghost sm" data-h="palette" aria-pressed="${!palHidden}" title="Leiste mit Elementen ein- oder ausblenden">${icon('list', 15)} ${palHidden ? 'Leiste zeigen' : 'Leiste ausblenden'}</button>
+      <span class="small-text muted">Tipp: In der Leiste unter „Raum“ stehen Tür, Geräteraumtor, Trennwand, Tafel und Lautsprecher; Körbe, Tore und Sprossenwand bei den Geräten.</span></div>
+    <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
+    <div class="hall-work">
+      ${palHidden ? '' : `<aside class="hall-palette no-print">${paletteHtml()}</aside>`}
+      <div class="hall-board" tabindex="0">
+        ${boardSvg(p, { edit: true })}
+        <p class="hall-note">Halle ${gymSize(gymById(p.gym))} · Schematisch · vor Ort prüfen</p>
+      </div>
+    </div>
+  </div>`;
   return `<div class="hall ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
     <div class="hall-bar no-print">
       <b class="hall-title" title="${esc(planLabel(p))}">${esc(p.title)}</b>
@@ -114,7 +166,7 @@ function editorHtml(p) {
       <button class="icon-btn sm" data-h="export-plan" title="Exportieren – diesen Hallenplan als Datei speichern" aria-label="Exportieren">${icon('download', 15)}</button>
       <button class="icon-btn sm" data-h="del-plan" title="Hallenplan löschen" aria-label="Hallenplan löschen">${icon('trash', 15)}</button>
       <span class="hall-sep"></span>
-      <label class="small-text" title="Hallenboden">Halle <select class="select sm" data-hc="floor" aria-label="Hallenboden">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="small-text" title="Hallenboden">Boden <select class="select sm" data-hc="floor" aria-label="Hallenboden">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <button class="btn ghost sm ${snap ? 'on' : ''}" data-h="snap" aria-pressed="${snap}" title="Beim Verschieben auf ein Raster von 0,5 m ausrichten">${icon('grid', 15)} Raster</button>
       <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
       <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${icon('forward', 16)}</button>
@@ -226,14 +278,14 @@ function toBoard(svg, cx, cy) {
   const pt = new DOMPoint(cx, cy).matrixTransform(m.inverse()); return { x: pt.x, y: pt.y };
 }
 // Raster 0,5 m (waagerecht entlang der Hallenlänge, senkrecht entlang der Tiefe)
-const GX = FLOOR.width / HALL.len / 2, GY = FLOOR.height / HALL.dep / 2;
-const snapX = v => Math.round((v - FLOOR.left) / GX) * GX + FLOOR.left, snapY = v => Math.round((v - FLOOR.top) / GY) * GY + FLOOR.top;
+const snapX = v => { const g = G(), d = g.width / g.len / 2; return Math.round((v - g.left) / d) * d + g.left; };
+const snapY = v => { const g = G(), d = g.height / g.dep / 2; return Math.round((v - g.top) / d) * d + g.top; };
 
 function newItem(kind, at, imgEntry, gearId) {
   const k = KINDS[kind];
   let w = k.w, h = k.h;
   const g = kind === 'gear' ? gear.GEAR[gearId] : null;
-  if (kind === 'gear') { if (!g) return; const s = gear.gearSize(g.id, g.views[0]), f = gear.scaleOf(g.id); w = Math.max(12, Math.round(s.w * f)); h = Math.max(12, Math.round(s.h * f)); }
+  if (kind === 'gear') { if (!g) return; const s = gear.gearSize(g.id, g.views[0]), f = gear.scaleOf(g.id, G()); w = Math.max(12, Math.round(s.w * f)); h = Math.max(12, Math.round(s.h * f)); }
   if (kind === 'kid' || kind === 'teacher') { w = Math.round(w * FIGURE); h = Math.round(h * FIGURE); }
   if (kind === 'img') {
     // Bilder mit Kennung V… (Hallenplanbrett) haben einen gemeinsamen Maßstab (≈ 0,3), W… sind kleiner gezeichnet; sonst höchstens 240
@@ -276,7 +328,9 @@ async function onClick(e) {
   switch (act) {
     case 'new': return newPlanDialog();
     case 'import-plan': return importPlansDialog();
-    case 'export-plan': return downloadFile(`Hallenplan - ${fileName(p.title)}.json`, exportPlans([p]));
+    case 'export-plan': return downloadFile(`Hallenplan - ${fileName(p.title)}.json`, exportPlans([p], gymOf));
+    case 'gym-done': return stopGymEdit();
+    case 'gym-props': return gymDialog(gymById(p.gym));
     case 'props': return propsDialog(p);
     case 'rules': return rulesEditDialog(p);
     case 'copy': return copyPlan(p, false);
@@ -284,7 +338,7 @@ async function onClick(e) {
     case 'phase': { const list = lessonPlans(p), k = list.findIndex(x => x.id === p.id), n = list[k + Number(b.dataset.d)]; if (n) openPlan(n.id); return; }
     case 'del-plan': {
       if (!(await confirmDialog('Hallenplan löschen', `„${p.title}“ löschen? Das lässt sich nicht rückgängig machen.`))) return;
-      sel = []; history.delete(p.id);
+      sel = []; history.delete(p.id); baseEdit = null;
       return store.update(s => { s.sport.halls = s.sport.halls.filter(x => x.id !== p.id); s.sport.activeHall = sortPlans(s.sport.halls)[0]?.id ?? null; s.screen.widgets.forEach(w => { if (w.type === 'hall' && w.planId === p.id) w.planId = null; }); });
     }
     case 'mark': return commit(x => { const m = b.dataset.mark, cur = x.lines || []; x.lines = cur.includes(m) ? cur.filter(y => y !== m) : MARKS.map(y => y.id).filter(y => y === m || cur.includes(y)); });
@@ -478,24 +532,24 @@ function startTileDrag(e, tileEl) {
 // ---------- Pläne und Bilder ----------
 const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
 // Bereiche ohne Beschriftung (Gestaltungsregel 13.11.2026), Teams nur über die Farbe
-const zonesAcross = n => Array.from({ length: n }, (_, k) => { const w = (HALL.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, 14.2, ZC[k % 4], ''); });
-// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien
-const goals = () => [gearAt('tor', 'gespiegelt', 1, HALL.dep / 2, { ax: 0.82, ay: 0.76 }), gearAt('tor', 'seitlich', 26, HALL.dep / 2, { ax: 0.18, ay: 0.76 })];
-const baskets = () => [gearAt('basketballkorb', 'gespiegelt', 1.7, HALL.dep / 2, { ax: 0.25, ay: 1.12 }), gearAt('basketballkorb', 'seitlich', 25.3, HALL.dep / 2, { ax: 0.75, ay: 1.12 })];
+const zonesAcross = (n, g) => Array.from({ length: n }, (_, k) => { const w = (g.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, g.dep - 0.8, ZC[k % 4], '', g); });
+// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (Felder passen sich der Halle an, siehe hallfloor.js)
+const goals = g => { const x = (g.len - Math.min(40, g.len - 2)) / 2; return [gearAt('tor', 'gespiegelt', x, g.dep / 2, { ax: 0.82, ay: 0.76, g }), gearAt('tor', 'seitlich', g.len - x, g.dep / 2, { ax: 0.18, ay: 0.76, g })]; };
+const baskets = g => { const x = (g.len - Math.min(28, g.len - 1)) / 2 + 1.2; return [gearAt('basketballkorb', 'gespiegelt', x, g.dep / 2, { ax: 0.25, ay: 1.12, g }), gearAt('basketballkorb', 'seitlich', g.len - x, g.dep / 2, { ax: 0.75, ay: 1.12, g })]; };
 const TEMPLATES = [
   { id: 'leer', label: 'Leere Halle', make: () => ({}) },
-  { id: 'z2', label: 'Zwei Bereiche', make: () => ({ items: zonesAcross(2) }) },
-  { id: 'z3', label: 'Drei Bereiche', make: () => ({ items: zonesAcross(3) }) },
-  { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: () => { const z = zonesAcross(4), w = (HALL.len - 1 - 3 * 0.6) / 4;
-    return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, 14.2, { ay: 0.8 }), gearAt('kleintor', 'hinten', cx, 0.8, { ay: 0.97 })]; })] }; } },
-  { id: 'badminton', label: 'Badminton (vier Felder mit Netz)', make: () => ({ lines: ['badminton'], items: badmintonCourts().map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, HALL.dep / 2, { ay: 0.97, L: 6.3 })) }) },
-  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', HALL.len / 2, HALL.dep / 2, { L: 9.6, ax: 0.5, ay: 0.65 })] }) },
-  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball'], items: baskets() }) },
-  { id: 'handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball'], items: goals() }) },
-  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball'], items: goals() }) },
+  { id: 'z2', label: 'Zwei Bereiche', make: g => ({ items: zonesAcross(2, g) }) },
+  { id: 'z3', label: 'Drei Bereiche', make: g => ({ items: zonesAcross(3, g) }) },
+  { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: g => { const z = zonesAcross(4, g), w = (g.len - 1 - 3 * 0.6) / 4;
+    return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, g.dep - 0.8, { ay: 0.8, g }), gearAt('kleintor', 'hinten', cx, 0.8, { ay: 0.97, g })]; })] }; } },
+  { id: 'badminton', label: 'Badminton (Felder mit Netz)', make: g => ({ lines: ['badminton'], items: badmintonCourts(g).map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, g.dep / 2, { ay: 0.97, L: 6.3, g })) }) },
+  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: g => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', g.len / 2, g.dep / 2, { L: Math.min(9.6, g.dep - 0.6), ax: 0.5, ay: 0.65, g })] }) },
+  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: g => ({ lines: ['basketball'], items: baskets(g) }) },
+  { id: 'handball', label: 'Handball (Feld mit Toren)', make: g => ({ lines: ['handball'], items: goals(g) }) },
+  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: g => ({ lines: ['fussball'], items: goals(g) }) },
 ];
 // Lehrkraft vorn an der Mittellinie (Nutzerentscheidung 14.11.2026: in jedem Plan, ohne Text, Größe 0,6)
-const teacherItem = () => itemAt('teacher', HALL.len / 2, 0.6, { size: FIGURE });
+const teacherItem = g => itemAt('teacher', g.len / 2, 0.6, { size: FIGURE, g });
 // ---------- Themen (seit 2.1.0): eigene Liste in sport.hallTopics, Auswahl statt freier Eingabe ----------
 export const topics = () => sp().hallTopics || [];
 const NEW_TOPIC = '__neu__';
@@ -522,20 +576,112 @@ const lessons = () => [...new Set(sp().halls.map(h => h.lesson).filter(Boolean))
 const datalist = (id, list) => `<datalist id="${id}">${list.map(x => `<option value="${esc(x)}">`).join('')}</datalist>`;
 const checkLimit = (n = 1) => { if (sp().halls.filter(h => !h.demo).length + n > store.HALL_MAX) throw new Error(`Es sind höchstens ${store.HALL_MAX} Hallenpläne möglich. Bitte zuerst alte Pläne löschen.`); };
 
+// Halle für einen neuen Plan: die Standardhalle der gewählten Lerngruppe, sonst die Halle des geöffneten Plans
+export function defaultGym() {
+  const lg = groups.active(), own = lg && groups.sportView(lg).gym;
+  return gymById(own)?.id || gymOf(plan())?.id || '';
+}
+const gymOptions = cur => `<option value="" ${cur ? '' : 'selected'}>${esc(gymLabel(null))}</option>${gyms().map(g => `<option value="${esc(g.id)}" ${g.id === cur ? 'selected' : ''}>${esc(gymLabel(g))}</option>`).join('')}`;
 export function newPlanDialog(topic = '', lesson = '') {
+  const cur = defaultGym();
   dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
     <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen" required></label>
     ${lesson ? `<p class="small-text">Stunde: <b>${esc(lesson)}</b> – wird dort als nächste Phase angelegt.</p>` : ''}
     ${topicField(topic, '– ordnet die Sammlung')}
+    <label class="field">Halle<select name="gym" class="select">${gymOptions(cur)}</select></label>
     <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
-    <p class="muted small-text">Halle 27 m × 15 m, Geräte maßstäblich (Kleingeräte etwas größer). Die Lehrkraft steht schon vorn an der Mittellinie. Spielfeldlinien lassen sich später ein- und ausschalten. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
+    <p class="muted small-text">Fläche und Spielfeldlinien passen sich der Halle an, Geräte sind maßstäblich (Kleingeräte etwas größer); die festen Geräte der Halle sind schon da. Die Lehrkraft steht vorn an der Mittellinie. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       checkLimit();
-      const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make();
-      const p = { id: uid(), title: t, topic: readTopic(fd), lesson, phase: lesson ? nextPhase(lesson) : 0, floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []), teacherItem()] };
-      sel = []; store.update(s => { addTopic(s, p.topic); s.sport.halls.push(p); s.sport.activeHall = p.id; });
+      const gy = gymById(String(fd.get('gym') || '')), g = geo(gy);
+      const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make(g);
+      // Geräte, die in der Halle fest stehen (z. B. Tore, Körbe), nicht noch einmal hineinstellen
+      const fixed = new Set((gy?.items || []).filter(i => i.kind === 'gear').map(i => i.gear));
+      const items = (tpl.items || []).filter(i => i.kind !== 'gear' || !fixed.has(i.gear));
+      const p = { id: uid(), title: t, topic: readTopic(fd), lesson, phase: lesson ? nextPhase(lesson) : 0, ...(gy ? { gym: gy.id } : {}), floor: 'halle', v: 3, lines: tpl.lines || [], items: [...items, teacherItem(g)] };
+      sel = []; baseEdit = null; store.update(s => { addTopic(s, p.topic); s.sport.halls.push(p); s.sport.activeHall = p.id; });
     }, onOpen: topicOpen });
+}
+
+// Geöffneten Plan in eine andere Halle legen ('' = Standardhalle); die Elemente passen sich der neuen Fläche an
+export function setPlanGym(id) {
+  const p = plan(); if (!p || p.base || (p.gym || '') === (id || '')) return;
+  const to = gymById(id), a = G(p), b = geo(to);
+  sel = [];
+  commit(x => { x.items = refitItems(x.items, a, b); if (to) x.gym = to.id; else delete x.gym; });
+  toast(`„${p.title}“ liegt jetzt in ${to ? `„${to.name}“` : 'der Standardhalle'} (${gymSize(to)}).`);
+}
+// Standardhalle einer Lerngruppe ('' = keine eigene Halle)
+export function setGroupGym(lgId, id) { store.update(s => { const k = groups.sportPart(s, lgId); if (!k) return; if (id) k.gym = id; else delete k.gym; }); }
+
+// Halle anlegen oder ändern: Name, Maße, Lerngruppen (Standardhalle); bei einer neuen Halle optional den geöffneten Plan hineinlegen
+const PRESETS = [['Einfeldhalle', 27, 15], ['Zweifeldhalle', 45, 22], ['Dreifeldhalle', 45, 27]];
+export function gymDialog(gym = null) {
+  const lgs = groups.list(), active = groups.active(), p = plan() && !plan().base ? plan() : null;
+  const isOf = lg => (gym ? groups.sportView(lg).gym === gym.id : lg.id === active?.id && !gymById(groups.sportView(lg).gym));
+  const n = gym ? sp().halls.filter(x => x.gym === gym.id).length : 0;
+  dialog({ title: gym ? 'Halle bearbeiten' : 'Neue Halle', submit: gym ? 'Speichern' : 'Anlegen', wide: true, body: `
+    <label class="field">Name<input name="name" class="input" maxlength="40" value="${esc(gym?.name || '')}" placeholder="z. B. Dreifeldhalle Schulzentrum" required></label>
+    <div class="two"><label class="field">Länge in m <small class="muted">(von links nach rechts)</small><input name="len" type="number" class="input" min="${GYM_LEN[0]}" max="${GYM_LEN[1]}" step="0.5" value="${gym?.len ?? 27}" required></label>
+    <label class="field">Breite in m <small class="muted">(von vorn nach hinten)</small><input name="dep" type="number" class="input" min="${GYM_DEP[0]}" max="${GYM_DEP[1]}" step="0.5" value="${gym?.dep ?? 15}" required></label></div>
+    <p class="small-text gym-presets">Übliche Maße: ${PRESETS.map(([l, a, b]) => `<button type="button" class="link" data-preset="${a},${b}">${l} ${a} × ${b} m</button>`).join(' · ')}</p>
+    ${lgs.length ? `<fieldset class="field gym-groups"><legend>Standardhalle für <small class="muted">– neue Pläne dieser Lerngruppen entstehen in dieser Halle</small></legend>
+      ${lgs.map(lg => `<label class="check"><input type="checkbox" name="lg" value="${esc(lg.id)}" ${isOf(lg) ? 'checked' : ''}> ${esc(lg.name)} <small class="muted">${esc(lg.subject)}${!isOf(lg) && gymById(groups.sportView(lg).gym) ? ' · jetzt: ' + esc(gymById(groups.sportView(lg).gym).name) : ''}</small></label>`).join('')}</fieldset>` : ''}
+    ${!gym && p ? `<label class="check"><input type="checkbox" name="move" checked> Den geöffneten Plan „${esc(p.title)}“ in diese Halle legen</label>` : ''}
+    ${gym ? `<p class="small-text muted">${n ? `${n} ${n === 1 ? 'Plan liegt' : 'Pläne liegen'} in dieser Halle. Neue Maße: Bereiche und Elemente passen sich an, Geräte bleiben maßstäblich.` : 'Noch kein Plan in dieser Halle.'}</p>
+      <p class="gym-actions"><button type="button" class="btn ghost sm" data-gym-base>${icon('edit', 15)} Feste Geräte einzeichnen</button> <button type="button" class="btn ghost sm danger" data-gym-del>${icon('trash', 15)} Halle löschen</button></p>`
+      : '<p class="muted small-text">Danach zeichnest du die festen Geräte ein – Tore, Körbe, Türen, Geräteraumtor –, die in jedem Plan dieser Halle stehen. Maße und Lage der Türen vor Ort prüfen.</p>'}`,
+    onOpen: (el, close) => {
+      el.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { const [a, c] = b.dataset.preset.split(','); el.querySelector('[name=len]').value = a; el.querySelector('[name=dep]').value = c; });
+      el.querySelector('[data-gym-base]')?.addEventListener('click', () => { close(); editGym(gym.id); });
+      el.querySelector('[data-gym-del]')?.addEventListener('click', () => { close(); deleteGym(gym); });
+    },
+    onSubmit: fd => {
+      const name = String(fd.get('name') || '').trim().slice(0, 40); if (!name) throw new Error('Bitte einen Namen eingeben.');
+      const len = Number(fd.get('len')), dep = Number(fd.get('dep'));
+      if (!(len >= GYM_LEN[0] && len <= GYM_LEN[1])) throw new Error(`Die Länge muss zwischen ${GYM_LEN[0]} und ${GYM_LEN[1]} m liegen.`);
+      if (!(dep >= GYM_DEP[0] && dep <= GYM_DEP[1])) throw new Error(`Die Breite muss zwischen ${GYM_DEP[0]} und ${GYM_DEP[1]} m liegen.`);
+      if (gyms().some(x => x.id !== gym?.id && x.name.toLocaleLowerCase('de') === name.toLocaleLowerCase('de'))) throw new Error(`Eine Halle „${name}“ gibt es schon.`);
+      if (!gym && gyms().length >= store.GYM_MAX) throw new Error(`Es sind höchstens ${store.GYM_MAX} Hallen möglich.`);
+      const g2 = geo({ len, dep }), chosen = new Set(fd.getAll('lg').map(String)), id = gym?.id || uid();
+      store.update(s => {
+        if (!gym) s.sport.gyms.push({ id, name, len: g2.len, dep: g2.dep, items: [] });
+        else {
+          const x = s.sport.gyms.find(y => y.id === id), a = geo(x);
+          x.name = name;
+          if (a.key !== g2.key) {   // neue Maße: feste Geräte und alle Pläne dieser Halle anpassen
+            x.items = refitItems(x.items, a, g2); x.len = g2.len; x.dep = g2.dep;
+            s.sport.halls.forEach(h => { if (h.gym === id) { h.items = refitItems(h.items, a, g2); history.delete(h.id); } });
+            history.delete('gym:' + id);
+          }
+        }
+        for (const lg of lgs) {
+          const has = groups.sportView(lg).gym === id;
+          if (chosen.has(lg.id) && !has) groups.sportPart(s, lg.id).gym = id;
+          else if (!chosen.has(lg.id) && has) delete groups.sportPart(s, lg.id).gym;
+        }
+      });
+      if (gym) return toast(`Halle „${name}“ gespeichert.`);
+      if (fd.get('move') === 'on') setPlanGym(id);
+      editGym(id);
+      toast(`Halle „${name}“ angelegt – jetzt Tore, Körbe und Türen einzeichnen. „Fertig“ führt zurück zum Plan.`);
+    } });
+}
+// Halle löschen: Ihre Pläne kommen in die Standardhalle und behalten die festen Geräte als eigene Elemente
+async function deleteGym(gym) {
+  const n = sp().halls.filter(x => x.gym === gym.id).length;
+  if (!(await confirmDialog('Halle löschen', `„${gym.name}“ löschen?${n ? ` ${n === 1 ? 'Der Plan in dieser Halle kommt' : `Die ${n} Pläne in dieser Halle kommen`} in die Standardhalle; die festen Geräte werden dabei in ${n === 1 ? 'den Plan' : 'die Pläne'} übernommen.` : ''}`, 'Löschen'))) return;
+  if (baseEdit === gym.id) baseEdit = null;
+  sel = [];
+  store.update(s => {
+    const a = geo(gym);
+    s.sport.halls.forEach(h => { if (h.gym !== gym.id) return; h.items = refitItems([...gym.items.map(i => ({ ...structuredClone(i), id: uid() })), ...h.items], a, STD); delete h.gym; history.delete(h.id); });
+    s.sport.groups.forEach(x => { if (x.gym === gym.id) delete x.gym; });
+    s.sport.gyms = s.sport.gyms.filter(x => x.id !== gym.id);
+  });
+  history.delete('gym:' + gym.id);
+  toast(`Halle „${gym.name}“ gelöscht.`);
 }
 
 // Name, Thema, Stunde und Phase eines Plans
@@ -590,6 +736,16 @@ const fileName = t => String(t).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, '
 export const importPlansDialog = () => hooks.importDialog?.();
 export function applyPlans(plans, { replace = false, topic = '' } = {}) {
   plans.forEach(p => { p.topic = topicName(p.topic || topic); });
+  // Hallen aus der Datei (seit 2.10.0): gleiche Halle (Name und Maße) wird wiederverwendet, sonst neu angelegt
+  const newGyms = [];
+  plans.forEach(p => {
+    const d = p.gymDef; delete p.gymDef; if (!d) return;
+    const same = x => x.name.toLocaleLowerCase('de') === d.name.toLocaleLowerCase('de') && x.len === d.len && x.dep === d.dep;
+    let g = gyms().find(same) || newGyms.find(same);
+    if (!g && gyms().length + newGyms.length < store.GYM_MAX) { g = { id: uid(), name: d.name, len: d.len, dep: d.dep, items: d.items }; newGyms.push(g); }
+    if (g) p.gym = g.id; else p.items = refitItems(p.items, geo(d), STD);
+  });
+  if (newGyms.length) store.update(s => { s.sport.gyms.push(...newGyms); }, { silent: true });
   const names = new Set(sp().halls.map(x => x.title));
   checkLimit(replace ? plans.filter(p => !names.has(p.title)).length : plans.length);
   let replaced = 0;
@@ -627,7 +783,7 @@ async function importImages(files) {
 
 function libDialog() {
   const lib = sp().hallLib, cats = [...new Set(lib.map(e => e.cat))];
-  const usedIds = new Set(sp().halls.flatMap(p => p.items.map(i => i.img).filter(Boolean)));
+  const usedIds = new Set([...sp().halls, ...gyms()].flatMap(p => p.items.map(i => i.img).filter(Boolean)));
   dialog({ title: 'Eigene Bilder verwalten', submit: null, cancel: 'Schließen', wide: true, body: `
     <p class="muted small-text">Entfernt nur Bilder aus der Leiste. Bilder, die in einem Hallenplan stehen, bleiben dort erhalten.</p>
     ${cats.map(c => `<div class="h-libcat"><b>${esc(c)}</b> <span class="muted">${lib.filter(e => e.cat === c).length}</span> <button type="button" class="link small-text" data-delcat="${esc(c)}">Gruppe entfernen</button></div>`).join('')}

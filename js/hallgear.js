@@ -2,7 +2,7 @@
 // Jedes Gerät wird aus einfachen Körpern (Quader, Stangen, Scheiben, Kugeln) in Metern beschrieben und
 // in derselben Schrägansicht wie die Hallenfläche gezeichnet: Tiefe nach hinten = nach oben mit dem
 // waagerechten Versatz K, Höhe senkrecht nach oben. Vorderseite, rechte Seite und Oberseite sind sichtbar.
-import { K, FLOOR, HALL } from './hallfloor.js';
+import { K, STD } from './hallfloor.js';
 export { K };
 const U = 110;            // Zeichen-Einheiten je Meter (im Plan auf den Maßstab der Halle verkleinert, siehe scaleOf)
 const F = 0.62;           // Verkürzung der Tiefe
@@ -456,9 +456,9 @@ export function gearSize(id, view, L) {
   return { w: Math.round(r.w), h: Math.round(r.h) };
 }
 export const isStretch = (id, view) => !!GEAR[id]?.stretch && !SWAP.has(view);
-// Maßstab im Plan: Geräte passen zur Halle (27 m = Breite der Hallenfläche); Kleingeräte bleiben zur Erkennbarkeit größer
-const TRUE = FLOOR.width / HALL.len / U;
-export const scaleOf = id => (GEAR[id]?.group === G4 ? 0.8 : TRUE);
+// Maßstab im Plan: Geräte passen zur Halle (g = Geometrie aus hallfloor.geo, ohne Angabe die Standardhalle 27 m × 15 m);
+// Kleingeräte bleiben zur Erkennbarkeit größer und in jeder Halle gleich groß
+export const scaleOf = (id, g = STD) => (GEAR[id]?.group === G4 ? 0.8 : g.s / U);
 // Länge (m) und Größenfaktor eines Elements aus seinem Rahmen; dehnbare Geräte werden länger statt verzerrt
 export function fit(i) {
   const g = GEAR[i.gear]; if (!g) return { L: 1, s: 1 };

@@ -1,6 +1,7 @@
 // Bereich Hallenpläne (seit 2.0.0): links die Sammlung (seit 2.3.0 umschaltbar nach Stunden oder nach Themen, mit Suche), rechts der Editor (hall.js).
 import * as store from './store.js';
 import * as hall from './hall.js';
+import * as groups from './groups.js';
 import { esc, icon, toggleFullscreen, dialog, confirmDialog, toast } from './ui.js';
 import { enableDrag } from './drag.js';
 
@@ -15,6 +16,7 @@ export function mount(el) {
   root = el;
   const off = store.subscribe(draw);
   el.onclick = onClick;
+  el.onchange = onChange;
   el.oninput = e => { if (e.target.id === 'hall-search') { search = e.target.value; drawLib(); } };
   // Plan aus der Sammlung auf ein Thema bzw. eine Stunde ziehen = dort einordnen (seit 2.1.0 bzw. 2.3.0)
   const offDrag = enableDrag(el, { item: '.hall-lib [data-open]', target: '.hall-lib [data-drop-topic], .hall-lib [data-drop-lesson]',
@@ -22,7 +24,7 @@ export function mount(el) {
       return 'dropLesson' in t.dataset ? (p.lesson || NO_LESSON) !== t.dataset.dropLesson : (p.topic || '') !== t.dataset.dropTopic; },
     onDrop: (a, t) => ('dropLesson' in t.dataset ? setLesson(a.dataset.open, t.dataset.dropLesson === NO_LESSON ? '' : t.dataset.dropLesson) : setTopic(a.dataset.open, t.dataset.dropTopic)) });
   draw();
-  return () => { off(); offDrag(); el.onclick = el.oninput = null; root = null; };
+  return () => { off(); offDrag(); el.onclick = el.onchange = el.oninput = null; root = null; };
 }
 
 function draw() {
@@ -36,10 +38,13 @@ function draw() {
         <h1>Hallenpläne<span class="dot">.</span></h1>
         <p class="sub">Zeichnen, nach Stunden ordnen, groß zeigen.</p>
       </div>
+      <div class="hall-head-right">
+      <div class="pickers no-print no-present">${gymPickerHtml()}${groups.pickerHtml(groups.active(), 'Lerngruppe')}</div>
       <div class="tools no-print">
         <button class="btn ghost sm" data-p="lib">${icon('list', 16)} ${libHidden ? 'Sammlung zeigen' : 'Sammlung ausblenden'}</button>
         <button class="btn ghost sm" data-p="print" title="Schüleransicht: A4 quer mit Titel und Zeichnung, Spielregeln (falls angelegt) auf Seite 2">${icon('print', 16)} Schüleransicht drucken</button>
         <button class="btn ghost sm" data-p="present">${icon(presenting ? 'shrink' : 'expand', 16)} ${presenting ? 'Ansicht verkleinern' : 'Ansicht vergrößern'}</button>
+      </div>
       </div>
     </div>
     <div class="hall-page ${libHidden ? 'no-lib' : ''}">
@@ -155,7 +160,47 @@ function topicsDialog() {
     } });
 }
 
+// Hallenauswahl oben (seit 2.10.0) – wie die Raumauswahl in Gruppen: Halle des geöffneten Plans wählen, als Standardhalle
+// der Lerngruppe merken (Stern), bearbeiten (Stift: Name, Maße, Lerngruppen, feste Geräte), neue Halle anlegen
+function gymPickerHtml() {
+  const p = hall.currentPlan(), editing = hall.editingGym(), lg = groups.active();
+  const cur = editing ? editing.id : p?.gym && hall.gymById(p.gym) ? p.gym : '', def = lg ? hall.gymById(groups.sportView(lg).gym)?.id || '' : null, isDef = lg && cur === def;
+  return `<div class="picker room-picker gym-picker">
+    <label class="eyebrow" for="gym-select">Halle</label>
+    <div class="picker-row">
+      <select id="gym-select" class="select" ${p || editing ? '' : 'disabled'} title="${editing ? 'Feste Geräte dieser Halle werden bearbeitet' : 'Halle des geöffneten Plans'}">
+        <option value="" ${cur ? '' : 'selected'}>${esc(hall.gymLabel(null))}${def === '' ? ' ★' : ''}</option>
+        ${hall.gyms().map(g => `<option value="${esc(g.id)}" ${g.id === cur ? 'selected' : ''}>${esc(hall.gymLabel(g))}${g.id === def ? ' ★' : ''}</option>`).join('')}
+        <option value="__new">+ Neue Halle …</option></select>
+      ${lg && !editing ? `<button class="icon-btn ${isDef ? 'on' : ''}" data-g="gym-default" aria-pressed="${!!isDef}" title="${isDef ? `Standardhalle von ${esc(lg.name)}` : `Als Standardhalle für ${esc(lg.name)} merken – neue Pläne entstehen dann in dieser Halle`}" aria-label="Als Standardhalle merken">${icon('star')}</button>` : ''}
+      ${cur ? `<button class="icon-btn" data-g="gym-edit" title="Halle bearbeiten (Name, Maße, Lerngruppen, feste Geräte)" aria-label="Halle bearbeiten">${icon('edit')}</button>` : ''}
+    </div>
+  </div>`;
+}
+function onChange(e) {
+  const t = e.target;
+  if (t.id === 'lg-select') { groups.setActive(t.value); return; }
+  if (t.id !== 'gym-select') return;
+  const editing = hall.editingGym();
+  if (t.value === '__new') { t.value = editing?.id || hall.currentPlan()?.gym || ''; hall.gymDialog(); return; }
+  if (editing) { if (t.value) hall.editGym(t.value); else hall.stopGymEdit(); return; }
+  hall.setPlanGym(t.value);
+}
 function onClick(e) {
+  const lg = e.target.closest('[data-lg]');
+  if (lg && lg.tagName !== 'SELECT' && lg.closest('.pickers')) { groups.handle(lg, draw); return; }
+  const gb = e.target.closest('[data-g]');
+  if (gb) {
+    const p = hall.currentPlan(), g = groups.active(), cur = hall.editingGym()?.id || (p && !p.base ? hall.gymById(p.gym)?.id || '' : '');
+    if (gb.dataset.g === 'gym-edit') { const gy = hall.gymById(cur); if (gy) hall.gymDialog(gy); return; }
+    if (gb.dataset.g === 'gym-default' && g) {
+      const def = hall.gymById(groups.sportView(g).gym)?.id || '';
+      if (def === cur) { toast(cur ? `„${hall.gymById(cur).name}“ ist schon die Standardhalle von „${g.name}“.` : `„${g.name}“ hat keine eigene Standardhalle (neue Pläne: Standardhalle 27 × 15 m).`); return; }
+      hall.setGroupGym(g.id, cur);
+      toast(cur ? `„${hall.gymById(cur).name}“ ist jetzt die Standardhalle von „${g.name}“ – neue Pläne entstehen dort.` : `„${g.name}“ plant jetzt wieder in der Standardhalle.`);
+    }
+    return;
+  }
   const o = e.target.closest('[data-open]');
   if (o) { hall.openPlan(o.dataset.open); return; }
   const nt = e.target.closest('[data-new-topic]');

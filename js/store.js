@@ -1,12 +1,12 @@
 // Datenhaltung: alles bleibt im Browser dieses Geräts (localStorage) – mit App-Sperre nur verschlüsselt.
 import { uid } from './engine.js';
 import { GEAR, gearSize, scaleOf } from './hallgear.js';
-import { MARKS, fromOldFloor } from './hallfloor.js';
+import { MARKS, fromOldFloor, geo } from './hallfloor.js';
 import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 11;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3)
+export const SCHEMA = 12;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3); 12 = eigene Sporthallen (sport.gyms), Halle je Hallenplan und Standardhalle je Lerngruppe (2.10.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -65,7 +65,7 @@ export function demoQuiz() {
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
   const h = demoHall();
-  return { schema: SCHEMA, active: c.id, technik: { classes: [c], activeId: c.id, rooms: [] }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [], hallTopics: normTopics(undefined, [h]) }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
+  return { schema: SCHEMA, active: c.id, technik: { classes: [c], activeId: c.id, rooms: [] }, sport: { groups: [g], activeId: g.id, halls: [h], activeHall: h.id, hallLib: [], hallTopics: normTopics(undefined, [h]), gyms: [] }, quiz: demoQuiz(), screen: defaultScreen(), welcomed: false };
 }
 
 let state;
@@ -233,7 +233,7 @@ function normClass(c, rooms = []) {
       ...(int(st.icols, 0, 6, 0) ? { icols: int(st.icols, 1, 6, 2) } : {}) },
     rules: (Array.isArray(c?.rules) ? c.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1]) && r[0] !== r[1]).map(r => [r[0], r[1]]), plan };
 }
-function normSport(g) {
+function normSport(g, gymIds = new Set()) {
   const students = (Array.isArray(g?.students) ? g.students : []).filter(s => s && s.id && str(s.name)).slice(0, 120).map(s => ({ id: String(s.id), name: str(s.name, 40), className: str(s.className, 20) }));
   const ids = new Set(students.map(s => s.id));
   const num = v => (v === null || v === '' || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -253,6 +253,8 @@ function normSport(g) {
     sessions: (s.sessions || []).map(x => ({ id: String(x.id || uid()), date: str(x.date, 10), title: str(x.title, 80), tournamentId: x.tournamentId || null,
       points: Object.fromEntries(Object.entries(x.points || {}).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)])) })) }));
   return { id: String(g?.id || uid()), name: str(g?.name, 60) || 'Sportgruppe', subject: str(g?.subject, 30) || 'Sport', demo: !!g?.demo, students, teamCount: int(g?.teamCount, 2, 20, 4),
+    // Standardhalle der Lerngruppe (seit 2.10.0): neue Hallenpläne entstehen in dieser Halle
+    ...(gymIds.has(g?.gym) ? { gym: String(g.gym) } : {}),
     rules: (Array.isArray(g?.rules) ? g.rules : []).filter(r => Array.isArray(r) && ids.has(r[0]) && ids.has(r[1])).map(r => [r[0], r[1]]),
     teams: (Array.isArray(g?.teams) ? g.teams : []).map(t => ({ id: String(t.id || uid()), name: str(t.name, 40), members: (t.members || []).filter(id => ids.has(id)) })),
     tournaments, series };
@@ -290,8 +292,26 @@ function toScale(i) {
   const f = scaleOf(i.gear), nw = Math.round(w * f), nh = Math.round(h * f);
   return { ...i, x: Math.round((Number(i.x) || 0) + (w - nw) / 2), y: Math.round((Number(i.y) || 0) + (h - nh) * 0.8), w: nw, h: nh };
 }
-function normHalls(list) {
+// Elemente eines Hallenplans bzw. die festen Geräte einer Halle (Einheiten der Zeichenfläche)
+const normHallItems = (list, max = 400) => (Array.isArray(list) ? list : []).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, max).map(i => ({
+      id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
+      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}),
+      ...(i.kind === 'zone' && FORM_IDS.includes(i.form) && i.form !== 'rect' ? { form: i.form, tx: bandOf(Number(i.tx)), ty: bandOf(Number(i.ty)) } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
+      ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) }));
+// Eigene Sporthallen (seit 2.10.0): Name, Länge (links–rechts) und Breite (vorn–hinten) in m, feste Geräte (Tore, Körbe,
+// Türen, Geräteraum …) in Einheiten der Zeichenfläche dieser Halle. Pläne ohne Halle zeigen die Standardhalle 27 m × 15 m.
+export const GYM_MAX = 20;
+function normGyms(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).filter(g => g && typeof g === 'object').slice(0, GYM_MAX).map(g => {
+    const d = geo(g), id = ID_RE.test(g.id) && !seen.has(g.id) ? String(g.id) : uid(); seen.add(id);
+    return { id, name: str(g.name, 40) || 'Halle', len: d.len, dep: d.dep, items: normHallItems(g.items, 200) };
+  });
+}
+function normHalls(list, gymIds = new Set()) {
   return (Array.isArray(list) ? list : []).slice(0, HALL_MAX).map(p => ({ id: String(p?.id || uid()), title: str(p?.title, 80) || 'Hallenplan', demo: !!p?.demo,
+    // Halle (seit 2.10.0): Kennung einer eigenen Halle; ohne Angabe die Standardhalle
+    ...(gymIds.has(p?.gym) ? { gym: String(p.gym) } : {}),
     // Thema, Stunde und Phase (seit 2.0.0): ordnen die Sammlung; Phase 0 = keine Phase
     topic: str(p?.topic, 60), lesson: str(p?.lesson, 80), phase: p?.lesson ? int(p?.phase, 1, 20, 1) : 0,
     // Spielregeln (seit 2.2.0): optional, Seite 2 der Schüleransicht
@@ -299,11 +319,7 @@ function normHalls(list) {
     floor: ['halle', 'linien', 'leer'].includes(p?.floor) ? p.floor : 'halle',
     // v 2 = Halle 27 m × 15 m (seit 1.15), v 3 = Geräte maßstäblich (seit 1.16); ältere Pläne werden einmal umgerechnet
     v: 3, lines: MARKS.map(m => m.id).filter(m => Array.isArray(p?.lines) && p.lines.includes(m)),
-    items: (Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && !(p.v >= 2) ? fromOldFloor(i) : i)).map(i => (i && !(p.v >= 3) ? toScale(i) : i)).filter(i => i && HALL_KINDS.includes(i.kind) && (i.kind !== 'img' || IMG_RE.test(i.img)) && (i.kind !== 'gear' || GEAR_RE.test(i.gear))).slice(0, 400).map(i => ({
-      id: String(i.id || uid()), kind: i.kind, x: int(i.x, -400, 2000, 100), y: int(i.y, -400, 1400, 100), w: int(i.w, 8, 2000, 80), h: int(i.h, 8, 1400, 80),
-      rot: int(i.rot, -360, 360, 0), ...(COLOR_RE.test(i.color) ? { color: i.color } : {}),
-      ...(i.kind === 'zone' && FORM_IDS.includes(i.form) && i.form !== 'rect' ? { form: i.form, tx: bandOf(Number(i.tx)), ty: bandOf(Number(i.ty)) } : {}), ...(i.text ? { text: str(i.text, 60) } : {}), ...(i.kind === 'img' ? { img: i.img } : {}),
-      ...(i.kind === 'gear' ? { gear: i.gear, view: VIEW_RE.test(i.view) && (!GEAR[i.gear] || GEAR[i.gear].views.includes(i.view)) ? i.view : (GEAR[i.gear]?.views[0] || 'quer') } : {}) })) }));
+    items: normHallItems((Array.isArray(p?.items) ? p.items : []).map(oldGear).map(i => (i && !(p.v >= 2) ? fromOldFloor(i) : i)).map(i => (i && !(p.v >= 3) ? toScale(i) : i))) }));
 }
 function normHallLib(list) {
   const seen = new Set();
@@ -374,22 +390,23 @@ export function normTopics(list, halls = []) {
   halls.forEach(h => add(h.topic));
   return out;
 }
-function hallPart(sp) {
+function hallPart(sp, gyms) {
   // Ältere Stände ohne Hallenpläne bekommen das Beispiel
-  const halls = Array.isArray(sp?.halls) ? normHalls(sp.halls) : [demoHall()];
-  return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib), hallTopics: normTopics(sp?.hallTopics, halls) };
+  const halls = Array.isArray(sp?.halls) ? normHalls(sp.halls, new Set(gyms.map(g => g.id))) : [demoHall()];
+  return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib), hallTopics: normTopics(sp?.hallTopics, halls), gyms };
 }
 export function normalize(raw) {
   const fresh = freshState();
   if (!raw || typeof raw !== 'object') return fresh;
   const rooms = normRooms(raw.technik?.rooms);
   const classes = (raw.technik?.classes || []).map(c => normClass(c, rooms));
-  const groups = (raw.sport?.groups || []).map(normSport);
+  const gyms = normGyms(raw.sport?.gyms), gymIds = new Set(gyms.map(g => g.id));
+  const groups = (raw.sport?.groups || []).map(g => normSport(g, gymIds));
   const known = id => classes.some(c => c.id === id) || groups.some(g => g.id === id);
   const active = known(raw.active) ? raw.active : known(raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? groups[0]?.id ?? null;
   return { schema: SCHEMA, active,
     technik: { classes, activeId: classes.some(c => c.id === raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? null, rooms },
-    sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null, ...hallPart(raw.sport) },
+    sport: { groups, activeId: groups.some(g => g.id === raw.sport?.activeId) ? raw.sport.activeId : groups[0]?.id ?? null, ...hallPart(raw.sport, gyms) },
     quiz: normQuiz(raw.quiz), screen: normScreen(raw.screen), welcomed: !!raw.welcomed };
 }
 
@@ -428,6 +445,7 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.active = incoming.technik.classes[0]?.id ?? incoming.sport.groups[0]?.id ?? next.active;
   next.sport.halls = merge(next.sport.halls, incoming.sport.halls.filter(h => !h.demo));
   next.sport.hallLib = merge(next.sport.hallLib, incoming.sport.hallLib);
+  next.sport.gyms = merge(next.sport.gyms || [], incoming.sport.gyms || []);
   next.sport.hallTopics = normTopics([...(next.sport.hallTopics || []), ...(incoming.sport.hallTopics || [])], next.sport.halls);
   const iq = incoming.quiz, nq = next.quiz;
   nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions);

@@ -109,6 +109,7 @@ export function idsIn(quiz) {
 export function hallIdsIn(sport) {
   const ids = new Set((sport?.hallLib || []).map(e => e.id));
   (sport?.halls || []).forEach(p => p.items.forEach(i => { if (i.img) ids.add(i.img); }));
+  (sport?.gyms || []).forEach(g => g.items.forEach(i => { if (i.img) ids.add(i.img); }));   // feste Geräte eigener Hallen (seit 2.10.0)
   return [...ids].filter(x => ID_RE.test(x));
 }
 // Alles, was die App an Bildern braucht (Quiz und Hallenpläne) – für Sicherung, Konto-Abgleich und Aufräumen
