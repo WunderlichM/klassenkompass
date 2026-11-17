@@ -172,10 +172,11 @@ function seatBox(c, x, off) {
   const k = x.k !== undefined ? ` data-seat="${esc(x.k)}"` : '';
   if (!x.id) return `<div class="seat free"${k}><span>${x.k !== undefined ? 'frei' : ''}</span></div>`;
   const name = nameOf(c, x.id), away = off?.has(x.id);
-  return `<div class="seat ${away ? 'away' : ''} ${name.length > 11 ? 'xlong' : name.length > 8 ? 'long' : ''}" data-pid="${esc(x.id)}"${k} style="${x.g >= 0 ? palStyle(x.g) : ''}" title="${esc(name)}${away ? ' – fehlt heute' : ''}"><span>${esc(name)}</span>${away ? '<small>fehlt</small>' : ''}</div>`;
+  return `<div class="seat ${away ? 'away' : ''} ${x.g >= 0 ? 'in-g' : ''} ${name.length > 11 ? 'xlong' : name.length > 8 ? 'long' : ''}" data-pid="${esc(x.id)}"${k} style="${x.g >= 0 ? palStyle(x.g) : ''}" title="${esc(name)}${away ? ' – fehlt heute' : ''}"><span>${esc(name)}</span>${away ? '<small>fehlt</small>' : ''}</div>`;
 }
 // Zweiertisch: Tischnummer klein in der Ecke, bei gemischten Gruppen die Gruppenfarbe auf dem ganzen Tisch
 const deskHtml = (c, t, off, no = true) => `<div class="table ${t.empty ? 'empty' : t.g >= 0 ? 'grouped' : 'plain'}" style="${t.g >= 0 ? palStyle(t.g) : ''}">${no && t.no ? `<i class="tno">${t.g >= 0 ? `<b class="gtag">G${t.g + 1}</b>` : ''}${t.no}</i>` : ''}<div class="pair">${t.seats.map(x => seatBox(c, x, off)).join('')}</div></div>`;
+// Legend der Gruppen – seit 2.9.6 unter dem Plan statt darüber
 const legend = c => c.plan.groups.length > 1
   ? `<div class="legend">${c.plan.groups.map((g, gi) => `<span class="legend-item" style="${palStyle(gi)}"><span class="gdot"></span>Gruppe ${gi + 1}<em>${g.length}</em></span>`).join('')}</div>` : '';
 
@@ -222,10 +223,10 @@ function roomIn(c, d, off, r, L) {
   // Gruppenfarbe je Tisch: Gruppe des ersten belegten Platzes
   const colorOf = new Map();
   if (!std) for (const it of seated) { const n = rooms.seatsOf(it); for (let i = 0; i < n; i++) { const e = at(it.id + ':' + i); if (e.id && e.g >= 0) { colorOf.set(it.id, e.g); break; } } }
-  const html = `<div class="room v2 raum ${L} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}">${std ? '' : legend(c)}${over ? `<p class="notice">Im Raum fehlen ${over} ${over === 1 ? 'Platz' : 'Plätze'} – im Raumplaner Plätze ergänzen.</p>` : ''}${rooms.roomHtml(rooms.compose(r, seated), { flip,
+  const html = `<div class="room v2 raum ${L} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}">${over ? `<p class="notice">Im Raum fehlen ${over} ${over === 1 ? 'Platz' : 'Plätze'} – im Raumplaner Plätze ergänzen.</p>` : ''}${rooms.roomHtml(rooms.compose(r, seated), { flip,
     seat: k => seatBox(c, at(k), off),
     itemClass: it => (colorOf.has(it.id) ? ['grouped', palStyle(colorOf.get(it.id))] : ['plain', '']),
-    tag: it => String(tagOf(it) ?? '') })}</div>`;
+    tag: it => String(tagOf(it) ?? '') })}${std ? '' : legend(c)}</div>`;
   return { html, outside };
 }
 
@@ -235,11 +236,11 @@ function room(c, d, off, r = null) {
   const L = d ? d.layout : c.settings.layout, std = !!d;
   if (r) return roomIn(c, d, off, r, L).html;
   const front = `<div class="front"><div class="art-board" role="img" aria-label="Tafel">${art('board', 4.4, 0.2, flip ? 'n' : 's')}</div><div class="art-desk" role="img" aria-label="Schreibtisch">${art('desk', 1.6, 0.8, flip ? 'n' : 's', { chair: true })}</div></div>`, back = `<div class="back">${flip ? 'Hinten (Blick von der Tafel)' : 'Hinten'}</div>`;
-  const wrap = (cls, body, style = '') => `<div class="room v2 ${cls} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}" style="${style}">${flip ? back + body + front : front + body + back}</div>`;
+  const wrap = (cls, body, style = '', after = '') => `<div class="room v2 ${cls} ${std ? 'std' : 'mix'} ${flip ? 'flip' : ''}" style="${style}">${flip ? back + body + front : front + body + back}${after}</div>`;
   if (L === 'omnibus') {
     let tables = tablesOf(c, d); const cols = colsOf(d ? d.cols : c.settings.cols, tables.length);
     if (flip) tables = tables.slice().reverse().map(turn);
-    return wrap('omnibus', `${std ? '' : legend(c)}<div class="rows">${tables.map(t => deskHtml(c, t, off)).join('')}</div>`, `--cols:${cols}`);
+    return wrap('omnibus', `<div class="rows">${tables.map(t => deskHtml(c, t, off)).join('')}</div>`, `--cols:${cols}`, std ? '' : legend(c));
   }
   if (L === 'gruppen') {
     // Gruppentisch aus zusammengeschobenen Zweiertischen; ein übrig bleibender Tisch steht quer an der Stirnseite
@@ -256,7 +257,7 @@ function room(c, d, off, r = null) {
     let left = tables.slice(0, side), bottom = tables.slice(side, n - side), right = tables.slice(n - side).reverse();
     if (flip) [left, bottom, right] = [right.slice().reverse().map(turn), bottom.slice().reverse().map(turn), left.slice().reverse().map(turn)];
     const t = x => deskHtml(c, x, off, false);
-    return wrap('uform', `${std ? '' : legend(c)}<div class="u"><div class="u-left">${left.map(t).join('')}</div><div class="u-mid">Offene Mitte</div><div class="u-right">${right.map(t).join('')}</div><div class="u-bottom">${bottom.map(t).join('')}</div></div>`);
+    return wrap('uform', `<div class="u"><div class="u-left">${left.map(t).join('')}</div><div class="u-mid">Offene Mitte</div><div class="u-right">${right.map(t).join('')}</div><div class="u-bottom">${bottom.map(t).join('')}</div></div>`, '', std ? '' : legend(c));
   }
   const flat = d ? d.seats.map((id, k) => ({ id, g: -1, k })) : c.plan.groups.flatMap((g, gi) => g.map(id => ({ id, g: gi })));
   if (L === 'sitzkreis' || L === 'stehkreis') {

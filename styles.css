@@ -1529,3 +1529,13 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 @media print { .rp-top, .rp-art, .room.v2 .table, .room.v2 .table::before, .room.v2 .table::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 .room.v2 .table.grouped { background: linear-gradient(100deg, rgba(255,255,255,.22), rgba(255,255,255,0) 35%, rgba(120,90,50,.08)), color-mix(in srgb, var(--g-bg) 50%, #dcc198); }
 [data-theme="dark"] .room.v2 .table.grouped { background: color-mix(in srgb, var(--g-bg) 55%, #8f7a58); }
+
+/* Gruppenfarben kräftiger (seit 2.9.6): bei „Gemischt“ sind Plätze, Tischplatten und Tischinseln deutlich in der
+   Farbe ihrer Gruppe getönt, damit die Gruppen im Plan auch klein (Handy) sofort erkennbar sind */
+.room.v2.mix .seat.in-g:not(.away) { background: color-mix(in srgb, var(--g-dot) 34%, var(--card)); border: 2px solid var(--g-dot); color: var(--ink); }
+.room.v2.mix .seat.in-g.away { border-color: var(--g-dot); }
+.room.v2.mix .table.grouped { background: color-mix(in srgb, var(--g-dot) 55%, #dcc198); border: 2.5px solid color-mix(in srgb, var(--g-dot) 75%, #000); }
+.room.v2.mix .rp-it.grouped .rp-top { border: 3px solid color-mix(in srgb, var(--g-dot) 75%, #000); background: color-mix(in srgb, var(--g-dot) 60%, #dcc198); }
+.room.v2.mix .island[style*="--g-dot"] { background: color-mix(in srgb, var(--g-dot) 20%, var(--surface)); border: 2px solid var(--g-dot); }
+.room.v2 > .legend { margin: 4px 0 0; }
+@media print { .room.v2.mix .seat.in-g, .room.v2.mix .table.grouped, .room.v2.mix .island { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

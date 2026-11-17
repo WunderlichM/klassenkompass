@@ -2,6 +2,11 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.9.6
+
+- **Gruppenlegende unter dem Plan (`js/gruppen.js`):** Bei „Gemischt“ steht die Legende („Gruppe 1 · 5“ …) nicht mehr über, sondern unter dem Sitzplan – im Raum unter dem Grundriss, bei Omnibus und U-Form unter „Hinten“ (bei „Blick von der Tafel“ unter der Tafel).
+- **Gruppenfarben kräftiger (`styles.css`):** Plätze (`.seat.in-g`), Tischplatten und Tischinseln sind deutlich in der Farbe ihrer Gruppe getönt und kräftig umrandet, auch im maßstäblichen Raum und im Druck. Der Standardsitzplan bleibt ohne Gruppenfarben. Kein neuer Datenstand.
+
 ## Neu in 2.9.5
 
 - **Ganzer Raum ohne Scrollen (`js/gruppen.js`, `js/room.js`, `styles.css`):** Die Sitzordnung – mit und ohne Raum, in allen Organisationsformen, im Standardsitzplan und bei „Gemischt“ – passt auf Handy, Tablet und PC immer ganz ins Fenster, weder seitlich noch nach unten muss gescrollt werden. `fitRoom()` misst die freie Fensterhöhe (ohne feste Kopfleiste und Rahmen) und begrenzt den maßstäblichen Raum entsprechend in der Breite; die übrigen Darstellungen werden über `zoom` in Breite und Höhe eingepasst. Die Mindestgröße mit seitlichem Wischen aus 2.9.4 entfällt; damit Namen auf kleinen Plätzen trotzdem ganz zu sehen sind, setzt `fitSeats()` sie notfalls bis 5 px klein. Dreht man das Handy oder ändert die Fenstergröße, wird neu eingepasst. Kein neuer Datenstand.
