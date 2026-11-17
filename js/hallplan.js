@@ -200,7 +200,7 @@ export function shape(i) {
 }
 // Feste Geräte der Halle (seit 2.10.0): liegen unter den Elementen des Plans und lassen sich dort nicht anfassen
 const baseSvg = i => `<g class="hb" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
-const itemSvg = i => `<g class="hi" data-hid=""${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
+const itemSvg = i => `<g class="hi" data-hid="${esc(i.id)}" transform="translate(${num(i.x)} ${num(i.y)})${i.rot ? ` rotate(${i.rot} ${num(i.w / 2)} ${num(i.h / 2)})` : ''}">${shape(i)}</g>`;
 export const defs = '<defs><pattern id="h-net" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M0 0L16 16M16 0L0 16" stroke="#9aa3b2" stroke-width="1.5"/></pattern><pattern id="h-grid" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M0 0H14M0 0V14" stroke="#7d8794" stroke-width="1.6"/></pattern></defs>';
 // Ausschnitt um Hallenfläche und Elemente (für das Bildschirm-Objekt, damit wenig Rand bleibt)
 // Halle eines Plans: in der App übergibt hall.js die gespeicherte Halle (gym), Dateien bringen sie als gymDef mit
