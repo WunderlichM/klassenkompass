@@ -12,7 +12,7 @@ import { esc, icon, dialog, confirmDialog, toast, downloadFile, hooks } from './
 import * as groups from './groups.js';
 
 import { BW, BH, K, MARKS, badmintonCourts, geo, STD, GYM_LEN, GYM_DEP } from './hallfloor.js';
-import { KINDS, clamp, num, shape, defs, boardSvg as drawBoard, zoneAt, gearAt, itemAt, parsePlans, exportPlans, refitItems, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
+import { KINDS, clamp, num, shape, defs, boardSvg as drawBoard, zoneAt, gearAt, itemAt, parsePlans, exportPlans, refitItems, GYM_TEMPLATES, gymTemplateItems, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
@@ -129,7 +129,7 @@ function gymBarHtml(p) {
   const h = hist(p.id), g = gymById(p.gym), n = sp().halls.filter(x => x.gym === p.gym).length;
   return `<div class="hall-bar hall-gymbar no-print">
       <b class="hall-title">${icon('edit', 15)} Halle „${esc(g.name)}“</b><span class="badge">${gymSize(g)}</span>
-      <span class="small-text muted">Feste Geräte (Tore, Körbe, Türen, Geräteraum …) – stehen in ${n === 1 ? 'dem Plan' : `allen ${n} Plänen`} dieser Halle und sind dort nicht verschiebbar.</span>
+      <span class="small-text muted">Einrichtung (Türen, Tore, Körbe, Sprossenwände, Seile, Matten …) – steht in ${n === 1 ? 'dem Plan' : `allen ${n} Plänen`} dieser Halle und ist dort nicht verschiebbar. Antippen = verschieben, drehen, Länge ändern oder löschen.</span>
       <button class="btn ghost sm" data-h="gym-props" title="Name, Maße und Lerngruppen dieser Halle">${icon('sliders', 15)} Name, Maße, Lerngruppen</button>
       <span class="hall-sep"></span>
       <button class="btn ghost sm ${snap ? 'on' : ''}" data-h="snap" aria-pressed="${snap}" title="Beim Verschieben auf ein Raster von 0,5 m ausrichten">${icon('grid', 15)} Raster</button>
@@ -144,7 +144,7 @@ function editorHtml(p) {
   if (p.base) return `<div class="hall gym-edit ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
     ${gymBarHtml(p)}
     <div class="hall-bar hall-marks no-print"><button class="btn ghost sm" data-h="palette" aria-pressed="${!palHidden}" title="Leiste mit Elementen ein- oder ausblenden">${icon('list', 15)} ${palHidden ? 'Leiste zeigen' : 'Leiste ausblenden'}</button>
-      <span class="small-text muted">Tipp: In der Leiste unter „Raum“ stehen Tür, Geräteraumtor, Trennwand, Tafel und Lautsprecher; Körbe, Tore und Sprossenwand bei den Geräten.</span></div>
+      <span class="small-text muted">Tipp: Unter „Raum“ stehen Tür, Doppeltür, Geräteraumtor, Trennwand, Tafel und Lautsprecher; Basketballkorb und Seilanlage unter „Hängen, Springen“, Sprossenwände (auch als Reihe) unter „Sprossenwand, Barren, Reck“, stehende Matten und Weichböden unter „Matten, Kästen, Bänke“, Tore unter „Balken, Netze, Tore“.</span></div>
     <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
     <div class="hall-work">
       ${palHidden ? '' : `<aside class="hall-palette no-print">${paletteHtml()}</aside>`}
@@ -616,24 +616,41 @@ export function setPlanGym(id) {
 export function setGroupGym(lgId, id) { store.update(s => { const k = groups.sportPart(s, lgId); if (!k) return; if (id) k.gym = id; else delete k.gym; }); }
 
 // Halle anlegen oder ändern: Name, Maße, Lerngruppen (Standardhalle); bei einer neuen Halle optional den geöffneten Plan hineinlegen
-const PRESETS = [['Einfeldhalle', 27, 15], ['Zweifeldhalle', 45, 22], ['Dreifeldhalle', 45, 27]];
-export function gymDialog(gym = null) {
+// Seit 2.11.0: Eine neue Halle entsteht aus einer Vorlage (leer, Einfeld-, Zweifeld-, Dreifeldhalle) mit fertiger Einrichtung
+// an den Wänden; Name und Maße sind frei, die Einrichtung ist danach wie jedes feste Gerät bearbeitbar.
+const freeName = base => { let n = base, k = 2; while (gyms().some(g => g.name.toLocaleLowerCase('de') === n.toLocaleLowerCase('de'))) n = `${base} ${k++}`; return n.slice(0, 40); };
+const EQUIP = 'Türen, Geräteraumtore, Tore, Basketballkörbe, Sprossenwände, Seilanlage, stehende Weichböden und Matten' ;
+export function gymDialog(gym = null, o = {}) {
   const lgs = groups.list(), active = groups.active(), p = plan() && !plan().base ? plan() : null;
   const isOf = lg => (gym ? groups.sportView(lg).gym === gym.id : lg.id === active?.id && !gymById(groups.sportView(lg).gym));
   const n = gym ? sp().halls.filter(x => x.gym === gym.id).length : 0;
-  dialog({ title: gym ? 'Halle bearbeiten' : 'Neue Halle', submit: gym ? 'Speichern' : 'Anlegen', wide: true, body: `
-    <label class="field">Name<input name="name" class="input" maxlength="40" value="${esc(gym?.name || '')}" placeholder="z. B. Dreifeldhalle Schulzentrum" required></label>
-    <div class="two"><label class="field">Länge in m <small class="muted">(von links nach rechts)</small><input name="len" type="number" class="input" min="${GYM_LEN[0]}" max="${GYM_LEN[1]}" step="0.5" value="${gym?.len ?? 27}" required></label>
-    <label class="field">Breite in m <small class="muted">(von vorn nach hinten)</small><input name="dep" type="number" class="input" min="${GYM_DEP[0]}" max="${GYM_DEP[1]}" step="0.5" value="${gym?.dep ?? 15}" required></label></div>
-    <p class="small-text gym-presets">Übliche Maße: ${PRESETS.map(([l, a, b]) => `<button type="button" class="link" data-preset="${a},${b}">${l} ${a} × ${b} m</button>`).join(' · ')}</p>
+  const tpl0 = gym ? null : GYM_TEMPLATES.find(t => t.id === (o.template || 'einfeld'));
+  dialog({ title: gym ? 'Halle bearbeiten' : o.fromStd ? 'Standardhalle als eigene Halle anlegen' : 'Neue Halle', submit: gym ? 'Speichern' : 'Anlegen', wide: true, body: `
+    ${o.fromStd ? '<p class="small-text muted">Die Standardhalle (27 × 15 m) bleibt als Schema erhalten. Als eigene Halle kannst du sie benennen, die Maße ändern und die Einrichtung anpassen.</p>' : ''}
+    ${gym ? '' : `<fieldset class="field gym-tpl"><legend>Vorlage <small class="muted">– fertig eingerichtet, danach frei bearbeitbar</small></legend>
+      <div class="seg" role="group" aria-label="Vorlage">${GYM_TEMPLATES.map(t => `<button type="button" data-tpl="${t.id}" class="${t === tpl0 ? 'on' : ''}" aria-pressed="${t === tpl0}">${esc(t.label)} <small>${t.fields ? `${t.len} × ${t.dep} m` : 'eigene Maße'}</small></button>`).join('')}</div>
+      <input type="hidden" name="tpl" value="${tpl0.id}">
+      <label class="check" data-equip ${tpl0.fields ? '' : 'hidden'}><input type="checkbox" name="equip" checked> <span>Einrichtung übernehmen <small class="muted">– ${EQUIP}${'; bei mehreren Hallenteilen Trennvorhänge'}</small></span></label></fieldset>`}
+    <label class="field">Name<input name="name" class="input" maxlength="40" value="${esc(gym?.name || (tpl0.fields ? freeName(tpl0.label) : ''))}" placeholder="z. B. Dreifeldhalle Schulzentrum" required></label>
+    <div class="two"><label class="field">Länge in m <small class="muted">(von links nach rechts)</small><input name="len" type="number" class="input" min="${GYM_LEN[0]}" max="${GYM_LEN[1]}" step="0.5" value="${gym?.len ?? tpl0.len}" required></label>
+    <label class="field">Breite in m <small class="muted">(von vorn nach hinten)</small><input name="dep" type="number" class="input" min="${GYM_DEP[0]}" max="${GYM_DEP[1]}" step="0.5" value="${gym?.dep ?? tpl0.dep}" required></label></div>
     ${lgs.length ? `<fieldset class="field gym-groups"><legend>Standardhalle für <small class="muted">– neue Pläne dieser Lerngruppen entstehen in dieser Halle</small></legend>
       ${lgs.map(lg => `<label class="check"><input type="checkbox" name="lg" value="${esc(lg.id)}" ${isOf(lg) ? 'checked' : ''}> ${esc(lg.name)} <small class="muted">${esc(lg.subject)}${!isOf(lg) && gymById(groups.sportView(lg).gym) ? ' · jetzt: ' + esc(gymById(groups.sportView(lg).gym).name) : ''}</small></label>`).join('')}</fieldset>` : ''}
-    ${!gym && p ? `<label class="check"><input type="checkbox" name="move" checked> Den geöffneten Plan „${esc(p.title)}“ in diese Halle legen</label>` : ''}
+    ${!gym && p ? `<label class="check"><input type="checkbox" name="move" ${o.fromStd || !p.gym ? 'checked' : ''}> Den geöffneten Plan „${esc(p.title)}“ in diese Halle legen</label>` : ''}
     ${gym ? `<p class="small-text muted">${n ? `${n} ${n === 1 ? 'Plan liegt' : 'Pläne liegen'} in dieser Halle. Neue Maße: Bereiche und Elemente passen sich an, Geräte bleiben maßstäblich.` : 'Noch kein Plan in dieser Halle.'}</p>
-      <p class="gym-actions"><button type="button" class="btn ghost sm" data-gym-base>${icon('edit', 15)} Feste Geräte einzeichnen</button> <button type="button" class="btn ghost sm danger" data-gym-del>${icon('trash', 15)} Halle löschen</button></p>`
-      : '<p class="muted small-text">Danach zeichnest du die festen Geräte ein – Tore, Körbe, Türen, Geräteraumtor –, die in jedem Plan dieser Halle stehen. Maße und Lage der Türen vor Ort prüfen.</p>'}`,
+      <p class="gym-actions"><button type="button" class="btn ghost sm" data-gym-base>${icon('edit', 15)} Einrichtung bearbeiten</button> <button type="button" class="btn ghost sm" data-gym-copy title="Kopie mit gleichen Maßen und gleicher Einrichtung anlegen, z. B. für eine ähnliche Halle">${icon('layers', 15)} Kopieren</button> <button type="button" class="btn ghost sm danger" data-gym-del>${icon('trash', 15)} Halle löschen</button></p>`
+      : `<p class="muted small-text">Danach siehst du die Einrichtung (${EQUIP} …) und passt sie an: verschieben, löschen oder aus der Leiste ergänzen. Sie steht in jedem Plan dieser Halle. Maße und Lage der Türen vor Ort prüfen.</p>`}`,
     onOpen: (el, close) => {
-      el.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { const [a, c] = b.dataset.preset.split(','); el.querySelector('[name=len]').value = a; el.querySelector('[name=dep]').value = c; });
+      // Vorlage wählen: Maße setzen, Namen vorschlagen (solange er noch aus einer Vorlage stammt)
+      const nameIn = el.querySelector('[name=name]'), auto = () => !nameIn.value.trim() || GYM_TEMPLATES.some(t => nameIn.value.trim().replace(/ \d+$/, '') === t.label);
+      el.querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => {
+        const t = GYM_TEMPLATES.find(x => x.id === b.dataset.tpl); if (!t) return;
+        el.querySelectorAll('[data-tpl]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+        el.querySelector('[name=tpl]').value = t.id; el.querySelector('[name=len]').value = t.len; el.querySelector('[name=dep]').value = t.dep;
+        el.querySelector('[data-equip]').hidden = !t.fields;
+        if (auto()) nameIn.value = t.fields ? freeName(t.label) : '';
+      });
+      el.querySelector('[data-gym-copy]')?.addEventListener('click', () => { close(); copyGym(gym); });
       el.querySelector('[data-gym-base]')?.addEventListener('click', () => { close(); editGym(gym.id); });
       el.querySelector('[data-gym-del]')?.addEventListener('click', () => { close(); deleteGym(gym); });
     },
@@ -646,7 +663,7 @@ export function gymDialog(gym = null) {
       if (!gym && gyms().length >= store.GYM_MAX) throw new Error(`Es sind höchstens ${store.GYM_MAX} Hallen möglich.`);
       const g2 = geo({ len, dep }), chosen = new Set(fd.getAll('lg').map(String)), id = gym?.id || uid();
       store.update(s => {
-        if (!gym) s.sport.gyms.push({ id, name, len: g2.len, dep: g2.dep, items: [] });
+        if (!gym) s.sport.gyms.push({ id, name, len: g2.len, dep: g2.dep, items: fd.get('equip') === 'on' ? gymTemplateItems(String(fd.get('tpl')), g2.len, g2.dep) : [] });
         else {
           const x = s.sport.gyms.find(y => y.id === id), a = geo(x);
           x.name = name;
@@ -665,8 +682,16 @@ export function gymDialog(gym = null) {
       if (gym) return toast(`Halle „${name}“ gespeichert.`);
       if (fd.get('move') === 'on') setPlanGym(id);
       editGym(id);
-      toast(`Halle „${name}“ angelegt – jetzt Tore, Körbe und Türen einzeichnen. „Fertig“ führt zurück zum Plan.`);
+      toast(fd.get('equip') === 'on' ? `Halle „${name}“ angelegt – Einrichtung anpassen (verschieben, löschen, ergänzen). „Fertig“ führt zurück zum Plan.` : `Halle „${name}“ angelegt – jetzt Tore, Körbe und Türen einzeichnen. „Fertig“ führt zurück zum Plan.`);
     } });
+}
+// Halle kopieren (seit 2.11.0): gleiche Maße und Einrichtung unter neuem Namen, danach gleich die Einrichtung bearbeiten
+function copyGym(gym) {
+  if (gyms().length >= store.GYM_MAX) return toast(`Es sind höchstens ${store.GYM_MAX} Hallen möglich.`, { kind: 'warn' });
+  const id = uid(), name = freeName(`${gym.name.slice(0, 33)} (Kopie)`);
+  store.update(s => { s.sport.gyms.push({ id, name, len: gym.len, dep: gym.dep, items: gym.items.map(i => ({ ...structuredClone(i), id: uid() })) }); });
+  editGym(id);
+  toast(`„${name}“ angelegt – Name und Maße über „Name, Maße, Lerngruppen“ ändern.`);
 }
 // Halle löschen: Ihre Pläne kommen in die Standardhalle und behalten die festen Geräte als eigene Elemente
 async function deleteGym(gym) {

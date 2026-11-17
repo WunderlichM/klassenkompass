@@ -146,8 +146,8 @@ const kasten = (b, n) => {
     b.box(-0.02, -0.02, hb, L + 0.04, D + 0.04, 0.12, C.wood, { top: C.leather, slots: [hb + 0.06] });
   });
 };
-const wall = (b, fields) => {
-  const fw = 0.95, xs = Array.from({ length: fields + 1 }, (_, i) => i * fw);
+const wall = (b, fields, L) => {
+  const fw = L ? L / fields : 0.95, xs = Array.from({ length: fields + 1 }, (_, i) => i * fw);
   for (let z = 0.25; z < 2.2; z += 0.19) b.rod([0, 0.04, z], [fields * fw, 0.04, z], 5, C.wood);
   xs.forEach(x => b.box(x - 0.04, 0, 0, 0.08, 0.08, 2.3, C.wood));
 };
@@ -208,6 +208,8 @@ const G0 = GROUPS[0], G1 = GROUPS[1], G2 = GROUPS[2], G3 = GROUPS[3], G4 = GROUP
 // Matten, Kästen, Bänke
 def('turnmatte', 'Turnmatte', G0, { views: QL, len: 2, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 1, 0.08, C.mat, { inset: 0.07 }) });
 def('matte_stehend', 'Matte stehend', G0, { views: QL, len: 2, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 0.08, 1, C.mat, { seams: [0.5] }) });
+// Weichboden hochkant an der Wand (seit 2.11.0): lange Seite unten, Liegefläche zur Halle hin
+def('weichboden_stehend', 'Weichboden stehend', G0, { views: QL, len: 3, stretch: true, short: 'Weichboden st.', build: (b, L) => b.box(0, 0, 0, L, 0.4, 2.0, C.soft, { seams: [0.2, 1.8] }) });
 def('weichboden', 'Weichboden', G0, { views: QL, len: 2.5, stretch: true, build: (b, L) => b.box(0, 0, 0, L, 1.6, 0.35, C.soft, { seams: [0.17], inset: 0.1 }) });
 def('mattenwagen', 'Mattenwagen', G0, { views: SIDE4, build: b => {
   [[0.15, 0.95], [1.95, 0.95], [0.15, 0.05], [1.95, 0.05]].forEach(([x, y]) => b.sphere(x, y, 0.06, C.black, null, { shadow: false, layer: -1 }));
@@ -226,6 +228,8 @@ def('bank_um', 'Bank umgedreht', G0, { views: QL, len: 3, stretch: true, short: 
 // Sprossenwand, Barren, Reck
 def('sprossenwand', 'Sprossenwand', G1, { views: FS, build: b => wall(b, 1) });
 def('sprossenwand2', 'Sprossenwand 2 Felder', G1, { views: FS, short: 'Sprossenw. 2', build: b => wall(b, 2) });
+// Reihe von Sprossenwänden an der Hallenwand (seit 2.11.0): Felder zu je 0,95 m, in der Länge dehnbar
+def('sprossenwand_reihe', 'Sprossenwände (Reihe)', G1, { views: FS, len: 3.8, stretch: true, short: 'Sprossenw. Reihe', build: (b, L) => wall(b, Math.max(1, Math.round(L / 0.95)), L) });
 def('leiter', 'Leiter', G1, { views: ['quer', 'laengs', 'stehend'], len: 2.6, build: (b, L, v) => {
   if (v === 'stehend') { for (let z = 0.3; z < 2.5; z += 0.3) b.rod([0.05, 0.03, z], [0.45, 0.03, z], 5, C.wood); [0, 0.44].forEach(x => b.box(x - 0.03, 0, 0, 0.07, 0.06, 2.6, C.wood)); return; }
   for (let x = 0.2; x < L; x += 0.3) b.rod([x, 0.06, 0.035], [x, 0.43, 0.035], 5, C.wood);
@@ -256,6 +260,12 @@ def('basketballkorb', 'Basketballkorb', G2, { views: FRONT4, short: 'Basketballk
 def('kletterseile', 'Kletterseile', G2, { views: FS, build: b => {
   [0.3, 0.8, 1.3].forEach(x => { b.rod([x, 0, 2.6], [x, 0, 0.15], 7, C.rope); b.disc(x, 0, 0.12, 0.06, C.rope, { sw: 2 }); });
   b.rod([0, 0, 2.62], [1.6, 0, 2.62], 9, C.metalD, { layer: 1 });
+} });
+// Seilanlage (seit 2.11.0): Laufschiene an der Decke mit Kletterseilen etwa alle 0,5 m, in der Länge dehnbar
+def('seilanlage', 'Seilanlage', G2, { views: FS, len: 3, stretch: true, build: (b, L) => {
+  const n = Math.max(2, Math.round(L / 0.5)), d = L / n;
+  for (let k = 0; k < n; k++) { const x = d * (k + 0.5); b.rod([x, 0, 2.6], [x, 0, 0.15], 6, C.rope); b.disc(x, 0, 0.12, 0.05, C.rope, { sw: 2 }); }
+  b.rod([0, 0, 2.64], [L, 0, 2.64], 10, C.metalD, { layer: 1 });
 } });
 def('turnringe', 'Turnringe', G2, { views: FS, build: b => {
   [0.25, 0.75].forEach(x => { b.rod([x, 0, 2.5], [x, 0, 1.22], 4, C.black); b.curve(b.vcircle(x, 0, 1.08, 0.14), 7, C.wood, { closed: true }); });
@@ -407,6 +417,14 @@ def('tuer', 'Tür', G5, { views: FRONT4, build: b => {
     b.box(-0.08, -0.01, 0, 1.16, 0.08, 2.22, '#9aa3ad');
     b.box(0, -0.02, 0, 1.0, 0.06, 2.12, '#c49564');
     if (b.front) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 5, C.metalD);
+  });
+} });
+// Doppeltür (seit 2.11.0): Eingang oder Notausgang mit zwei Flügeln
+def('doppeltuer', 'Doppeltür', G5, { views: FRONT4, build: b => {
+  b.group([-0.08, 0, 0], () => {
+    b.box(-0.08, -0.01, 0, 2.16, 0.08, 2.22, '#9aa3ad');
+    [0, 1.0].forEach(x => b.box(x, -0.02, 0, 0.98, 0.06, 2.12, '#c49564'));
+    if (b.front) [0.8, 1.2].forEach(x => b.rod([x - 0.06, -0.03, 1.05], [x + 0.06, -0.03, 1.05], 5, C.metalD));
   });
 } });
 // Geräteraumtor: breites Holztor mit waagrechten Brettern (seams zeichnen sie auch von der Seite), in der Breite dehnbar

@@ -173,7 +173,8 @@ function gymPickerHtml() {
         ${hall.gyms().map(g => `<option value="${esc(g.id)}" ${g.id === cur ? 'selected' : ''}>${esc(hall.gymLabel(g))}${g.id === def ? ' ★' : ''}</option>`).join('')}
         <option value="__new">+ Neue Halle …</option></select>
       ${lg && !editing ? `<button class="icon-btn ${isDef ? 'on' : ''}" data-g="gym-default" aria-pressed="${!!isDef}" title="${isDef ? `Standardhalle von ${esc(lg.name)}` : `Als Standardhalle für ${esc(lg.name)} merken – neue Pläne entstehen dann in dieser Halle`}" aria-label="Als Standardhalle merken">${icon('star')}</button>` : ''}
-      ${cur ? `<button class="icon-btn" data-g="gym-edit" title="Halle bearbeiten (Name, Maße, Lerngruppen, feste Geräte)" aria-label="Halle bearbeiten">${icon('edit')}</button>` : ''}
+      ${cur ? `<button class="icon-btn" data-g="gym-edit" title="Halle bearbeiten (Name, Maße, Lerngruppen, Einrichtung)" aria-label="Halle bearbeiten">${icon('edit')}</button>`
+        : p ? `<button class="icon-btn" data-g="gym-std" title="Standardhalle als eigene Halle anlegen – benennen, Maße ändern, Türen, Tore, Körbe, Sprossenwände, Seilanlage, Matten einrichten" aria-label="Standardhalle als eigene Halle anlegen">${icon('edit')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -193,6 +194,7 @@ function onClick(e) {
   if (gb) {
     const p = hall.currentPlan(), g = groups.active(), cur = hall.editingGym()?.id || (p && !p.base ? hall.gymById(p.gym)?.id || '' : '');
     if (gb.dataset.g === 'gym-edit') { const gy = hall.gymById(cur); if (gy) hall.gymDialog(gy); return; }
+    if (gb.dataset.g === 'gym-std') { hall.gymDialog(null, { fromStd: true }); return; }
     if (gb.dataset.g === 'gym-default' && g) {
       const def = hall.gymById(groups.sportView(g).gym)?.id || '';
       if (def === cur) { toast(cur ? `„${hall.gymById(cur).name}“ ist schon die Standardhalle von „${g.name}“.` : `„${g.name}“ hat keine eigene Standardhalle (neue Pläne: Standardhalle 27 × 15 m).`); return; }

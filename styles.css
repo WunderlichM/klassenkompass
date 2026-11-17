@@ -1551,6 +1551,13 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .gym-groups { border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px 4px; margin: 10px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 12px; }
 .gym-groups legend { font-size: 14px; padding: 0 4px; }
 .gym-groups .check { margin: 5px 0; }
-.gym-presets .link { font-size: inherit; }
+
 .gym-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 760px) { .hall-head-right { align-items: stretch; } .gym-picker { min-width: 0; } }
+/* Vorlagen für neue Hallen (seit 2.11.0) */
+.gym-tpl { border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px 8px; margin: 0 0 10px; }
+.gym-tpl legend { font-size: 14px; padding: 0 4px; }
+.gym-tpl .seg { display: flex; flex-wrap: wrap; width: 100%; }
+.gym-tpl .seg button { flex: 1 1 120px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.gym-tpl .seg small { font-size: 11px; opacity: .8; }
+.gym-tpl .check { margin: 8px 0 0; }

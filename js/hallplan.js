@@ -368,10 +368,57 @@ function readGym(raw, where) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object') throw new Error(`${where}: „gym“ braucht { "name", "len", "dep" }.`);
   const ok = (v, [a, b]) => isNum(v) && v >= a && v <= b;
+  const tpl = raw.template === undefined ? null : GYM_TEMPLATES.find(t => t.id === raw.template);
+  if (raw.template !== undefined && !tpl) throw new Error(`${where}: Vorlage „${str(raw.template, 30)}“ gibt es nicht (möglich: ${GYM_TEMPLATES.map(t => t.id).join(', ')}).`);
+  if (tpl) raw = { ...raw, len: raw.len ?? tpl.len, dep: raw.dep ?? tpl.dep, name: raw.name ?? tpl.label };
   if (!ok(raw.len, GYM_LEN) || !ok(raw.dep, GYM_DEP)) throw new Error(`${where}: „len“ (${GYM_LEN[0]}–${GYM_LEN[1]} m) und „dep“ (${GYM_DEP[0]}–${GYM_DEP[1]} m) fehlen oder passen nicht.`);
-  const G = geo(raw), items = Array.isArray(raw.items) ? raw.items.slice(0, 200).map((i, n) => readItem(i, `${where}, festes Gerät ${n + 1}`, G)) : [];
+  // Vorlage (seit 2.11.0): ihre Einrichtung, dazu die Geräte aus "items"
+  const G = geo(raw), own = Array.isArray(raw.items) ? raw.items.slice(0, 200) : [];
+  const items = [...(tpl ? gymTemplateRaw(tpl.id, G.len, G.dep) : []), ...own].slice(0, 200).map((i, n) => readItem(i, `${where}, festes Gerät ${n + 1}`, G));
   return { name: str(raw.name, 40) || `Halle ${G.len} × ${G.dep} m`, len: G.len, dep: G.dep, items };
 }
+// ---------- Vorgefertigte Hallen (seit 2.11.0) ----------
+// Vorlagen für eine neue Halle: Name, übliche Maße und eine fertige Einrichtung an den Wänden (Türen, Geräteraumtore,
+// Tore an den Stirnseiten, Basketballkörbe, Sprossenwände, Seilanlage, stehende Weichböden und Matten, Trennvorhänge).
+// Die Einrichtung ist ein Vorschlag: Sie wird danach wie jedes feste Gerät verschoben, gelöscht oder ergänzt;
+// Lage von Türen und Geräten vor Ort prüfen. fields = Hallenteile (je Teil ein Satz Wandgeräte an der hinteren Wand).
+export const GYM_TEMPLATES = [
+  { id: 'leer', label: 'Leere Halle', len: 27, dep: 15, fields: 0 },
+  { id: 'einfeld', label: 'Einfeldhalle', len: 27, dep: 15, fields: 1 },
+  { id: 'zweifeld', label: 'Zweifeldhalle', len: 45, dep: 22, fields: 2 },
+  { id: 'dreifeld', label: 'Dreifeldhalle', len: 45, dep: 27, fields: 3 },
+];
+// Einrichtung einer Vorlage in Metern (Format wie in Dateien) für eine Halle len × dep
+export function gymTemplateRaw(id, len, dep) {
+  const t = GYM_TEMPLATES.find(x => x.id === id); if (!t?.fields) return [];
+  const n = t.fields, fw = len / n, out = [], yb = dep - 0.1, G = (gear, view, x, y, o = {}) => out.push({ kind: 'gear', gear, view, at: [num(x), num(y)], ...o });
+  // Geräte nebeneinander in einem Wandstück a…b; was nicht passt, entfällt (von hinten)
+  // dehnbare Geräte werden bei Platzmangel bis auf 60 % kürzer
+  const row = (a, b, list) => {
+    const space = b - a, fit = () => { const st = list.filter(x => x[2]).reduce((v, x) => v + x[1], 0), fix = list.filter(x => !x[2]).reduce((v, x) => v + x[1], 0);
+      return st ? (space - 0.25 * (list.length + 1) - fix) / st : (fix + 0.25 * (list.length + 1) <= space ? 1 : 0); };
+    while (list.length && fit() < 0.6) list.pop();
+    const f = Math.min(1, fit()); list = list.map(([g, L, st]) => [g, st ? num(L * f) : L, st]);
+    const gap = (space - list.reduce((v, x) => v + x[1], 0)) / (list.length + 1); let x = a + gap;
+    list.forEach(([gear, L, stretch]) => { G(gear, 'frontal' in VIEWS_OF(gear) ? 'frontal' : 'quer', x + L / 2, yb, stretch ? { L } : {}); x += L + gap; });
+  };
+  for (let k = 0; k < n; k++) {
+    const x0 = k * fw, cx = x0 + fw / 2;
+    G('basketballkorb', 'frontal', cx, yb);
+    row(x0 + 0.5, cx - 1.3, [['geraeteraumtor', 3, true], ['weichboden_stehend', 3, true], ['doppeltuer', 2]]);
+    row(cx + 1.3, x0 + fw - 0.5, [['sprossenwand_reihe', 3.8, true], ['seilanlage', 3, true], ['matte_stehend', 2, true]]);
+  }
+  // Stirnseiten: Tore zur Halle hin, Türen vorn
+  G('tor', 'gespiegelt', 1.15, dep / 2); G('tor', 'seitlich', len - 1.15, dep / 2);
+  G('tuer', 'gespiegelt', 0.3, Math.min(2.5, dep / 5)); G('tuer', 'seitlich', len - 0.3, Math.min(2.5, dep / 5));
+  // Trennvorhänge zwischen den Hallenteilen (Stücke bis 14 m)
+  for (let k = 1; k < n; k++) { const c = Math.ceil(dep / 14), L = dep / c; for (let j = 0; j < c; j++) G('trennwand', 'laengs', k * fw, j * L, { L: num(L), ax: 0, ay: 1 }); }
+  return out;
+}
+const VIEWS_OF = id => Object.fromEntries((gear.GEAR[id]?.views || []).map(v => [v, 1]));
+// Einrichtung einer Vorlage als feste Geräte (Einheiten der Zeichenfläche dieser Halle)
+export const gymTemplateItems = (id, len, dep) => { const G = geo({ len, dep }); return gymTemplateRaw(id, G.len, G.dep).map((i, n) => readItem(i, `Vorlage, Gerät ${n + 1}`, G)); };
+
 // gymOf(p) liefert die Halle eines Plans aus der App ({ name, len, dep, items }); Dateien bringen sie als gymDef mit
 export function exportPlans(plans, gymOf = p => p.gymDef) {
   const gymOut = g => (g ? { gym: { name: g.name, len: g.len, dep: g.dep, items: (g.items || []).map(({ id, ...i }) => i) } } : {});
