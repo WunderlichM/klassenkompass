@@ -27,6 +27,7 @@ export const MIN = { pick: [240, 220], mode: [240, 240], task: [300, 220], agend
 const arr = v => (Array.isArray(v) ? v : []);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const patch = (id, fn, opts) => store.update(s => { const w = s.screen.widgets.find(x => x.id === id); if (w) fn(w); }, opts);
+const lastPts = new Map();   // zuletzt gezeigter Punktestand je Anzeigetafel und Seite (für die kurze Animation)
 const lines = (v, max = 12, len = 80) => String(v ?? '').split(/\n/).map(l => l.trim().slice(0, len)).filter(Boolean).slice(0, max);
 
 export function create(kind) {
@@ -242,9 +243,16 @@ export function html(w, { ctrl }) {
         <form class="sw-record no-present" data-wq="${esc(w.id)}"><input class="input sm" name="name" placeholder="Name oder Tischnummer" maxlength="30"><button class="btn primary sm">Anstellen</button>${people(w).length ? `<button type="button" class="icon-btn sm" data-act="x-queue-pick" title="Aus der Liste wählen" aria-label="Aus der Liste wählen">${icon('users', 15)}</button>` : ''}</form>`, 'queue'];
     }
     case 'score': {
-      const side = k => { const t = w[k] || {}; return `<div class="sc-side sc-${k}"><p class="sc-name">${esc(t.name || (k === 'a' ? 'Team A' : 'Team B'))}</p><p class="sc-pts">${Number(t.pts) || 0}</p>
-        <div class="sc-btns no-present"><button class="round-btn" data-act="x-score" data-k="${k}" data-d="-1" aria-label="Punkt abziehen">−</button><button class="round-btn primary" data-act="x-score" data-k="${k}" data-d="1" aria-label="Punkt dazu">+</button></div></div>`; };
-      return [`<div class="sc">${side('a')}<div class="sc-mid">${w.timed ? `<div class="time" data-live="time"></div>${ctrl(w, w.endsAt !== null)}<p class="w-state" data-live="state"></p>` : '<span class="sc-colon">:</span>'}</div>${side('b')}</div>`, 'score'];
+      const pa = Number(w.a?.pts) || 0, pb = Number(w.b?.pts) || 0;
+      const side = k => {
+        const t = w[k] || {}, pts = k === 'a' ? pa : pb, other = k === 'a' ? pb : pa, key = w.id + k;
+        const bump = lastPts.has(key) && lastPts.get(key) !== pts ? (pts > lastPts.get(key) ? ' bump' : ' drop') : '';
+        lastPts.set(key, pts);
+        return `<div class="sc-side sc-${k}${pts > other ? ' lead' : ''}"><p class="sc-name">${esc(t.name || (k === 'a' ? 'Team A' : 'Team B'))}</p>
+          <p class="sc-pts${bump}" data-len="${String(pts).length}">${pts}</p>
+          <div class="sc-btns no-present"><button class="round-btn" data-act="x-score" data-k="${k}" data-d="-1" aria-label="Punkt abziehen">−</button><button class="round-btn primary" data-act="x-score" data-k="${k}" data-d="1" aria-label="Punkt dazu">+</button></div></div>`;
+      };
+      return [`<div class="sc${w.timed ? ' timed' : ''}">${side('a')}<div class="sc-mid">${w.timed ? `<div class="sc-clock"><div class="time" data-live="time"></div></div>${ctrl(w, w.endsAt !== null)}<p class="w-state" data-live="state"></p>` : '<span class="sc-vs">:</span>'}</div>${side('b')}</div>`, 'score'];
     }
     case 'board': {
       const er = w.tool === 'eraser', cur = BOARD_COLORS.includes(w.color) ? w.color : BOARD_COLORS[0], size = Number(w.size) || 4, n = arr(w.strokes).length;
