@@ -2,6 +2,13 @@
 
 Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 
+## Neu in 2.12.0
+
+- **Eine Einteilung für Gruppen und Teams (`js/groups.js`, `js/gruppen.js`):** Sitzordnung „Gemischt“ und Teams zeigen dieselbe Einteilung – Gruppe 1 = Team 1. „Anzahl Gruppen“ und „Anzahl Teams“ sind dieselbe Einstellung (2–20), „Neu mischen“ und Tauschen per Ziehen wirken in beiden Ansichten, „Einteilung anpassen“ ist eine gemeinsame Liste. Die Einteilung liegt im Sportteil (`sport.groups[].teams`, `teamCount`, `rules`); `seatView()` leitet `plan`, `settings.groups` und `rules` daraus ab. Raum, Organisationsform, Tische und Standardsitzplan bleiben im Sitzordnungsteil.
+- **Gruppenliste entfällt:** Der Umschalter Sitzplan/Gruppenliste in „Gemischt“ ist weg; die Liste zeigt „Teams“.
+- **Teams:** „Anzahl Teams“ steht neben „Neu mischen“ (seit 2.11.2).
+- **Datenstand 13:** Beim Laden übernimmt die App je Lerngruppe eine Einteilung – bei Sport die Teams, sonst die gemischten Gruppen der Sitzordnung – und führt die Regeln beider Teile zusammen (`shareDivision` in `js/store.js`). Bestehende Turniere behalten ihre Teams. Geräte mit älterer Fassung speichern nichts mehr, bis sie die neue Version geladen haben – nach dem Update alle Geräte einmal öffnen und „Neue Version“ übernehmen.
+
 ## Neu in 2.11.0
 
 - **Vorgefertigte Hallen (`js/hall.js`, `js/hallplan.js`):** „+ Neue Halle …“ beginnt mit einer **Vorlage** – Leere Halle, Einfeldhalle (27 × 15 m), Zweifeldhalle (45 × 22 m) oder Dreifeldhalle (45 × 27 m). Mit „Einrichtung übernehmen“ steht die Halle gleich fertig eingerichtet da: je Hallenteil an der hinteren Wand Geräteraumtor, stehender Weichboden, Doppeltür, Basketballkorb, Sprossenwände, Seilanlage und stehende Matte (was nicht passt, wird kürzer oder entfällt), Tore an beiden Stirnseiten, Türen vorn an den Stirnseiten und bei Zwei- und Dreifeldhallen Trennvorhänge. Name (Vorschlag: Name der Vorlage, bei Gleichnamigen mit Nummer) und Maße sind frei; die Einrichtung wird danach wie jedes feste Gerät verschoben, gedreht, verlängert, gelöscht oder ergänzt. `gymTemplateRaw()` beschreibt die Einrichtung in Metern und passt sie an die gewählten Maße an.

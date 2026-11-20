@@ -28,7 +28,7 @@ const LAYOUT_PICS = {
 
 // Ansicht je Lerngruppe: Sport-Gruppen öffnen mit „Teams“, alle anderen mit „Sitzordnung“; eine andere Wahl gilt bis zur nächsten Auswahl der Lerngruppe (seit 2.8.1)
 const viewOf = groups.viewOf;
-let listMode = 'plan', search = '', root = null, problem = '';
+let search = '', root = null, problem = '';
 const viewFor = g => viewOf.get(g.id) || (groups.isSport(g) ? 'teams' : 'sitz');
 // Sitzordnung (seit 2.6.0) in zwei Fassungen: „std“ = Standardsitzplan (wer normalerweise wo sitzt, fest gespeichert),
 // „mix“ = gemischte Gruppen wie bisher. Gibt es einen Standardsitzplan, öffnet die Sitzordnung damit.
@@ -58,7 +58,7 @@ export function mount(el) {
   const onResize = () => fitRoom();
   addEventListener('resize', onResize);
   document.fonts?.ready.then(() => { if (root) fitRoom(); });
-  // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan, Gruppenliste)
+  // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan)
   const offDrag = enableDrag(el, { item: '[data-pid]', target: '[data-pid],[data-seat],[data-tray]', onDrop: (a, b) => drop(a, b) });
   const offRoom = rooms.attach(el, () => draw());
   render();
@@ -274,8 +274,6 @@ function room(c, d, off, r = null) {
   if (flip) rows = rows.reverse().map(r => r.slice().reverse());
   return wrap('arena', rows.map(row => `<div class="arena-row" style="--n:${per}">${row.map(x => seatBox(c, x, off)).join('')}</div>`).join(''));
 }
-const groupList = c => `<div class="group-list">${c.plan.groups.map((g, gi) => `<div class="group-card" style="${palStyle(gi)}"><h4><span class="gdot"></span>Gruppe ${gi + 1} <span class="badge">${g.length}</span></h4><ol>${g.map(id => `<li data-pid="${esc(id)}">${esc(nameOf(c, id))}</li>`).join('')}</ol></div>`).join('')}</div>`;
-
 const stepper = (label, k, val, { min = true, max = true, text = val, disabled = false } = {}) => `<label ${disabled ? 'class="disabled"' : ''}>${label}<span class="stepper"><button data-act="step" data-k="${k}" data-d="-1" data-base="${val}" ${!disabled && min ? '' : 'disabled'}>−</button><output>${text}</output><button data-act="step" data-k="${k}" data-d="1" data-base="${val}" ${!disabled && max ? '' : 'disabled'}>+</button></span></label>`;
 const layoutCard = cur => `<div class="card">
         <h3>${icon('sliders', 16)} Organisationsform</h3>
@@ -359,24 +357,20 @@ function seatHtml(g) {
         <div><p class="eyebrow">Dein Raum${r ? ' · ' + esc(r.name) : ''}</p><h2>${esc(layout.name)} <span class="badge">${present} anwesend</span></h2></div>
         <div class="tools no-print">
           <button class="btn primary" data-act="mix-seat">${icon('shuffle')} Neu mischen</button>
-          ${listMode === 'plan' ? flipBtn : ''}
-          <div class="seg" role="group" aria-label="Darstellung">
-            <button class="${listMode === 'plan' ? 'on' : ''}" data-act="list-mode" data-v="plan" title="Sitzplan">${icon('grid', 16)}</button>
-            <button class="${listMode === 'list' ? 'on' : ''}" data-act="list-mode" data-v="list" title="Gruppenliste">${icon('list', 16)}</button>
-          </div>
+          ${flipBtn}
           ${head}
         </div>
       </div>
       ${title}
       ${problem ? `<p class="notice no-print">${esc(problem)}</p>` : ''}
-      <div class="room-wrap">${c.plan ? (listMode === 'plan' ? room(c, null, off, r) : groupList(c)) : '<div class="room-empty"><p>Noch keine Verteilung.</p></div>'}</div>
-      ${c.plan ? `<p class="hint no-print no-present">${icon('check', 14)} Die Farben zeigen die Gruppen. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</p>` : ''}
+      <div class="room-wrap">${c.plan ? room(c, null, off, r) : '<div class="room-empty"><p>Noch keine Verteilung.</p></div>'}</div>
+      ${c.plan ? `<p class="hint no-print no-present">${icon('check', 14)} Die Farben zeigen die Gruppen – dieselben wie unter Teams. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</p>` : ''}
     </div>
     <aside class="side no-print">
       <div class="card">
         <h3>${icon('users', 16)} Gruppen und Tische</h3>
         <div class="num-row">
-          ${stepper('Anzahl Gruppen', 'groups', c.settings.groups)}
+          ${stepper('Anzahl Gruppen', 'groups', c.settings.groups, { min: c.settings.groups > 2, max: c.settings.groups < 20 })}
           ${cus ? '' : stepper('Anzahl Tische', 'tables', c.settings.tables, { min: c.settings.tables > minT, disabled: !usesTables })}
           ${L === 'omnibus' && !cus ? stepper('Tische nebeneinander', 'cols', cols, { min: cols > 2, max: cols < 5 }) : ''}
           ${L === 'gruppen' && !cus ? stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
@@ -483,7 +477,7 @@ function drawPeople() {
   const g = groups.active(), ul = root?.querySelector('#lg-people'); if (!g || !ul) return;
   let color = () => '';
   if (viewFor(g) === 'sitz' && modeFor(g) === 'std') color = () => '';
-  else if (viewFor(g) === 'sitz' && g.seat?.plan) { const m = new Map(g.seat.plan.groups.flatMap((gr, i) => gr.map(id => [id, i]))); color = id => (m.has(id) ? palStyle(m.get(id)) : ''); }
+  else if (viewFor(g) === 'sitz' && groups.seatView(g).plan) { const m = new Map(groups.seatView(g).plan.groups.flatMap((gr, i) => gr.map(id => [id, i]))); color = id => (m.has(id) ? palStyle(m.get(id)) : ''); }
   else if (g.sport?.teams.length) { const m = new Map(g.sport.teams.flatMap((t, i) => t.members.map(id => [id, i]))); color = id => (m.has(id) ? palStyle(m.get(id)) : ''); }
   ul.innerHTML = groups.peopleItems(g, search, color);
 }
@@ -503,14 +497,11 @@ function drop(aEl, bEl) {
 }
 function swap(a, b) {
   const g = groups.active(); if (!g || a === b) return;
-  const teams = viewFor(g) === 'teams', view = teams ? groups.sportView(g) : groups.seatView(g);
-  const cur = teams ? view.teams.map(t => t.members) : view.plan?.groups; if (!cur) return;
+  // Teams und gemischte Sitzordnung haben dieselbe Einteilung (seit 2.12.0)
+  const view = groups.sportView(g), cur = view.teams.map(t => t.members); if (!cur.length) return;
   const r = swapMembers(cur, a, b, view.rules);
   if (r.error) return toast(r.error, { kind: 'warn' });
-  store.update(s => {
-    if (teams) { const p = groups.sportPart(s, g.id); p.teams = p.teams.map((t, i) => ({ ...t, members: r.groups[i] })); }
-    else groups.seatPart(s, g.id).plan.groups = r.groups;
-  });
+  store.update(s => { const p = groups.sportPart(s, g.id); p.teams = p.teams.map((t, i) => ({ ...t, members: r.groups[i] })); });
 }
 
 // Raum gelöscht: Lerngruppen, die ihn als Standardraum haben, zeigen danach die Organisationsformen ohne Raum
@@ -562,7 +553,6 @@ async function onClick(e) {
       break;
     }
     case 'view': viewOf.set(g.id, b.dataset.v); search = ''; draw(); break;
-    case 'list-mode': listMode = b.dataset.v; draw(); break;
     case 'print': window.print(); break;
     case 'present': toggleFullscreen(); draw(); break;
     case 'seat-mode': modeOf.set(g.id, b.dataset.v); draw(); break;
@@ -623,16 +613,21 @@ async function onClick(e) {
       }
       if (k === 'icols') { store.update(s => { groups.seatPart(s, g.id).settings.icols = Math.min(6, Math.max(1, Number(b.dataset.base) + d)); }); break; }
       if (k === 'cols') { store.update(s => { const st = groups.seatPart(s, g.id).settings; st.cols = Math.min(5, Math.max(2, colsOf(st.cols, st.tables) + d)); }); break; }
+      if (k === 'groups') { store.update(s => { const p = groups.sportPart(s, g.id); p.teamCount = Math.min(20, Math.max(2, p.teamCount + d)); }); break; }   // = Anzahl Teams
       const minT = k === 'tables' ? minimumTables(groups.presentCount(g), groups.seatView(g).settings.groups) : 1;
       store.update(s => { const st = groups.seatPart(s, g.id).settings; st[k] = Math.min(k === 'tables' ? 40 : 20, Math.max(minT, 1, st[k] + d)); });
       break;
     }
     case 'mix-seat': {
-      const c = groups.seatView(g);
-      const res = mixGroups({ students: c.students, rules: c.rules, groupCount: c.settings.groups }, absent);
+      // mischt die gemeinsame Einteilung (= Teams) neu und stellt bei Bedarf Tische dazu
+      const k = groups.sportView(g);
+      const res = mixGroups({ students: k.students, rules: k.rules, groupCount: k.teamCount }, absent);
       if (!res.ok) return toast(res.message, { kind: 'warn' });
       const need = res.groups.reduce((n, gr) => n + Math.ceil(gr.length / 2), 0);
-      store.update(s => { const p = groups.seatPart(s, g.id); p.plan = { groups: res.groups, createdAt: new Date().toISOString() }; if (TABLE_LAYOUTS.includes(p.settings.layout)) p.settings.tables = Math.min(40, Math.max(p.settings.tables, need)); });
+      store.update(s => {
+        groups.sportPart(s, g.id).teams = res.groups.map((members, i) => ({ id: uid(), name: 'Team ' + (i + 1), members }));
+        const p = groups.seatPart(s, g.id); if (TABLE_LAYOUTS.includes(p.settings.layout)) p.settings.tables = Math.min(40, Math.max(p.settings.tables, need));
+      });
       toast('Neu verteilt.');
       break;
     }
@@ -644,11 +639,11 @@ async function onClick(e) {
       break;
     }
     case 'rules': {
-      const teams = viewFor(g) === 'teams', part = s => (teams ? groups.sportPart(s, g.id) : groups.seatPart(s, g.id));
-      rulesDialog({ title: teams ? 'Teams: Einteilung anpassen' : 'Sitzordnung: Einteilung anpassen',
+      const part = s => groups.sportPart(s, g.id);   // eine gemeinsame Liste für Gruppen und Teams (seit 2.12.0)
+      rulesDialog({ title: 'Einteilung anpassen',
         people: g.students.map(p => ({ id: p.id, label: p.name + (p.className ? ' (' + p.className + ')' : '') })),
-        getRules: () => { const x = groups.byId(g.id); return (teams ? x?.sport?.rules : x?.seat?.rules) ?? []; },
-        note: teams ? 'Die Regeln gelten beim Mischen der Teams.' : 'Die Regeln gelten in jeder Organisationsform.',
+        getRules: () => groups.byId(g.id)?.sport?.rules ?? [],
+        note: 'Die Regeln gelten für die Gruppen der Sitzordnung und die Teams – in jeder Organisationsform.',
         onAdd: pair => store.update(s => { part(s).rules.push(pair); }),
         onDelete: i => store.update(s => { part(s).rules.splice(i, 1); }) });
       break;

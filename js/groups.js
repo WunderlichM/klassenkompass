@@ -41,8 +41,15 @@ export function absent(id) { if (!absentById.has(id)) absentById.set(id, new Set
 export const presentCount = g => g.students.filter(p => !absent(g.id).has(p.id)).length;
 
 // Standardwerte, solange ein Teil noch nicht gespeichert ist (nur lesen, nichts anlegen)
-export const seatView = g => g.seat || { id: g.id, name: g.name, students: g.students.map(p => ({ id: p.id, name: p.name })), settings: { layout: 'omnibus', tables: Math.max(8, Math.ceil(g.students.length / 2)), groups: 4 }, rules: [], plan: null };
 export const sportView = g => g.sport || { id: g.id, name: g.name, students: g.students.map(p => ({ ...p })), teamCount: 4, rules: [], teams: [], tournaments: [], series: [] };
+// Seit 2.12.0 haben Sitzordnung „Gemischt“ und Teams eine gemeinsame Einteilung: Sie liegt im Sportteil (teams, teamCount,
+// rules). Die Sitzordnung zeigt sie im Raum – Gruppe 1 = Team 1; Anzahl Gruppen = Anzahl Teams. Raum, Organisationsform,
+// Tische und Standardsitzplan bleiben im Sitzordnungsteil.
+const seatBase = g => g.seat || { id: g.id, name: g.name, students: g.students.map(p => ({ id: p.id, name: p.name })), settings: { layout: 'omnibus', tables: Math.max(8, Math.ceil(g.students.length / 2)), groups: 4 }, rules: [], plan: null };
+export const seatView = g => {
+  const c = seatBase(g), k = sportView(g);
+  return { ...c, settings: { ...c.settings, groups: k.teamCount }, rules: k.rules, plan: k.teams.length ? { groups: k.teams.map(t => t.members) } : null };
+};
 
 // ---------- Einteilung immer aktuell halten (seit 2.1.0) ----------
 // Gibt es noch keine Einteilung oder passt die Anzahl nicht, wird gemischt. Fehlt ein Kind (abwesend, entfernt) oder kommt
@@ -73,27 +80,15 @@ export function ensureTeams(g) {
     return { changed: 'mix' };
   });
 }
+// Sitzordnung „Gemischt“: dieselbe Einteilung wie die Teams; reichen die Tische nicht, wird die Tischzahl auf das Nötige erhöht
 export function ensureSeat(g) {
-  const c = seatView(g), off = absent(g.id), ids = c.students.filter(p => !off.has(p.id)).map(p => p.id), st = c.settings;
-  const cur = c.plan?.groups || [], tables = TABLE_LAYOUTS.includes(st.layout);
-  const ok = c.plan && cur.length === st.groups && sameMembers(cur, ids) && rulesKept(cur, c.rules);
-  // Reichen die Tische nicht, wird die Tischzahl auf das Nötige erhöht
-  const fit = (s, groups) => { const p = seatPart(s, g.id); if (tables) p.settings.tables = Math.min(40, Math.max(p.settings.tables, tablesFor(groups))); };
-  if (ok) {
-    if (tables && tablesFor(cur) > st.tables) { store.update(s => fit(s, cur)); return { changed: 'tables' }; }
-    return {};
-  }
-  return ensure(['s', g.id, st.groups, ids.join(), JSON.stringify(c.rules), cur.length].join('|'), () => {
-    if (!ids.length) return { error: 'Heute ist niemand anwesend.' };
-    if (c.plan && cur.length === st.groups && rulesKept(cur, c.rules)) {
-      const r = rebalance(cur, ids, c.rules);
-      if (r) { store.update(s => { seatPart(s, g.id).plan.groups = r.groups; fit(s, r.groups); }); return { changed: 'balance', moved: r.moved }; }
-    }
-    const res = mixGroups({ students: c.students, rules: c.rules, groupCount: st.groups }, off);
-    if (!res.ok) return { error: res.message };
-    store.update(s => { seatPart(s, g.id).plan = { groups: res.groups, createdAt: new Date().toISOString() }; fit(s, res.groups); });
-    return { changed: 'mix' };
-  });
+  const r = ensureTeams(g); if (r.error) return r;
+  const c = seatView(byId(g.id) || g), st = c.settings;
+  if (!c.plan || !TABLE_LAYOUTS.includes(st.layout)) return r;
+  const need = tablesFor(c.plan.groups);
+  if (need <= st.tables) return r;
+  store.update(s => { const p = seatPart(s, g.id); p.settings.tables = Math.min(40, Math.max(p.settings.tables, need)); });
+  return r.changed ? r : { changed: 'tables' };
 }
 
 // ---------- Ändern ----------
@@ -101,7 +96,7 @@ export function ensureSeat(g) {
 export function seatPart(s, id) {
   let c = seatOf(s, id); if (c) return c;
   const g = build(s, id); if (!g) return null;
-  c = { ...seatView(g), subject: g.subject, demo: g.demo }; s.technik.classes.push(c); return c;
+  c = { ...seatBase(g), subject: g.subject, demo: g.demo }; s.technik.classes.push(c); return c;
 }
 export function sportPart(s, id) {
   let k = sportOf(s, id); if (k) return k;

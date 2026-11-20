@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 12;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3); 12 = eigene Sporthallen (sport.gyms), Halle je Hallenplan und Standardhalle je Lerngruppe (2.10.0)
+export const SCHEMA = 13;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3); 12 = eigene Sporthallen (sport.gyms), Halle je Hallenplan und Standardhalle je Lerngruppe (2.10.0); 13 = gemeinsame Einteilung für Sitzordnung „Gemischt“ und Teams im Sportteil (2.12.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -395,6 +395,26 @@ function hallPart(sp, gyms) {
   const halls = Array.isArray(sp?.halls) ? normHalls(sp.halls, new Set(gyms.map(g => g.id))) : [demoHall()];
   return { halls, activeHall: halls.some(h => h.id === sp?.activeHall) ? sp.activeHall : halls[0]?.id ?? null, hallLib: normHallLib(sp?.hallLib), hallTopics: normTopics(sp?.hallTopics, halls), gyms };
 }
+// Datenstand 13 (2.12.0): Sitzordnung „Gemischt“ und Teams bekommen eine gemeinsame Einteilung im Sportteil.
+// Gibt es beide, bleiben bei Sport die Teams, sonst die gemischten Gruppen der Sitzordnung. Die Regeln
+// („nicht zusammen“) beider Teile werden zusammengeführt. Fehlt der Sportteil, entsteht er mit denselben Kindern.
+function shareDivision(classes, groups, gymIds) {
+  for (const c of classes) {
+    let k = groups.find(x => x.id === c.id);
+    const plan = c.plan?.groups?.length ? c.plan.groups : null;
+    if (!k && !plan && !c.rules.length && c.settings.groups === 4) continue;
+    if (!k) { k = normSport({ id: c.id, name: c.name, subject: c.subject, demo: c.demo, students: c.students, teamCount: 4 }, gymIds); groups.push(k); }
+    const sport = String(k.subject || c.subject || '').trim().toLocaleLowerCase('de') === 'sport';
+    const fromSeat = plan && !(sport && k.teams.length);
+    if (fromSeat || !k.teams.length) {
+      k.teamCount = Math.min(20, Math.max(2, c.settings.groups || 4));
+      if (plan) k.teams = plan.filter(gr => gr.length).length >= 2 ? plan.map((members, i) => ({ id: uid(), name: 'Team ' + (i + 1), members: members.filter(id => k.students.some(p => p.id === id)) })) : [];
+    }
+    const has = (a, b) => k.rules.some(r => (r[0] === a && r[1] === b) || (r[0] === b && r[1] === a));
+    for (const [a, b] of c.rules) if (!has(a, b) && k.students.some(p => p.id === a) && k.students.some(p => p.id === b)) k.rules.push([a, b]);
+    c.plan = null; c.rules = [];
+  }
+}
 export function normalize(raw) {
   const fresh = freshState();
   if (!raw || typeof raw !== 'object') return fresh;
@@ -402,6 +422,7 @@ export function normalize(raw) {
   const classes = (raw.technik?.classes || []).map(c => normClass(c, rooms));
   const gyms = normGyms(raw.sport?.gyms), gymIds = new Set(gyms.map(g => g.id));
   const groups = (raw.sport?.groups || []).map(g => normSport(g, gymIds));
+  if (!(Number(raw.schema) >= 13)) shareDivision(classes, groups, gymIds);
   const known = id => classes.some(c => c.id === id) || groups.some(g => g.id === id);
   const active = known(raw.active) ? raw.active : known(raw.technik?.activeId) ? raw.technik.activeId : classes[0]?.id ?? groups[0]?.id ?? null;
   return { schema: SCHEMA, active,
