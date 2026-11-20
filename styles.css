@@ -1561,3 +1561,91 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .gym-tpl .seg button { flex: 1 1 120px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .gym-tpl .seg small { font-size: 11px; opacity: .8; }
 .gym-tpl .check { margin: 8px 0 0; }
+
+/* ---------- 2.13: Delay-Cam (js/delaycam.js) ---------- */
+body.t-dcam { --accent: #a83f5e; --accent-dark: #86304a; --accent-soft: #f7e6ec; }
+@media screen { :root[data-theme="dark"] body.t-dcam { --accent: #c95d7c; --accent-dark: #f0a9bd; --accent-soft: #3a2129; } }
+.dcam-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.dcam-grid .card + .card { margin-top: 0; }
+.dcam-delay { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; }
+.dcam-delay b { font-size: 64px; line-height: 1; letter-spacing: -.04em; color: var(--accent); font-variant-numeric: tabular-nums; }
+.dcam-delay span { color: var(--muted); font-size: 15px; }
+.dcam-range { width: 100%; accent-color: var(--accent); margin: 6px 0 12px; height: 28px; }
+.dcam-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.dcam-chips .chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 13px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.dcam-chips .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dcam-opts { border-top: 1px solid var(--line); padding-top: 14px; margin-bottom: 16px; }
+.dcam-opts .seg { margin-bottom: 6px; }
+.dcam-privacy { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; } .dcam-privacy .ic { flex: none; margin-top: 2px; }
+@media (max-width: 860px) { .dcam-grid { grid-template-columns: minmax(0, 1fr); } }
+/* Sechs Bereiche in der Kopfzeile: Speicherhinweis früher ausblenden, auf dem Handy Symbole weglassen und notfalls wischen */
+@media (max-width: 1400px) { .status { display: none; } .status.attn { display: inline-flex; } }
+@media (max-width: 560px) {
+  .nav { overflow-x: auto; scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
+  .nav a { flex: 1 0 auto; font-size: 12.5px; padding: 8px 5px; gap: 0; } .nav a .ic { display: none; }
+}
+@media (max-width: 420px) { .nav { padding: 2px; } .nav a { font-size: 12px; padding: 8px 3px; letter-spacing: -.01em; } }
+
+body.dcam-on { overflow: hidden; }
+.dcam { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; outline: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.dcam-view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dcam-live { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: 150px; width: min(26vw, 260px); aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 8px 24px rgba(0,0,0,.5); background: #111; display: none; }
+.dcam.pip .dcam-live { display: block; }
+.dcam.mirror .dcam-live { transform: scaleX(-1); }
+/* Während der Puffer sich füllt: Live-Bild groß zum Ausrichten */
+.dcam.filling .dcam-view { visibility: hidden; }
+.dcam.filling .dcam-live { display: block; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; border: 0; border-radius: 0; box-shadow: none; background: #000; opacity: .55; }
+.dcam-top { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 28px max(14px, env(safe-area-inset-left)); background: linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,0)); transition: opacity .3s; }
+.dcam-badge { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.45); backdrop-filter: blur(6px); border-radius: 14px; padding: 8px 14px; min-width: 0; transition: transform .3s; }
+.dcam-badge b { font-size: clamp(22px, 4vw, 40px); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dcam-badge small { font-size: 12.5px; opacity: .8; }
+.dcam-dot { width: 12px; height: 12px; border-radius: 50%; background: #e2475f; box-shadow: 0 0 0 4px rgba(226,71,95,.25); flex: none; animation: dcam-pulse 1.6s ease-in-out infinite; }
+.dcam.paused .dcam-dot { background: #f2b84b; box-shadow: 0 0 0 4px rgba(242,184,75,.25); animation: none; }
+.dcam.filling .dcam-dot { background: #8fb7ff; box-shadow: 0 0 0 4px rgba(143,183,255,.25); }
+@keyframes dcam-pulse { 50% { opacity: .35; } }
+.dcam-top-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.dcam-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 50px; min-width: 50px; padding: 0 12px; border: 0; border-radius: 14px; background: rgba(255,255,255,.18); color: #fff; font-weight: 600; font-size: 15px; backdrop-filter: blur(6px); cursor: pointer; }
+.dcam-btn:hover { background: rgba(255,255,255,.28); }
+.dcam-btn.on { background: rgba(255,255,255,.42); }
+.dcam-btn.done { background: #a83f5e; }
+.dcam-btn.main { background: #fff; color: #222; }
+.dcam-btn.resume { background: #3f9a5c; }
+.dcam-btn[hidden] { display: none; }
+.dcam-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px max(12px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.72)); transition: opacity .3s; }
+.dcam-btns { display: flex; gap: 8px; align-items: stretch; max-width: 900px; margin: 0 auto; }
+.dcam-btn.wide { flex: 1; }
+.dcam-stepper { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border-radius: 16px; padding: 3px; }
+.dcam-stepper[hidden] { display: none; }
+.dcam-stepper .dcam-btn { font-size: 26px; font-weight: 500; }
+.dcam-stepper span { display: flex; flex-direction: column; align-items: center; min-width: 74px; } .dcam-stepper b { font-size: 20px; font-variant-numeric: tabular-nums; } .dcam-stepper small { font-size: 11px; opacity: .75; }
+.dcam-replay { max-width: 900px; margin: 0 auto 10px; }
+.dcam-scrub { width: 100%; accent-color: #f2b84b; height: 32px; }
+.dcam-replay-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dcam-time { font-size: 13.5px; opacity: .9; font-variant-numeric: tabular-nums; }
+.dcam-speeds { display: flex; gap: 6px; }
+.dcam-chip { border: 0; border-radius: 999px; padding: 7px 14px; background: rgba(255,255,255,.18); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; }
+.dcam-chip.on { background: #f2b84b; color: #222; }
+.dcam-fill { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; text-align: center; padding: 0 20px; }
+.dcam-fill[hidden] { display: none; }
+.dcam-fill p { margin: 0; font-size: 16px; background: rgba(0,0,0,.5); padding: 8px 14px; border-radius: 12px; }
+.dcam-ring { position: relative; width: min(38vmin, 220px); aspect-ratio: 1; }
+.dcam-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.dcam-ring circle { fill: rgba(0,0,0,.35); stroke-width: 8; }
+.dcam-ring .bg { stroke: rgba(255,255,255,.2); }
+.dcam-ring .fg { fill: none; stroke: #fff; stroke-linecap: round; stroke-dasharray: 326.7; stroke-dashoffset: 326.7; transition: stroke-dashoffset .2s linear; }
+.dcam-ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: min(18vmin, 96px); font-variant-numeric: tabular-nums; }
+.dcam-msg { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); background: rgba(0,0,0,.6); padding: 12px 18px; border-radius: 12px; font-size: 15px; text-align: center; max-width: 86%; }
+.dcam-msg:empty { display: none; }
+/* Ohne Bedienung: Leisten ausblenden, nur die Verzögerung bleibt klein sichtbar */
+.dcam.idle { cursor: none; }
+.dcam.idle .dcam-bottom, .dcam.idle .dcam-top-btns { opacity: 0; pointer-events: none; }
+.dcam.idle .dcam-top { background: none; }
+@media (max-width: 600px) {
+  .dcam-btn.done span { display: none; }
+  .dcam-btn { min-height: 46px; min-width: 46px; padding: 0 10px; }
+  .dcam-btns { flex-wrap: wrap; } .dcam-btn.resume { order: -1; flex: 1 0 100%; }
+  .dcam-badge small { display: none; }
+  .dcam-live { width: 38vw; bottom: 140px; }
+  .dcam-stepper span { min-width: 60px; }
+}
+@media (prefers-reduced-motion: reduce) { .dcam-dot { animation: none; } }
