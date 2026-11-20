@@ -459,7 +459,10 @@ function teamsHtml(g) {
     <div class="main-col print-area"><div class="card">
       <div class="card-head">
         <div><p class="eyebrow">Heute gemeinsam</p><h2>Deine Teams <span class="badge">${present} dabei</span></h2></div>
-        <button class="btn primary sport-btn no-print" data-act="mix-teams">${icon('shuffle')} Neu mischen</button>
+        <div class="tools no-print">
+          <label class="field inline">Anzahl Teams<select class="select sm" id="team-count">${Array.from({ length: 19 }, (_, i) => i + 2).map(n => `<option ${n === k.teamCount ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <button class="btn primary sport-btn" data-act="mix-teams">${icon('shuffle')} Neu mischen</button>
+        </div>
       </div>
       <p class="print-only print-title">${esc(g.name)} · Teams · ${new Date().toLocaleDateString('de-DE')}</p>
       ${k.teams.length ? `<div class="team-grid">${k.teams.map((t, i) => `<div class="team" style="${palStyle(i)}"><h4><span class="gdot"></span>${esc(t.name)}<span class="count">${t.members.length}</span></h4><ul>${t.members.map(id => { const p = person(id); return p ? `<li data-pid="${esc(id)}">${esc(p.name)}${p.className ? `<small>${esc(p.className)}</small>` : ''}</li>` : ''; }).join('')}</ul></div>`).join('')}</div>`
@@ -469,11 +472,6 @@ function teamsHtml(g) {
         <button class="btn ghost" data-act="new-tournament" ${k.teams.length >= 2 && !problem ? '' : 'disabled'}>Turnier mit diesen Teams →</button></div>
     </div></div>
     <aside class="side no-print">
-      <div class="card">
-        <h3>Teams</h3>
-        <label class="field inline">Anzahl Teams<select class="select sm" id="team-count">${Array.from({ length: 19 }, (_, i) => i + 2).map(n => `<option ${n === k.teamCount ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-        <p class="muted small-text">Alle heute anwesenden Kinder werden genau einmal zugeordnet. Ändert sich die Anzahl, wird neu gemischt; fehlt ein Kind, wird nur ausgeglichen.</p>
-      </div>
       ${groups.peopleCardHtml(g, search)}
       <div class="card"><button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button></div>
     </aside>
