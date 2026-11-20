@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.13.1
+
+- **Anzeigetafel schöner (`js/widgets.js`, `styles.css`):** Jedes Team hat ein eigenes Feld in seiner Farbe (Blau links, Rot rechts) mit Farbleiste oben und dem Namen als Plakette; Plus-Knopf in der Teamfarbe. Wer führt, wird mit farbigem Rahmen und Leuchten hervorgehoben. Die Spielzeit steht in einer dunklen Anzeige wie auf einer echten Tafel (rot, wenn sie abgelaufen ist). Neue Punkte springen kurz auf, abgezogene sinken kurz ab (aus bei „Bewegung reduzieren“). Dreistellige Punktzahlen werden kleiner gesetzt und passen ins Feld; in schmalen Tafeln (Handy) werden die Knöpfe kleiner, damit nichts abgeschnitten wird. Dunkles Design mit eigenen, helleren Teamfarben. Kein neuer Datenstand.
+
 ## Neu in 2.13.0
 
 - **Delay-Cam (`js/delaycam.js`, neuer Bereich `#/delaycam`):** zeigt das Kamerabild mit einstellbarer Verzögerung (1–60 s, Schnellwahl 2–30 s) – z. B. im Sport: Übung turnen, umdrehen und sich selbst sehen. Bis die Verzögerung erreicht ist, zeigt ein Countdown das Live-Bild zum Ausrichten; danach läuft das verzögerte Bild durchgehend. Verzögerung im Betrieb mit − / + ändern.
