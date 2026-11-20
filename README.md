@@ -1,6 +1,14 @@
 # KlassenKompass
 
-Web-App (PWA) für den Unterricht mit fünf Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
+Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
+
+## Neu in 2.13.0
+
+- **Delay-Cam (`js/delaycam.js`, neuer Bereich `#/delaycam`):** zeigt das Kamerabild mit einstellbarer Verzögerung (1–60 s, Schnellwahl 2–30 s) – z. B. im Sport: Übung turnen, umdrehen und sich selbst sehen. Bis die Verzögerung erreicht ist, zeigt ein Countdown das Live-Bild zum Ausrichten; danach läuft das verzögerte Bild durchgehend. Verzögerung im Betrieb mit − / + ändern.
+- **Pause und Wiederholung:** „Pause“ hält an; Regler über die letzten Sekunden (Verzögerung plus 10 s), Einzelbilder vor und zurück, Abspielen in 0,25×, 0,5× und 1×. „Weiter mit Verzögerung“ baut die Verzögerung neu auf.
+- **Weitere Bedienung:** Spiegeln, Kamera wechseln (bei mehreren Kameras), Live-Bild klein in der Ecke, Vollbild; ohne Bedienung blenden sich die Knöpfe nach 4 s aus. Tasten: Leertaste, ← →, + −, F, Esc. Bildschirm bleibt an (Wake Lock), die App-Sperre wartet, solange die Delay-Cam läuft.
+- **Technik und Datenschutz:** Die Bilder werden als JPEG (720p oder 480p, 30 oder 15 Bilder/s) nur im Arbeitsspeicher gepuffert (höchstens etwa 220 MB) und beim Beenden verworfen – keine Aufnahme, keine Speicherung, keine Übertragung. Die Einstellungen liegen nur auf dem Gerät (`localStorage` `klassenkompass.delaycam`). Kein neuer Datenstand.
+- **Kopfzeile mit sechs Bereichen:** Der Speicherhinweis oben verschwindet schon unter 1400 px Breite; auf dem Handy stehen die Bereiche ohne Symbole (bei sehr schmalen Geräten seitlich wischbar).
 
 ## Neu in 2.12.0
 

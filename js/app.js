@@ -6,6 +6,7 @@ import * as turniere from './turniere.js';
 import * as hallen from './hallen.js';
 import * as screen from './screen.js';
 import * as quiz from './quiz.js';
+import * as delaycam from './delaycam.js';
 import * as backup from './backup.js';
 import * as account from './account.js';
 import * as cloudimages from './cloudimages.js';
@@ -16,15 +17,16 @@ import * as importer from './importer.js';
 import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.12.0';
+export const VERSION = '2.13.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   hallenplaene: { mod: hallen, title: 'Hallenpläne', theme: '#2d6f7d', cls: 't-hall' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
-  bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' } };
+  bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' },
+  delaycam: { mod: delaycam, title: 'Delay-Cam', theme: '#a83f5e', cls: 't-dcam' } };
 // Frühere Adressen: #/sport öffnet Gruppen → Teams, #/gruppen ist dasselbe wie #/
-const ALIASES = { gruppen: '', sport: '', technik: '', hallenplan: 'hallenplaene' };
+const ALIASES = { gruppen: '', sport: '', technik: '', hallenplan: 'hallenplaene', delay: 'delaycam', 'delay-cam': 'delaycam' };
 
 let unmount = null, installEvent = null;
 await lock.gate();   // mit App-Sperre: erst nach dem Passwort weiter
@@ -48,6 +50,7 @@ function shell() {
       <a href="#/hallenplaene" data-route="hallenplaene">${icon('hall', 16)}<span>Hallenpläne</span></a>
       <a href="#/quiz" data-route="quiz">${icon('cards', 16)}<span>Quiz</span></a>
       <a href="#/bildschirm" data-route="bildschirm">${icon('screen', 16)}<span>Bildschirm</span></a>
+      <a href="#/delaycam" data-route="delaycam">${icon('camera', 16)}<span>Delay-Cam</span></a>
     </nav>
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
@@ -264,6 +267,7 @@ function helpDialog() {
       <li><b>Hallenpläne:</b> eigene Sammlung, nach Themen geordnet und durchsuchbar; Pläne einer Stunde lassen sich als Phasen hintereinander anlegen. Bereiche, Hütchen, Kinder, Lehrkraft und über 50 Geräte aus der Leiste in die schräg gezeichnete Halle (Standard 27 m × 15 m oder eigene Hallen mit festen Geräten, oben wählbar und als Standardhalle je Lerngruppe; Spielfeldlinien zuschaltbar) ziehen, verschieben, drehen und in der Größe ändern; mit Umschalt-Klick mehrere Elemente wählen, „Kinder einsetzen“ füllt einen Bereich, „Raster“ richtet beim Verschieben aus. Groß zeigen oder als Schüleransicht (A4 quer) drucken. Optional eigene Bilder – sie bleiben auf deinen Geräten bzw. verschlüsselt in deinem Konto.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Im Quiz gibt es keine Namen, nur Tiere: Karte 1 ist immer der Adler, Karte 2 der Biber … – in jeder Klasse gleich, ein Kartensatz reicht für alle Klassen. Quiz-Klasse mit Name und Kinderzahl anlegen (bei weniger Kindern fallen die letzten Tiere weg), Karten und das Zuordnungsblatt drucken (die Kinder schreiben ihren Namen neben ihr Tier; das Blatt bleibt bei dir), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Das Quiz läuft dort als Bühne mit Tönen und Denkmusik (Lautsprecher-Knopf: an/aus, Lautstärke, Probehören); nach dem Auflösen zeigt „Zwischenstand“ die besten fünf Tiere. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Jede Klasse hat eine Rangliste über alle Quiz (sortiert nach Anteil richtiger Antworten), die sich zeigen, als CSV speichern und neu beginnen lässt. Unter „Differenzierung“ lassen sich bei Bedarf einschalten: Zweite Chance (erst nur die Verteilung zeigen, beraten, Karten noch einmal zeigen), G- und M-Fassung einer Frage (je Tier wählbar), Klassenziel, Abschluss ohne Podium und Vorlesen; je Frage außerdem Sternchenfrage, Thema und Tipp. Ausgeschaltet läuft das Quiz wie gewohnt. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ auf andere Geräte.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer, QR-Codes und Hallenpläne frei anordnen und groß zeigen – dazu Zufallsauswahl, Arbeitsform (auf Wunsch mit Lautstärke-Ampel), Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und eine Tafel zum Schreiben und Malen. Der Endton jedes Timers ist wählbar (Standard: Klangschale; Zahnrad am Timer). „Vorlagen“ speichert Anordnungen und lädt sie wieder. Läuft auf dem Gerät Musik, kann die App sie bei Signalen leiser stellen oder kurz anhalten (Zahnrad → „Musik bei Signalen“).</li>
+      <li><b>Delay-Cam:</b> zeigt das Kamerabild mit einstellbarer Verzögerung (1–60 s) – z. B. im Sport: Übung turnen, umdrehen und sich selbst sehen. Tablet oder Handy aufstellen, Verzögerung wählen, „Delay-Cam starten“. Bis die Verzögerung erreicht ist, zeigt ein Countdown das Live-Bild zum Ausrichten. „Pause“ hält an: mit dem Regler durch die letzten Sekunden fahren, Einzelbilder vor und zurück, Zeitlupe (0,25× und 0,5×). „Weiter mit Verzögerung“ startet neu. Dazu Spiegeln, Kamera wechseln, Live-Bild klein in der Ecke und Vollbild; ohne Bedienung blenden sich die Knöpfe aus. Tasten: Leertaste, ← →, + −, F, Esc.</li>
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
       <li><b>Drucken:</b> Sitzplan, Teams, Turnier und Ranglisten über „Drucken / PDF“ ausdrucken oder als PDF speichern.</li>
       <li><b>Konto (alle Geräte):</b> Zahnrad → „Konto &amp; Synchronisierung“. Mit E-Mail und Passwort anmelden; die Daten werden auf dem Gerät verschlüsselt und auf allen angemeldeten Geräten gleich gehalten. Passwort vergessen = Daten im Konto verloren.</li>
@@ -280,6 +284,7 @@ function helpDialog() {
       <li>Bitte nur Vornamen (und bei Bedarf die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Das Quiz kennt keine Namen, nur Kartennummern und Tiere; die Zuordnung Tier ↔ Kind steht nur auf deinem Papierblatt. Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Karte. Ist die G- und M-Fassung eingeschaltet, speichert die App zusätzlich, welche Kartennummern die G-Fassung bearbeiten (und im Ergebnis, wer sie bearbeitet hat) – ohne Namen; am Beamer stehen beide Fassungen nebeneinander. Bei sehr wenigen Kindern auf G lässt die Verteilung dort Rückschlüsse auf einzelne Antworten zu. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
       <li><b>Bildschirm:</b> Die Lautstärke-Ampel (Objekt „Arbeitsform“) nutzt das Mikrofon nur, nachdem du es gestartet und der Browser es freigegeben hat. Der Ton wird ausschließlich auf dem Gerät zu einem Pegel ausgewertet – nichts wird aufgenommen, gespeichert oder übertragen. Zufallsauswahl, Dienste und Hilfe-Warteliste zeigen Vornamen der gewählten Lerngruppe am Beamer; wer das nicht möchte, wählt dort „Tiere des Kartenquiz“ oder „Nummern“. Was du in Auftragskarte, Warteliste oder Tafel schreibst, wird wie alle Daten gespeichert (mit Konto verschlüsselt abgeglichen) – bitte dort keine Bewertungen oder Angaben über einzelne Kinder notieren.</li>
+      <li><b>Delay-Cam:</b> Die Kamera läuft nur, solange die Delay-Cam geöffnet ist. Die Bilder liegen nur kurz im Arbeitsspeicher des Geräts (höchstens Verzögerung plus 10 Sekunden), werden nicht aufgenommen, nicht gespeichert und nicht übertragen und sind beim Beenden weg. Gespeichert werden nur deine Einstellungen (Verzögerung, Kamera, Spiegeln) auf diesem Gerät. Zeige das Bild nur, wenn alle im Bild einverstanden sind.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
       <li>Wenn der Browserverlauf bzw. die Websitedaten gelöscht werden, sind auch die Daten weg. Exportiere daher regelmäßig eine Sicherung.</li>
     </ul>
@@ -362,7 +367,8 @@ function tour({ force = false } = {}) {
       <li>${icon('trophy')}<span><b>Turniere</b> – jeder gegen jeden, K.-o. und King of the Court ohne Ausscheiden, dazu Einzelranglisten.</span></li>
       <li>${icon('hall')}<span><b>Hallenpläne</b> – Hallen schräg von oben zeichnen, nach Themen ordnen und als Schüleransicht drucken.</span></li>
       <li>${icon('cards')}<span><b>Quiz</b> – Kartenquiz: Kinder heben Antwortkarten, das Handy scannt die ganze Klasse.</span></li>
-      <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Zufallsauswahl, Auftragskarte, Anzeigetafel, Tafel und mehr groß zeigen.</span></li></ul>
+      <li>${icon('screen')}<span><b>Bildschirm</b> – Timer, Stoppuhren, Zufallsauswahl, Auftragskarte, Anzeigetafel, Tafel und mehr groß zeigen.</span></li>
+      <li>${icon('camera')}<span><b>Delay-Cam</b> – Kamerabild mit Verzögerung: Übung machen, umdrehen, sich selbst sehen – mit Zeitlupe.</span></li></ul>
       <p class="muted small-text">Zum Ausprobieren sind zwei Demo-Lerngruppen mit erfundenen Namen angelegt. Du kannst sie jederzeit löschen.</p>` },
     { ic: icon('check', 30), title: 'Deine Daten', html: `<ul class="help-list">
       <li>Bitte <b>nur Vornamen</b> eintragen (optional die Klasse).</li>
@@ -406,7 +412,7 @@ theme.init(() => { if (document.querySelector('meta[name=theme-color]')) setThem
 addEventListener('hashchange', navigate);
 navigate();
 tour();
-lock.startAutoLock(() => screen.busy() || quiz.busy());
+lock.startAutoLock(() => screen.busy() || quiz.busy() || delaycam.busy());
 // Daten einer neueren App-Fassung: nichts speichern, neu laden lassen (store.outdated)
 if (store.outdated()) toast('Diese Daten stammen von einer neueren App-Fassung. Änderungen werden nicht gespeichert – bitte neu laden.', { kind: 'warn', action: 'Neu laden', onAction: () => location.reload() });
 // Hinweis auf die App-Sperre, solange eigene Daten unverschlüsselt auf dem Gerät liegen (höchstens einmal pro Woche)
