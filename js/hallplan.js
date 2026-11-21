@@ -2,7 +2,7 @@
 // document noch Speicher und läuft deshalb auch in Node (tools/hallplan.mjs erzeugt damit Schüleransicht und PNG).
 import { uid } from './engine.js';
 import * as gear from './hallgear.js';
-import { BW, BH, K, MARKS, STD, geo, marksSvg, GYM_LEN, GYM_DEP } from './hallfloor.js';
+import { BW, BH, K, MARKS, STD, geo, marksSvg, badmintonCourts, GYM_LEN, GYM_DEP } from './hallfloor.js';
 export { geo, STD };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -206,18 +206,33 @@ export const defs = '<defs><pattern id="h-net" width="16" height="16" patternUni
 // Halle eines Plans: in der App übergibt hall.js die gespeicherte Halle (gym), Dateien bringen sie als gymDef mit
 const gymFor = (p, gym) => (gym !== undefined ? gym : p?.gymDef) || null;
 export const baseItems = (p, gym) => (p?.base ? [] : gymFor(p, gym)?.items || []);
+// ---------- Eingeblendete Geräte (seit 2.14.0): Körbe, Tore und Netz unter „Spielfeldlinien“ ----------
+// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (Felder passen sich der Halle an, siehe hallfloor.js)
+export const goals = g => { const x = (g.len - Math.min(40, g.len - 2)) / 2; return [gearAt('tor', 'gespiegelt', x, g.dep / 2, { ax: 0.82, ay: 0.76, g }), gearAt('tor', 'seitlich', g.len - x, g.dep / 2, { ax: 0.18, ay: 0.76, g })]; };
+export const baskets = g => { const x = (g.len - Math.min(28, g.len - 1)) / 2 + 1.2; return [gearAt('basketballkorb', 'gespiegelt', x, g.dep / 2, { ax: 0.25, ay: 1.12, g }), gearAt('basketballkorb', 'seitlich', g.len - x, g.dep / 2, { ax: 0.75, ay: 1.12, g })]; };
+// Netz: Badmintonnetze, wenn nur Badmintonlinien an sind, sonst das Volleyballnetz
+export const nets = (g, lines = []) => (lines.includes('badminton') && !lines.includes('volleyball')
+  ? badmintonCourts(g).map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, g.dep / 2, { ay: 0.97, L: 6.3, g }))
+  : [gearAt('netz', 'laengs', g.len / 2, g.dep / 2, { L: Math.min(9.6, g.dep - 0.6), ax: 0.5, ay: 0.65, g })]);
+const MARK_GEAR = { koerbe: baskets, tore: goals, netz: nets };
+// Gerät fest in der Halle (Basketballkörbe an der Wand): dann zeichnet der Schalter nichts zusätzlich
+export const fixedGear = (p, gym, mark) => { const id = MARKS.find(m => m.id === mark)?.gear; return !!id && baseItems(p, gym).some(i => i.kind === 'gear' && i.gear === id); };
+export function markGear(p, gym) {
+  const lines = p?.lines || [], g = geo(gymFor(p, gym));
+  return MARKS.filter(m => m.gear && lines.includes(m.id) && !fixedGear(p, gym, m.id)).flatMap(m => MARK_GEAR[m.id](g, lines).map((i, n) => ({ ...i, id: `mark-${m.id}-${n}` })));
+}
 export function contentBox(p, gym) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
   const g = geo(gymFor(p, gym));
   if (p.floor !== 'leer') add(g.left, g.top, g.left + g.width + g.height * K, g.bottom);
-  [...baseItems(p, gym), ...p.items].forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
+  [...baseItems(p, gym), ...markGear(p, gym), ...p.items].forEach(i => { const r = i.rot ? Math.hypot(i.w, i.h) / 2 : 0, cx = i.x + i.w / 2, cy = i.y + i.h / 2; r ? add(cx - r, cy - r, cx + r, cy + r) : add(i.x, i.y, i.x + i.w, i.y + i.h); });
   if (!Number.isFinite(x0)) return `0 0 ${BW} ${BH}`;
   const pad = 24; return `${num(x0 - pad)} ${num(y0 - pad)} ${num(x1 - x0 + 2 * pad)} ${num(y1 - y0 + 2 * pad)}`;
 }
 export function boardSvg(p, { edit = false, cls = '', crop = false, gym } = {}) {
   if (!p) return '';
-  const base = baseItems(p, gym);
+  const base = [...baseItems(p, gym), ...markGear(p, gym)];
   return `<svg class="hall-svg ${cls}" viewBox="${crop ? contentBox(p, gym) : `0 0 ${BW} ${BH}`}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hallenplan ${esc(p.title)}">${defs}
     <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p, geo(gymFor(p, gym)))}${base.length ? `<g class="h-base">${base.map(baseSvg).join('')}</g>` : ''}${p.items.map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
 }
