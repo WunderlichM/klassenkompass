@@ -40,6 +40,7 @@ let host = null, sel = [], kidCount = 5;
 const pref = (k, d) => { try { return localStorage.getItem('klassenkompass.' + k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem('klassenkompass.' + k, v); } catch {} };
 let snap = pref('hallSnap', '0') === '1', palHidden = pref('hallPalette', '1') === '0';
+let showRules = pref('hallRulesShow', '0') === '1';   // Spielregeln unter der Halle zeigen (seit 2.16.0, je Gerät)
 let side = pref('hallSide', 'tools') === 'settings' ? 'settings' : 'tools';   // Seitenleiste: Elemente oder Einstellungen (seit 2.15.0)
 // Geräte, die beim Einrichten einer Halle gebraucht werden (seit 2.15.0 als eigene Gruppe oben in der Leiste)
 const SETUP_GEAR = ['tuer', 'doppeltuer', 'geraeteraumtor', 'trennwand', 'tor', 'basketballkorb', 'seilanlage', 'sprossenwand', 'sprossenwand2', 'sprossenwand_reihe', 'matte_stehend', 'weichboden_stehend', 'tafel', 'lautsprecher'];
@@ -196,6 +197,7 @@ function settingsHtml(p) {
       <label class="field">Stunde <small class="muted">optional, z. B. Datum und Klasse</small><input class="input sm" data-hc="lesson" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 · Klasse 6">${datalist('h-lessons', lessons())}</label>
       ${p.lesson ? `<label class="field h-inline">Phase <input class="input sm h-num" type="number" data-hc="phase" min="1" max="20" value="${p.phase || 1}"><small class="muted">Pläne derselben Stunde zeigst du oben mit den Pfeilen nacheinander.</small></label>` : ''}
       <button class="btn ghost sm full ${p.rules ? 'on' : ''}" data-h="rules">${icon('list', 15)} ${p.rules ? `Spielregeln bearbeiten (${p.rules.items.length})` : 'Spielregeln anlegen'}</button>
+      ${rulesCheck(!p.rules)}
     </section>
     <section><h3>Halle</h3>
       <select class="select sm" data-hc="gym" aria-label="Halle dieses Plans">${gymOptions(cur)}<option value="__new">+ Neue Halle …</option></select>
@@ -217,6 +219,10 @@ function settingsHtml(p) {
     </section>
   </div>`;
 }
+// Schalter „Regeln unter der Halle zeigen“ – gilt auf diesem Gerät für alle Pläne mit Spielregeln
+const rulesCheck = (off = false) => `<label class="check"><input type="checkbox" data-hc="showrules" ${showRules ? 'checked' : ''} ${off ? 'disabled' : ''}><span>Regeln unter der Halle zeigen <small class="muted">${off ? 'erst Spielregeln anlegen' : 'auch in der großen Ansicht; gilt auf diesem Gerät für alle Pläne mit Regeln'}</small></span></label>`;
+// Spielregeln unter der Zeichnung (Bildschirmansicht, nicht im Druck – dort stehen sie auf Seite 2)
+const screenRules = p => (showRules && p.rules?.items?.length ? `<section class="h-rules-scr ${p.rules.items.length > 4 ? 'cols' : ''}"><b>${esc(p.rules.title || 'Spielregeln')}</b><ol>${p.rules.items.map(x => `<li>${esc(x)}</li>`).join('')}</ol></section>` : '');
 function editorHtml(p) {
   const presenting = document.body.classList.contains('presenting');
   return `<div class="hall ${p.base ? 'gym-edit' : ''} ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
@@ -226,6 +232,7 @@ function editorHtml(p) {
       ${palHidden ? '' : sideHtml(p)}
       <div class="hall-board" tabindex="0">
         ${boardSvg(p, { edit: true })}
+        ${p.base ? '' : screenRules(p)}
         <p class="hall-note">${p.base ? `Halle ${gymSize(gymById(p.gym))} · ` : ''}Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p>
       </div>
     </div>
@@ -470,6 +477,7 @@ function onSettingChange(t, hc) {
   if (hc === 'phase') { const v = clamp(Math.round(Number(t.value)) || 1, 1, 20); commit(x => { x.phase = v; }); return true; }
   if (hc === 'mark') { const m = t.value; commit(x => { const cur = x.lines || []; x.lines = t.checked ? MARKS.map(y => y.id).filter(y => y === m || cur.includes(y)) : cur.filter(y => y !== m); }); return true; }
   if (hc === 'snap') { snap = t.checked; setPref('hallSnap', snap ? '1' : '0'); return true; }
+  if (hc === 'showrules') { showRules = t.checked; setPref('hallRulesShow', showRules ? '1' : '0'); attach(host); return true; }
   if (hc === 'gym') { if (t.value === '__new') { t.value = gymOf(p)?.id || ''; gymDialog(); } else setPlanGym(t.value); return true; }
   if (hc === 'gymdef') {
     const lg = groups.active(), cur = gymOf(p)?.id || ''; if (!lg) return true;
@@ -827,9 +835,11 @@ function rulesEditDialog(p) {
     <label class="field">Überschrift<input name="title" class="input" maxlength="60" value="${esc(r?.title || p.topic || '')}" placeholder="z. B. Völkerball"></label>
     <label class="field">Regeln <small class="muted">(eine je Zeile, höchstens ${RULES_MAX}, kurz halten)</small><textarea name="items" class="input" rows="8" maxlength="${RULES_MAX * 210}" placeholder="Treffer: direkt, ohne Boden.\nKopf zählt nicht.\nGetroffen? Über den Randweg nach außen.">${esc((r?.items || []).join('\n'))}</textarea></label>
     <label class="check"><input type="checkbox" name="print" ${r?.print === false ? '' : 'checked'}> Beim Drucken der Schüleransicht auf Seite 2 mitdrucken</label>
+    <label class="check"><input type="checkbox" name="show" ${showRules ? 'checked' : ''}> <span>In der App unter der Halle zeigen <small class="muted">auch in der großen Ansicht; gilt auf diesem Gerät für alle Pläne mit Regeln</small></span></label>
     <p class="muted small-text">Seite 1 bleibt der Hallenplan in voller Größe; die Regeln stehen auf Seite 2 – beidseitig gedruckt also auf der Rückseite. Leeres Feld = keine Regeln.</p>`,
     onSubmit: fd => {
       const rules = normRules({ title: fd.get('title'), items: String(fd.get('items') || '').split(/\r?\n/).map(x => x.replace(/^\s*(?:\d+[.)]|[-•*])\s*/, '')), print: fd.get('print') === 'on' });
+      showRules = fd.get('show') === 'on'; setPref('hallRulesShow', showRules ? '1' : '0');
       commit(x => { if (rules) x.rules = rules; else delete x.rules; });
       toast(rules ? `${rules.items.length} ${rules.items.length === 1 ? 'Regel' : 'Regeln'} gespeichert${rules.print ? ' – sie stehen beim Drucken auf Seite 2' : ''}.` : 'Keine Spielregeln mehr bei diesem Plan.');
     } });

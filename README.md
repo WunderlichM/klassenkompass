@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.16.0
+
+- **Spielregeln unter der Halle zeigen (`js/hall.js`, `styles.css`):** Neuer Schalter „Regeln unter der Halle zeigen“ in den Einstellungen (Abschnitt *Plan*, unter „Spielregeln“) und im Dialog „Spielregeln“. Ist er an, stehen Überschrift und nummerierte Regeln direkt unter der Zeichnung – im Editor und in „Ansicht vergrößern“ (dort groß für den Beamer; die Halle wird so weit verkleinert, dass Plan und Regeln zusammen auf den Bildschirm passen). Ab fünf Regeln zweispaltig. Der Schalter gilt auf diesem Gerät für alle Pläne mit Regeln (`klassenkompass.hallRulesShow`, Standard aus); ohne Regeln ist er gesperrt. Der Druck bleibt unverändert (Regeln auf Seite 2). Kein neuer Datenstand.
+
 ## Neu in 2.15.0
 
 - **Hallenpläne übersichtlicher (`js/hall.js`, `js/hallen.js`, `styles.css`):** Über der Halle steht nur noch eine schlanke Kopfzeile: Titel (antippen = Einstellungen mit Fokus auf dem Namen), Thema, Phasen mit „+“ für eine neue Phase, Rückgängig/Wiederholen mit eigenen Symbolen (nicht mehr mit den Phasenpfeilen zu verwechseln), die Knöpfe **Elemente** und **Einstellungen** und ein Menü **„⋯“** mit Nächste Phase, Kopie, Spielregeln, Exportieren und – abgesetzt, rot – Löschen. Die frühere zweite Leiste mit den Linien-Schaltern und der Knopf „Eigenschaften“ entfallen.

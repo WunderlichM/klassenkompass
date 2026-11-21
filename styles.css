@@ -1739,3 +1739,15 @@ body.dcam-on { overflow: hidden; }
 .h-tpl-l { line-height: 1.2; }
 @media (max-width: 600px) { .h-tpls { grid-template-columns: repeat(2, 1fr); } }
 .field[hidden], .check[hidden] { display: none; }
+/* Spielregeln unter der Halle (seit 2.16.0, Schalter in Einstellungen bzw. im Regel-Dialog) */
+.h-rules-scr { margin: 6px 6px 2px; padding: 10px 14px 6px; border-top: 2px solid #e3e6ea; color: #1f2a3c; }
+.h-rules-scr b { display: block; font-size: 17px; margin-bottom: 6px; }
+.h-rules-scr ol { margin: 0; padding-left: 24px; font-size: 16px; line-height: 1.4; }
+.h-rules-scr li { margin: 0 0 4px; padding-left: 2px; break-inside: avoid; }
+@media (min-width: 900px) { .h-rules-scr.cols ol { columns: 2; column-gap: 40px; } }
+body.presenting .hall-board:has(.h-rules-scr) { display: flex; flex-direction: column; height: calc(100dvh - 60px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+body.presenting .hall-board:has(.h-rules-scr) svg { flex: 1 1 auto; min-height: 0; height: auto; }
+body.presenting .h-rules-scr { flex: none; padding: 12px 24px 4px; }
+body.presenting .h-rules-scr b { font-size: clamp(20px, 2.4vw, 32px); }
+body.presenting .h-rules-scr ol { font-size: clamp(18px, 2vw, 28px); padding-left: 1.4em; }
+body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
