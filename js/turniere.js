@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import * as groups from './groups.js';
 import { tournamentTable, individualTable, reconcileSeries, linkTournament, uid, FORMATS, formatOf, matchWinner, koPlan, koLabel, koSize, kotcPlan, kotcCourts, defaultCourtPoints, syncTournament, tournamentDone, createTournament, teamsAreCurrent } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, palStyle, toggleFullscreen, todayISO, displayDate } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, palStyle, toggleFullscreen, todayISO, displayDate, helpCard } from './ui.js';
 
 const SPORTS = ['Fußball', 'Basketball', 'Volleyball', 'Handball', 'Badminton', 'Tischtennis', 'Leichtathletik', 'Turnen', 'Hockey', 'Brennball', 'Völkerball', 'Treibball'];
 let tab = 'turnier', activeTournament = null, activeSeries = null, root = null;
@@ -59,7 +59,7 @@ function sidebar(g) {
       <button class="btn primary sport-btn full" data-act="new-tournament" ${k.teams.length >= 2 && current ? '' : 'disabled'}>${icon('plus', 16)} Turnier mit diesen Teams</button>
       <a class="btn ghost full" href="#/" data-act="to-teams">${icon('shuffle', 16)} Teams mischen (Gruppen)</a>
     </div>
-    <div class="card"><p class="muted small-text">Turnierformen ohne Ausscheiden und Warten: Bei K.-o. spielen Verlierer um die hinteren Plätze, bei King of the Court steigen Teams über mehrere Felder auf und ab.</p></div>`;
+    ${helpCard('turniere', `${icon('help', 16)} Turnierformen`, '<p class="muted small-text">Ohne Ausscheiden und Warten: <b>Jeder gegen jeden</b> nach Spielplan; bei <b>K.-o.</b> spielen Verlierer um die hinteren Plätze; bei <b>King of the Court</b> steigen Teams über mehrere Felder auf und ab.</p>')}`;
 }
 
 // ---------- Turniere ----------

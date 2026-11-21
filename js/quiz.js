@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as account from './account.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks, helpCard } from './ui.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
@@ -190,7 +190,7 @@ function drawHome() {
         <p class="sub">Jede Karte eine Stimme – ohne Handys für die Kinder.</p>
       </div>
       <div class="picker">
-        <label class="eyebrow" for="quiz-class">Deine Klasse</label>
+        <label class="eyebrow" for="quiz-class" title="Quiz-Klassen kennen keine Namen – nur Kinderzahl und Tierkarten">Quiz-Klasse</label>
         <div class="picker-row">
           <select id="quiz-class" class="select">${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeClassId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${q.classes.length ? '' : '<option>Noch keine Klasse</option>'}</select>
           <button class="icon-btn" data-act="classes" title="Klassen verwalten" aria-label="Klassen verwalten">${icon('sliders')}</button>
@@ -243,16 +243,13 @@ function drawHome() {
           <div class="card-head small"><h3>${icon('sliders', 16)} Differenzierung</h3><div class="tools"><button class="btn ghost sm" data-act="diff">Einstellen</button></div></div>
           <p class="muted small-text">${esc(diffSummary())}</p>
         </div>
-        <div class="card">
-          <h3>${icon('help', 16)} So geht’s</h3>
-          <ol class="help-list steps small-text">
+        ${helpCard('quiz', `${icon('help', 16)} So geht’s`, `          <ol class="help-list steps small-text">
             <li>Einen Kartensatz drucken (am besten auf festem Papier) – er passt für alle Klassen. Jede Karte trägt Nummer und Tier. Mit dem Zuordnungsblatt notieren die Kinder einmal, welches Tier sie haben; das Blatt bleibt bei dir.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
             <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf sein Tier → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
             <li>Unter „Differenzierung“ lassen sich bei Bedarf Zweite Chance, G- und M-Fassung, Klassenziel, ein Abschluss ohne Podium und das Vorlesen einschalten.</li>
-          </ol>
-        </div>
+          </ol>`)}
       </aside>
     </div>
   </section>`;

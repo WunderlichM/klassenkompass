@@ -1,7 +1,7 @@
 // Bereich Delay-Cam: Kamerabild mit einstellbarer Verzögerung zeigen (z. B. Sport: Bewegung ausführen, umdrehen, sich selbst sehen).
 // Wiederholung in Zeitlupe, Einzelbilder, Spiegeln, Kamerawechsel. Nichts wird gespeichert oder übertragen:
 // die Bilder liegen nur im Arbeitsspeicher und werden beim Beenden verworfen.
-import { esc, icon, toast } from './ui.js';
+import { esc, icon, toast, helpCard } from './ui.js';
 
 const KEY = 'klassenkompass.delaycam';
 const DELAYS = [2, 3, 5, 8, 10, 15, 20, 30];
@@ -63,17 +63,14 @@ function draw() {
         ${ok ? `<button type="button" class="btn primary big full" data-act="start">${icon('camera', 20)} Delay-Cam starten</button>`
           : `<div class="notice">Dieser Browser kann nicht auf die Kamera zugreifen. Bitte einen aktuellen Browser (Chrome, Safari, Edge, Firefox) verwenden und die Seite über https öffnen.</div>`}
       </div>
-      <div class="card dcam-help">
-        <h3>${icon('bulb', 16)} So geht's</h3>
-        <ol class="help-list steps">
+      <div class="dcam-side">${helpCard('delaycam', `${icon('bulb', 16)} So geht's`, `        <ol class="help-list steps">
           <li>Tablet oder Handy auf ein Stativ, eine Bank oder an die Wand stellen – Kamera zur Übungsstelle, Bildschirm dorthin, wo die Kinder nach der Übung hinschauen.</li>
           <li>Verzögerung so wählen, dass Übung plus Rückweg hineinpasst (Rolle oder Wurf: etwa 5–8 s, Anlauf mit Sprung: 10–15 s).</li>
           <li>Starten. Bis die Verzögerung erreicht ist, siehst du das Live-Bild zum Ausrichten; dann läuft das verzögerte Bild ohne Unterbrechung.</li>
           <li><b>Pause</b> hält das Bild an: mit dem Regler durch die letzten Sekunden fahren, Einzelbilder vor und zurück, in Zeitlupe abspielen. <b>Weiter</b> startet die Verzögerung neu.</li>
         </ol>
-        <p class="muted small-text"><b>Tasten:</b> Leertaste Pause/Weiter · ← → Einzelbild · + − Verzögerung · F Vollbild · Esc Beenden</p>
-        <div class="notice dcam-privacy">${icon('lock', 14)}<span>Es wird <b>nichts aufgenommen, gespeichert oder übertragen</b>. Die Bilder liegen nur kurz im Arbeitsspeicher dieses Geräts und sind beim Beenden weg. Bitte trotzdem nur zeigen, wenn alle im Bild einverstanden sind.</span></div>
-      </div>
+        <p class="muted small-text"><b>Tasten:</b> Leertaste Pause/Weiter · ← → Einzelbild · + − Verzögerung · F Vollbild · Esc Beenden</p>`, 'dcam-help')}
+      <div class="notice dcam-privacy dcam-privacy-out">${icon('lock', 14)}<span>Es wird <b>nichts aufgenommen, gespeichert oder übertragen</b>. Die Bilder liegen nur kurz im Arbeitsspeicher dieses Geräts und sind beim Beenden weg. Bitte trotzdem nur zeigen, wenn alle im Bild einverstanden sind.</span></div></div>
     </div>
   </section>`;
 }

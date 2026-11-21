@@ -26,6 +26,15 @@ const minFor = w => MIN[w.type === 'timer' ? w.style : w.type === 'stopwatch' &&
 const isTimer = w => w.type === 'timer' || (w.type === 'score' && w.timed);
 const isPhased = w => w.type === 'interval' || w.type === 'stations';
 const allAdd = [...ADD, ...extra.ADD];
+// Leiste unten nach Art geordnet (seit 2.17.0); Objekte, die hier fehlen, landen unter „Weitere“
+const ADD_GROUPS = (() => {
+  const g = [['Zeit', ['digital', 'circle', 'egg', 'stopwatch', 'people', 'interval']],
+    ['Ablauf', ['agenda', 'mode', 'task', 'signal', 'stations']],
+    ['Klasse', ['pick', 'duty', 'queue', 'score']],
+    ['Anzeige', ['board', 'qr', 'hall']]];
+  const rest = allAdd.map(a => a.kind).filter(k => !g.some(([, ks]) => ks.includes(k)));
+  return rest.length ? [...g, ['Weitere', rest]] : g;
+})();
 
 let root = null, raf = 0, selected = null, scale = 1, muted = false;
 const alarms = new Map(); // eingeplante Endtöne je Timer: Schlüssel id:endsAt → Wiedergabe
@@ -75,7 +84,7 @@ function draw() {
         ${s.widgets.length ? '' : '<div class="stage-empty">Füge unten ein Objekt hinzu, z. B. einen Timer, die Zufallsauswahl oder eine Auftragskarte.</div>'}</div>
     </div>
     <div class="dock no-present">
-      ${[ADD, extra.ADD].map(row => `<div class="add-row">${row.map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>`).join('')}
+      ${ADD_GROUPS.map(([cat, kinds]) => `<div class="add-row" role="group" aria-label="${cat}"><span class="add-cat">${cat}</span>${kinds.map(k => allAdd.find(a => a.kind === k)).filter(Boolean).map(a => `<button class="add-btn" data-act="add" data-kind="${a.kind}">${icon(a.ic, 18)}<span>${a.label}</span></button>`).join('')}</div>`).join('')}
       <div class="dock-row">
         <span class="muted small-text dock-hint">Objekte an freien Stellen ziehen · Ecke für die Größe · Pfeiltasten zum Verschieben</span><span class="muted small-text stack-hint">Auf dem Handy stehen alle Objekte groß untereinander; „Große Ansicht“ füllt den ganzen Bildschirm. Die freie Anordnung zeigen PC und Tablet.</span>
         <button class="btn ghost sm" data-act="layouts" title="Anordnungen speichern und wieder laden, z. B. Ankommen, Arbeitsphase, Aufräumen">${icon('layers', 15)} Vorlagen${s.layouts?.length ? ` <span class="badge">${s.layouts.length}</span>` : ''}</button>
