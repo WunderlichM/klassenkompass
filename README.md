@@ -2,6 +2,11 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.14.1
+
+- **Bereiche besser sichtbar (`js/hallplan.js`):** Bereiche sind kräftiger gefüllt (helle Farben stärker) und haben einen Rand in einer dunkleren Stufe ihrer Farbe. Sie liegen jetzt immer unter allen anderen Elementen und unter den Geräten der Halle, damit sie keine Bänke, Hütchen, Körbe oder Figuren verdecken.
+- **Körbe an der Wand:** In Hallen bis 29 m Länge hängen die eingeblendeten Körbe direkt an der Stirnwand; in größeren Hallen bleiben sie über den Grundlinien des mittigen Feldes. Kein neuer Datenstand.
+
 ## Neu in 2.14.0
 
 - **Körbe, Tore und Netz einblenden (`js/hallfloor.js`, `js/hallplan.js`, `js/hall.js`):** Unter „Spielfeldlinien“ gibt es die neue Gruppe „Geräte“ mit den Schaltern Körbe, Tore und Netz. Sie setzen die Geräte an die üblichen Stellen (Körbe über den Grundlinien, Tore auf den Handball-Torlinien, Volleyballnetz in der Mitte bzw. Badmintonnetze, wenn nur Badmintonlinien an sind) – nicht verschiebbar, wie die festen Geräte der Halle; zum Verschieben das Gerät aus der Leiste setzen. Die Schalter gehen auch ohne Linien. Hat die Halle das Gerät fest eingebaut (z. B. Basketballkörbe an der Wand), ist der Schalter an und gesperrt („Fest in der Halle eingebaut“), damit nichts doppelt erscheint. Gespeichert in `lines` (`koerbe`, `tore`, `netz`). Die Vorlagen Basketball, Handball, Hallenfußball, Volleyball und Badminton nutzen diese Schalter statt einzelner Geräte.
