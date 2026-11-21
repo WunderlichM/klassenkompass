@@ -17,7 +17,7 @@ import * as importer from './importer.js';
 import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.16.0';
+export const VERSION = '2.17.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
@@ -40,18 +40,20 @@ function resolveAlias() {
   history.replaceState(null, '', '#/' + ALIASES[k]);
 }
 
-function shell() {
-  document.getElementById('app').innerHTML = `
-  <header class="topbar no-present">
-    <a class="brand" href="#/"><span class="logo">${logo(26)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
-    <nav class="nav" aria-label="Bereiche">
+// Bereichsleiste: oben in der Kopfzeile, auf dem Handy (seit 2.17.0) als eigene Leiste am unteren Rand
+const NAV = cls => `<nav class="${cls}" aria-label="Bereiche">
       <a href="#/" data-route="">${icon('users', 16)}<span>Gruppen</span></a>
       <a href="#/turniere" data-route="turniere">${icon('trophy', 16)}<span>Turniere</span></a>
       <a href="#/hallenplaene" data-route="hallenplaene">${icon('hall', 16)}<span>Hallenpläne</span></a>
       <a href="#/quiz" data-route="quiz">${icon('cards', 16)}<span>Quiz</span></a>
       <a href="#/bildschirm" data-route="bildschirm">${icon('screen', 16)}<span>Bildschirm</span></a>
       <a href="#/delaycam" data-route="delaycam">${icon('camera', 16)}<span>Delay-Cam</span></a>
-    </nav>
+    </nav>`;
+function shell() {
+  document.getElementById('app').innerHTML = `
+  <header class="topbar no-present">
+    <a class="brand" href="#/"><span class="logo">${logo(26)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
+    ${NAV('nav')}
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>
       <button class="btn ghost sm" id="install-btn" ${showInstall() ? '' : 'hidden'} title="Als App installieren">${icon('install', 16)}<span class="lbl">Installieren</span></button>
@@ -60,6 +62,7 @@ function shell() {
     </div>
   </header>
   <main id="view" tabindex="-1"></main>
+  ${NAV('nav nav-bottom no-present no-print')}
   <footer class="foot no-present no-print">KlassenKompass ${VERSION} · <span id="foot-store">${footStore()}</span> · <button class="link" id="foot-help">Hilfe &amp; Datenschutz</button></footer>`;
   document.getElementById('menu-btn').onclick = menuDialog;
   document.getElementById('lock-btn').onclick = () => lock.lockNow();

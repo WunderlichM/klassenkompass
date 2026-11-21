@@ -1751,3 +1751,28 @@ body.presenting .h-rules-scr { flex: none; padding: 12px 24px 4px; }
 body.presenting .h-rules-scr b { font-size: clamp(20px, 2.4vw, 32px); }
 body.presenting .h-rules-scr ol { font-size: clamp(18px, 2vw, 28px); padding-left: 1.4em; }
 body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
+/* Handy (seit 2.17.0): Bereichsleiste unten im Daumenbereich, Symbol über kurzem Wort */
+.nav-bottom { display: none; }
+@media (max-width: 700px) {
+  .topbar .nav { display: none; }
+  body:not(.presenting) { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .nav-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; order: 0; width: auto; margin: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; padding: 4px 2px calc(4px + env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--line); border-radius: 0; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 -4px 18px rgba(0,0,0,.06); overflow: visible; }
+  .nav-bottom a { flex-direction: column; justify-content: center; gap: 2px; min-height: 54px; padding: 5px 0 4px; font-size: 10px; letter-spacing: -.01em; border-radius: 10px; min-width: 0; }
+  .nav-bottom a .ic { display: block !important; width: 21px; height: 21px; }
+  .nav-bottom a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .nav-bottom a.on, [data-theme="dark"] .nav-bottom a.on { background: var(--accent-soft); color: var(--accent-dark); box-shadow: none; font-weight: 700; }
+  .nav-bottom a.on .ic { color: var(--accent); }
+  [data-theme="dark"] .nav-bottom a.on { color: #fff; }
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .h-menu-list { bottom: calc(74px + env(safe-area-inset-bottom)); }
+}
+
+.room-def { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); gap: 6px; } .room-def input { width: 16px; height: 16px; }
+
+@media (min-width: 761px) { .pickers:has(.room-picker) { align-items: flex-start; } }
+.card.empty .link { display: inline-block; margin-top: 10px; color: var(--accent-dark); text-decoration: underline; }
+@media (max-width: 700px) { .nav-bottom a:hover:not(.on) { background: transparent; color: var(--muted); } }
+/* Quiz: Fragensatz-Auswahl mit beschrifteten Knöpfen (seit 2.17.0) */
+.quiz .card-head .picker-row { flex-wrap: wrap; }
+.quiz .card-head .picker-row #quiz-set { flex: 1 1 260px; min-width: 0; }
+.quiz .card-head > div { min-width: 0; flex: 1; }

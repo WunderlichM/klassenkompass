@@ -286,10 +286,10 @@ function roomPickerHtml(g) {
   return `<div class="picker room-picker no-print">
     <label class="eyebrow" for="room-select">Raum</label>
     <div class="picker-row">
-      <select id="room-select" class="select"><option value="" ${cur ? '' : 'selected'}>Kein Raum (Standard)${def ? '' : ' ★'}</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}${x.id === def ? ' ★' : ''}</option>`).join('')}<option value="__new">+ Neuer Raum …</option></select>
-      <button class="icon-btn ${isDef ? 'on' : ''}" data-act="room-default" aria-pressed="${isDef}" title="${isDef ? `Standardraum von ${esc(g.name)}` : `Als Standardraum für ${esc(g.name)} merken`}" aria-label="Als Standardraum merken">${icon('star')}</button>
+      <select id="room-select" class="select" title="Raum für die Sitzordnung – ★ = Standardraum von ${esc(g.name)}"><option value="" ${cur ? '' : 'selected'}>Ohne Raum (allgemeiner Plan)${def ? '' : ' ★'}</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}${x.id === def ? ' ★' : ''}</option>`).join('')}<option value="__new">+ Neuer Raum …</option></select>
       ${r ? `<button class="icon-btn" data-act="room-edit" title="Raum bearbeiten (Grundriss und Plätze je Organisationsform)" aria-label="Raum bearbeiten">${icon('edit')}</button>` : ''}
     </div>
+    <label class="check room-def" title="Mit diesem Raum öffnet die Sitzordnung von ${esc(g.name)}"><input type="checkbox" id="room-def" ${isDef ? 'checked' : ''} ${!cur && isDef ? 'disabled' : ''}> <span>Standardraum für „${esc(g.name)}“</span></label>
   </div>`;
 }
 function seatHtml(g) {
@@ -532,6 +532,10 @@ function onChange(e) {
   if (t.id === 'room-select' && g) {
     if (t.value === '__new') { t.value = roomOf(g)?.id || ''; newRoom(g); return; }
     roomSel.set(g.id, t.value); draw(); return;
+  }
+  if (t.id === 'room-def' && g) {   // seit 2.17.0 Häkchen statt Stern
+    const r = roomOf(g), cur = t.checked ? r?.id || '' : '';
+    setDefaultRoom(g, cur); toast(cur ? `„${r.name}“ ist jetzt der Standardraum von „${g.name}“.` : `„${g.name}“ öffnet jetzt ohne Raum.`); return;
   }
   if (t.id === 'lg-select') { search = ''; groups.setActive(t.value); }
   else if (t.id === 'team-count' && g) store.update(s => { groups.sportPart(s, g.id).teamCount = Number(t.value); });

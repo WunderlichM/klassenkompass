@@ -204,18 +204,18 @@ function drawHome() {
           <div class="card-head">
             <div><p class="eyebrow">Fragensatz</p>
               <div class="picker-row"><select id="quiz-set" class="select">${sets.map(x => `<option value="${esc(x.id)}" ${x.id === t?.id ? 'selected' : ''}>${esc(x.title)} (${x.questions.length})${setTag(x)}</option>`).join('')}${sets.length ? '' : `<option>${c ? 'Noch kein Fragensatz für diese Klasse' : 'Noch kein Fragensatz'}</option>`}</select>
-              <button class="icon-btn" data-act="set-new" title="Neuer Fragensatz" aria-label="Neuer Fragensatz">${icon('plus')}</button>
-              <button class="icon-btn" data-act="set-import" title="Fragensätze importieren (Datei oder Text)" aria-label="Fragensätze importieren">${icon('upload')}</button>
-              ${t ? `<button class="icon-btn" data-act="set-edit" title="Umbenennen, kopieren oder löschen" aria-label="Fragensatz bearbeiten">${icon('edit')}</button>` : ''}</div>
+              ${t ? `<button class="btn ghost sm" data-act="set-edit" title="Umbenennen, Klasse ändern, kopieren, exportieren oder löschen">${icon('edit', 15)} Bearbeiten</button>` : ''}
+              <button class="btn ghost sm" data-act="set-new" title="Neuen Fragensatz anlegen">${icon('plus', 15)} Neu</button>
+              <button class="btn ghost sm" data-act="set-import" title="Fragensätze aus einer Datei oder eingefügtem Text übernehmen">${icon('upload', 15)} Importieren</button></div>
             </div>
           </div>
           ${t && c ? (!t.classId ? `<p class="notice">Dieser Fragensatz hat noch keine Klasse und lässt sich so nicht starten. <button class="link" data-act="set-assign">„${esc(c.name)}“ zuordnen</button> · <button class="link" data-act="set-edit">andere Auswahl</button></p>`
             : `<p class="muted small-text">${t.classId === ALL ? 'Für <b>alle Klassen</b> freigegeben.' : `Nur für <b>${esc(c.name)}</b> – in anderen Klassen erscheint dieser Fragensatz nicht.`}</p>`) : ''}
-          ${t ? questionList(t) : `<p class="muted">Lege einen Fragensatz an oder starte mit „Schnellstart“ und stelle die Fragen mündlich.</p>`}
+          ${t ? questionList(t) : `<p class="muted">Lege einen Fragensatz an oder starte „Ohne Fragen“ und stelle die Fragen mündlich oder an der Tafel.</p>`}
           <div class="card-foot">
             <button class="btn ghost" data-act="q-add" ${t ? '' : 'disabled'}>${icon('plus', 16)} Frage hinzufügen</button>
             <div class="tools">
-              <button class="btn ghost" data-act="start-quick" ${c ? '' : 'disabled'} title="Ohne vorbereitete Fragen: Du stellst die Frage mündlich oder an der Tafel">Schnellstart</button>
+              <button class="btn ghost" data-act="start-quick" ${c ? '' : 'disabled'} title="Ohne vorbereitete Fragen: Du stellst jede Frage mündlich oder an der Tafel, die Kinder antworten mit den Karten A–D">Ohne Fragen starten</button>
               <button class="btn primary big" data-act="start" ${c && t?.questions.length ? '' : 'disabled'}>${icon('play', 16)} Quiz starten</button>
             </div>
           </div>

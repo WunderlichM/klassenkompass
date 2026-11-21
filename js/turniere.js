@@ -40,7 +40,7 @@ function draw() {
       <div class="tabs" role="tablist">
         ${[['turnier', 'trophy', 'Turniere'], ['rangliste', 'chart', 'Einzelrangliste']].map(([id, ic, label]) => `<button role="tab" aria-selected="${tab === id}" class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${icon(ic, 16)} ${label}</button>`).join('')}
       </div>
-      <div class="tools"><button class="btn ghost sm" data-act="print">${icon('print', 16)} Drucken / PDF</button><button class="btn ghost sm" data-act="present">${icon(presenting ? 'shrink' : 'expand', 16)} ${presenting ? 'Ansicht verkleinern' : 'Ansicht vergrößern'}</button></div>
+      ${tab === 'turnier' && !sportOf(g).tournaments.length ? '' : `<div class="tools"><button class="btn ghost sm" data-act="print">${icon('print', 16)} Drucken / PDF</button><button class="btn ghost sm" data-act="present">${icon(presenting ? 'shrink' : 'expand', 16)} ${presenting ? 'Ansicht verkleinern' : 'Ansicht vergrößern'}</button></div>`}
     </div>
     <div class="work-grid">
       <div class="main-col print-area">${tab === 'turnier' ? tournamentView(g) : seriesView(g)}</div>
@@ -65,7 +65,15 @@ function sidebar(g) {
 // ---------- Turniere ----------
 function tournamentView(g) {
   const k = sportOf(g), list = [...k.tournaments].reverse();
-  if (!list.length) return `<div class="card empty"><p>Noch kein Turnier. Mische unter Gruppen → Teams und lege dann ein Turnier an.</p><a class="btn primary sport-btn" href="#/" data-act="to-teams">Zu den Teams</a></div>`;
+  // Noch kein Turnier (seit 2.17.0): direkt zum nächsten sinnvollen Schritt – anlegen, wenn passende Teams da sind, sonst zu den Teams
+  if (!list.length) {
+    const n = k.teams.length, current = teamsAreCurrent(k, groups.absent(g.id));
+    if (n >= 2 && current) return `<div class="card empty"><p><b>Noch kein Turnier für „${esc(g.name)}“.</b><br>Die ${n} aktuellen Teams sind bereit.</p>
+      <button class="btn primary sport-btn" data-act="new-tournament">${icon('plus', 16)} Turnier mit diesen ${n} Teams anlegen</button>
+      <p class="small-text"><a class="link" href="#/" data-act="to-teams">Teams vorher neu mischen</a></p></div>`;
+    return `<div class="card empty"><p><b>Noch kein Turnier für „${esc(g.name)}“.</b><br>${n >= 2 ? 'Die Teams passen gerade nicht zur Anwesenheit. Prüfe sie unter Gruppen → Teams.' : 'Bilde zuerst unter Gruppen → Teams mindestens zwei Teams.'}</p>
+      <a class="btn primary sport-btn" href="#/" data-act="to-teams">${icon('shuffle', 16)} Zu den Teams</a></div>`;
+  }
   const t = k.tournaments.find(x => x.id === activeTournament) || list[0];
   activeTournament = t.id;
   const f = formatOf(t), finished = tournamentDone(t);
