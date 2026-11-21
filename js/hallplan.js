@@ -159,13 +159,18 @@ function coneSvg(i, c) {
     + (t ? `<text x="${X(0.5)}" y="${Y(0.515)}" dy=".35em" font-size="${num(fs)}" font-weight="800" text-anchor="middle" fill="${ink}" stroke="#fff" stroke-width="${num(u * 0.035)}" paint-order="stroke" stroke-linejoin="round" class="h-cone-t">${esc(t)}</text>` : '');
   return i.rot ? `<g transform="rotate(${-i.rot} ${num(w / 2)} ${num(h / 2)})">${g}</g>` : g;
 }
+// Helligkeit einer Farbe 0…1 (für Bereiche; abdunkeln mit shade oben)
+const rgb = c => { const m = /^#([0-9a-f]{6})$/i.exec(c || ''); if (!m) return null; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+const lum = c => { const v = rgb(c); return v ? (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) / 255 : 0.5; };
 export function shape(i) {
   const { w, h } = i, c = i.color || KINDS[i.kind]?.color || '#333';
   switch (i.kind) {
     case 'zone': {
       const fs = clamp(Math.min(w, h) * 0.11, 18, 48);
       const zp = zonePath(i), body = zp ? `<path d="${zp}" fill-rule="evenodd"` : `<polygon points="${para(w, h)}"`;
-      return `${body} fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="4"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
+      // seit 2.14.1 deutlicher: helle Farben kräftiger gefüllt, Rand immer in einer dunkleren Stufe der Farbe
+      const L = lum(c);
+      return `${body} fill="${c}" fill-opacity="${L > 0.7 ? '.5' : L > 0.45 ? '.26' : '.17'}" stroke="${shade(c, 'b', L > 0.7 ? 0.5 : 0.25)}" stroke-width="5"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
     }
     case 'cone':
       return coneSvg(i, c);
@@ -209,7 +214,8 @@ export const baseItems = (p, gym) => (p?.base ? [] : gymFor(p, gym)?.items || []
 // ---------- Eingeblendete Geräte (seit 2.14.0): Körbe, Tore und Netz unter „Spielfeldlinien“ ----------
 // Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (Felder passen sich der Halle an, siehe hallfloor.js)
 export const goals = g => { const x = (g.len - Math.min(40, g.len - 2)) / 2; return [gearAt('tor', 'gespiegelt', x, g.dep / 2, { ax: 0.82, ay: 0.76, g }), gearAt('tor', 'seitlich', g.len - x, g.dep / 2, { ax: 0.18, ay: 0.76, g })]; };
-export const baskets = g => { const x = (g.len - Math.min(28, g.len - 1)) / 2 + 1.2; return [gearAt('basketballkorb', 'gespiegelt', x, g.dep / 2, { ax: 0.25, ay: 1.12, g }), gearAt('basketballkorb', 'seitlich', g.len - x, g.dep / 2, { ax: 0.75, ay: 1.12, g })]; };
+// Körbe an der Stirnwand (Halle bis 29 m lang), in größeren Hallen über den Grundlinien des mittigen Feldes (seit 2.14.1)
+export const baskets = g => { const x = g.len > 29 ? (g.len - 28) / 2 + 1.2 : 0.3; return [gearAt('basketballkorb', 'gespiegelt', x, g.dep / 2, { ax: 0.25, ay: 1.12, g }), gearAt('basketballkorb', 'seitlich', g.len - x, g.dep / 2, { ax: 0.75, ay: 1.12, g })]; };
 // Netz: Badmintonnetze, wenn nur Badmintonlinien an sind, sonst das Volleyballnetz
 export const nets = (g, lines = []) => (lines.includes('badminton') && !lines.includes('volleyball')
   ? badmintonCourts(g).map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, g.dep / 2, { ay: 0.97, L: 6.3, g }))
@@ -232,9 +238,11 @@ export function contentBox(p, gym) {
 }
 export function boardSvg(p, { edit = false, cls = '', crop = false, gym } = {}) {
   if (!p) return '';
+  // Reihenfolge (seit 2.14.1): Boden, Bereiche, Geräte der Halle und eingeblendete Geräte, übrige Elemente –
+  // Bereiche liegen als Flächen auf dem Boden und verdecken keine Geräte, Körbe oder Figuren
   const base = [...baseItems(p, gym), ...markGear(p, gym)];
   return `<svg class="hall-svg ${cls}" viewBox="${crop ? contentBox(p, gym) : `0 0 ${BW} ${BH}`}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hallenplan ${esc(p.title)}">${defs}
-    <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p, geo(gymFor(p, gym)))}${base.length ? `<g class="h-base">${base.map(baseSvg).join('')}</g>` : ''}${p.items.map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
+    <rect x="-2000" y="-2000" width="${BW + 4000}" height="${BH + 4000}" class="hf-bg"/>${floorSvg(p, geo(gymFor(p, gym)))}${p.items.filter(i => i.kind === 'zone').map(itemSvg).join('')}${base.length ? `<g class="h-base">${base.map(baseSvg).join('')}</g>` : ''}${p.items.filter(i => i.kind !== 'zone').map(itemSvg).join('')}${edit ? '<g class="h-sel" data-sel></g>' : ''}</svg>`;
 }
 
 // Plan in eine andere Halle legen (seit 2.10.0): Jedes Element behält seinen Platz im Verhältnis zur Hallenfläche
