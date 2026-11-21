@@ -40,6 +40,9 @@ let host = null, sel = [], kidCount = 5;
 const pref = (k, d) => { try { return localStorage.getItem('klassenkompass.' + k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem('klassenkompass.' + k, v); } catch {} };
 let snap = pref('hallSnap', '0') === '1', palHidden = pref('hallPalette', '1') === '0';
+let side = pref('hallSide', 'tools') === 'settings' ? 'settings' : 'tools';   // Seitenleiste: Elemente oder Einstellungen (seit 2.15.0)
+// Geräte, die beim Einrichten einer Halle gebraucht werden (seit 2.15.0 als eigene Gruppe oben in der Leiste)
+const SETUP_GEAR = ['tuer', 'doppeltuer', 'geraeteraumtor', 'trennwand', 'tor', 'basketballkorb', 'seilanlage', 'sprossenwand', 'sprossenwand2', 'sprossenwand_reihe', 'matte_stehend', 'weichboden_stehend', 'tafel', 'lautsprecher'];
 const libOpen = new Set(['g:' + gear.GROUPS[0]]); // geöffnete Gruppen der Leiste
 const history = new Map(); // Plan-ID → { undo: [], redo: [] }
 const sp = () => store.get().sport;
@@ -124,69 +127,110 @@ export function attach(el) {
   if (p) { hydrateSvg(el.querySelector('.hall-board')); hydrateSvg(el.querySelector('.hall-print')); images.hydrate(el.querySelector('.hall-palette')); drawSel(); }
 }
 
-// Leiste beim Bearbeiten der festen Geräte einer Halle
+// ---------- Kopfzeile, Seitenleiste und Menüs (seit 2.15.0) ----------
+// Kopfzeile: Titel, Thema, Phasen, Rückgängig/Wiederholen, „Elemente“ und „Einstellungen“ (schalten die Seitenleiste um),
+// Menü „⋯“ mit den seltenen Aktionen. Alles, was den Plan beschreibt (Name, Thema, Stunde, Halle, Boden, Linien, Geräte),
+// steht gebündelt in der Seitenleiste unter „Einstellungen“.
+const moreIcon = '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></svg>';
+const menuItem = (act, ic, label, hint = '', cls = '') => `<button type="button" class="h-menu-item ${cls}" data-h="${act}">${ic ? icon(ic, 16) : ''}<span><b>${label}</b>${hint ? `<small>${hint}</small>` : ''}</span></button>`;
+const menu = (label, body, cls = '') => `<details class="h-menu ${cls}"><summary class="icon-btn sm" title="${label}" aria-label="${label}">${moreIcon}</summary><div class="h-menu-list">${body}</div></details>`;
+// Eigene Pfeile für Rückgängig/Wiederholen – nicht zu verwechseln mit den Phasenpfeilen
+const undoIcon = flip => `<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${flip ? ' style="transform:scaleX(-1)"' : ''}><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`;
+const undoBtns = h => `<span class="h-grp" role="group" aria-label="Rückgängig und Wiederholen"><button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${undoIcon(false)}</button>
+      <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${undoIcon(true)}</button></span>`;
+const sideBtns = (base = false) => [['tools', 'plus', 'Elemente', 'Planungssymbole und Geräte zum Hineinziehen'], ...(base ? [] : [['settings', 'sliders', 'Einstellungen', 'Name, Thema, Stunde, Halle, Boden, Spielfeldlinien']])]
+  .map(([t, ic, l, tip]) => { const on = !palHidden && (base || side === t); return `<button class="btn ghost sm ${on ? 'on' : ''}" data-h="side" data-tab="${t}" aria-pressed="${on}" title="${tip}${on ? ' – nochmal klicken blendet die Leiste aus' : ''}">${icon(ic, 15)} ${l}</button>`; }).join('');
+
+// Kopfzeile beim Bearbeiten der festen Geräte einer Halle: deutlich als eigener Modus gekennzeichnet
 function gymBarHtml(p) {
   const h = hist(p.id), g = gymById(p.gym), n = sp().halls.filter(x => x.gym === p.gym).length;
   return `<div class="hall-bar hall-gymbar no-print">
-      <b class="hall-title">${icon('edit', 15)} Halle „${esc(g.name)}“</b><span class="badge">${gymSize(g)}</span>
-      <span class="small-text muted">Einrichtung (Türen, Tore, Körbe, Sprossenwände, Seile, Matten …) – steht in ${n === 1 ? 'dem Plan' : `allen ${n} Plänen`} dieser Halle und ist dort nicht verschiebbar. Antippen = verschieben, drehen, Länge ändern oder löschen.</span>
-      <button class="btn ghost sm" data-h="gym-props" title="Name, Maße und Lerngruppen dieser Halle">${icon('sliders', 15)} Name, Maße, Lerngruppen</button>
+      <span class="hall-gymbar-text">${icon('hall', 18)}<span><b>Einrichtung der Halle „${esc(g.name)}“</b> <span class="muted">${gymSize(g)}</span>
+        <small>Du bearbeitest die Halle, nicht den Plan. Was hier steht, erscheint in ${n === 1 ? 'dem Plan' : n ? `allen ${n} Plänen` : 'jedem Plan'} dieser Halle und ist dort nicht verschiebbar.</small></span></span>
       <span class="hall-sep"></span>
-      <button class="btn ghost sm ${snap ? 'on' : ''}" data-h="snap" aria-pressed="${snap}" title="Beim Verschieben auf ein Raster von 0,5 m ausrichten">${icon('grid', 15)} Raster</button>
-      <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
-      <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${icon('forward', 16)}</button>
+      ${sideBtns(true)}
+      <button class="btn ghost sm" data-h="gym-props" title="Name, Maße und Lerngruppen dieser Halle">${icon('sliders', 15)} Name und Maße</button>
+      ${undoBtns(h)}
       <button class="btn primary sm" data-h="gym-done" title="Zurück zum Hallenplan">${icon('check', 15)} Fertig</button>
     </div>`;
 }
-function editorHtml(p) {
-  const h = hist(p.id), presenting = document.body.classList.contains('presenting');
-  const phases = lessonPlans(p), k = phases.findIndex(x => x.id === p.id);
-  if (p.base) return `<div class="hall gym-edit ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
-    ${gymBarHtml(p)}
-    <div class="hall-bar hall-marks no-print"><button class="btn ghost sm" data-h="palette" aria-pressed="${!palHidden}" title="Leiste mit Elementen ein- oder ausblenden">${icon('list', 15)} ${palHidden ? 'Leiste zeigen' : 'Leiste ausblenden'}</button>
-      <span class="small-text muted">Tipp: Unter „Raum“ stehen Tür, Doppeltür, Geräteraumtor, Trennwand, Tafel und Lautsprecher; Basketballkorb und Seilanlage unter „Hängen, Springen“, Sprossenwände (auch als Reihe) unter „Sprossenwand, Barren, Reck“, stehende Matten und Weichböden unter „Matten, Kästen, Bänke“, Tore unter „Balken, Netze, Tore“.</span></div>
-    <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
-    <div class="hall-work">
-      ${palHidden ? '' : `<aside class="hall-palette no-print">${paletteHtml()}</aside>`}
-      <div class="hall-board" tabindex="0">
-        ${boardSvg(p, { edit: true })}
-        <p class="hall-note">Halle ${gymSize(gymById(p.gym))} · Schematisch · vor Ort prüfen</p>
-      </div>
-    </div>
-  </div>`;
-  return `<div class="hall ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
-    <div class="hall-bar no-print">
-      <b class="hall-title" title="${esc(planLabel(p))}">${esc(p.title)}</b>
+function headBarHtml(p) {
+  const h = hist(p.id), phases = lessonPlans(p), k = phases.findIndex(x => x.id === p.id);
+  return `<div class="hall-bar hall-head no-print">
+      <button class="hall-title-btn" data-h="props" title="Name, Thema, Stunde und Phase ändern"><b class="hall-title">${esc(p.title)}</b>${icon('edit', 14)}</button>
       ${p.topic ? `<span class="badge">${esc(p.topic)}</span>` : ''}
-      ${phases.length ? `<span class="hall-phase" role="group" aria-label="Phasen der Stunde"><button class="icon-btn sm" data-h="phase" data-d="-1" title="Vorige Phase" aria-label="Vorige Phase" ${k > 0 ? '' : 'disabled'}>${icon('back', 15)}</button><span class="small-text">Phase ${p.phase} · ${k + 1}/${phases.length}</span><button class="icon-btn sm" data-h="phase" data-d="1" title="Nächste Phase" aria-label="Nächste Phase" ${k < phases.length - 1 ? '' : 'disabled'}>${icon('forward', 15)}</button></span>` : ''}
-      <button class="btn ghost sm" data-h="props" title="Name, Thema, Stunde und Phase ändern">${icon('edit', 15)} Eigenschaften</button>
-      <button class="btn ghost sm ${p.rules ? 'on' : ''}" data-h="rules" title="Spielregeln zu diesem Plan – werden auf Seite 2 der Schüleransicht gedruckt">${icon('list', 15)} Regeln${p.rules ? ` (${p.rules.items.length})` : ''}</button>
-      <button class="btn ghost sm" data-h="next-phase" title="Kopie als nächste Phase derselben Stunde anlegen">${icon('plus', 15)} Nächste Phase</button>
-      <button class="btn ghost sm" data-h="copy">Kopie</button>
-      <button class="icon-btn sm" data-h="export-plan" title="Exportieren – diesen Hallenplan als Datei speichern" aria-label="Exportieren">${icon('download', 15)}</button>
-      <button class="icon-btn sm" data-h="del-plan" title="Hallenplan löschen" aria-label="Hallenplan löschen">${icon('trash', 15)}</button>
+      ${phases.length ? `<span class="hall-phase" role="group" aria-label="Phasen der Stunde"><button class="icon-btn sm" data-h="phase" data-d="-1" title="Vorige Phase" aria-label="Vorige Phase" ${k > 0 ? '' : 'disabled'}>${icon('back', 15)}</button><span class="small-text" title="${esc(p.lesson)}">Phase ${p.phase} · ${k + 1}/${phases.length}</span><button class="icon-btn sm" data-h="phase" data-d="1" title="Nächste Phase" aria-label="Nächste Phase" ${k < phases.length - 1 ? '' : 'disabled'}>${icon('forward', 15)}</button><button class="icon-btn sm" data-h="next-phase" title="Neue Phase anlegen (Kopie dieses Plans)" aria-label="Neue Phase anlegen">${icon('plus', 15)}</button></span>` : ''}
       <span class="hall-sep"></span>
-      <label class="small-text" title="Hallenboden">Boden <select class="select sm" data-hc="floor" aria-label="Hallenboden">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <button class="btn ghost sm ${snap ? 'on' : ''}" data-h="snap" aria-pressed="${snap}" title="Beim Verschieben auf ein Raster von 0,5 m ausrichten">${icon('grid', 15)} Raster</button>
-      <button class="icon-btn sm" data-h="undo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig" ${h.undo.length ? '' : 'disabled'}>${icon('back', 16)}</button>
-      <button class="icon-btn sm" data-h="redo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen" ${h.redo.length ? '' : 'disabled'}>${icon('forward', 16)}</button>
-    </div>
-    <div class="hall-bar hall-marks no-print"><button class="btn ghost sm" data-h="palette" aria-pressed="${!palHidden}" title="Leiste mit Elementen ein- oder ausblenden">${icon('list', 15)} ${palHidden ? 'Leiste zeigen' : 'Leiste ausblenden'}</button>
-      <span class="small-text muted">Spielfeldlinien</span>
-      ${MARKS.filter(m => !m.gear).map(m => markBtn(p, m)).join('')}
-      <span class="small-text muted">Geräte</span>
-      ${MARKS.filter(m => m.gear).map(m => markBtn(p, m)).join('')}
-    </div>
+      ${undoBtns(h)}
+      <span class="hall-gap"></span>
+      ${sideBtns()}
+      ${menu('Weitere Aktionen', `
+        ${menuItem('next-phase', 'layers', 'Nächste Phase anlegen', 'Kopie als nächste Phase derselben Stunde')}
+        ${menuItem('copy', 'plus', 'Kopie anlegen', 'Eigenständiger Plan mit gleichem Inhalt')}
+        ${menuItem('rules', 'list', p.rules ? `Spielregeln (${p.rules.items.length})` : 'Spielregeln anlegen', 'Werden auf Seite 2 der Schüleransicht gedruckt')}
+        ${menuItem('export-plan', 'download', 'Exportieren', 'Diesen Plan als Datei speichern')}
+        <hr>
+        ${menuItem('del-plan', 'trash', 'Hallenplan löschen', 'Lässt sich nicht rückgängig machen', 'danger')}`)}
+    </div>`;
+}
+// Seitenleiste: Kopf mit Titel und Schließen, darunter Elemente oder Einstellungen
+function sideHtml(p) {
+  const tab = p.base ? 'tools' : side;
+  return `<aside class="hall-palette hall-side no-print">
+    <div class="h-side-head"><b>${tab === 'settings' ? 'Einstellungen' : p.base ? 'Einrichtung ergänzen' : 'Elemente'}</b>
+      <button class="icon-btn sm" data-h="side-close" title="Leiste ausblenden – die Halle wird größer" aria-label="Leiste ausblenden">${icon('x', 15)}</button></div>
+    ${tab === 'settings' ? settingsHtml(p) : paletteHtml(p.base)}
+  </aside>`;
+}
+// Einstellungen eines Plans in vier Abschnitten; Änderungen gelten sofort und lassen sich rückgängig machen
+function settingsHtml(p) {
+  const cur = gymOf(p)?.id || '', lg = groups.active(), def = lg ? gymById(groups.sportView(lg).gym)?.id || '' : null;
+  const tp = [...new Set([...topics(), ...(p.topic ? [p.topic] : [])])];
+  const fixedOf = m => m.gear && fixedGear(p, gymOf(p), m.id);
+  const check = m => { const fixed = fixedOf(m), on = fixed || p.lines?.includes(m.id), off = fixed || (!m.gear && p.floor === 'leer');
+    return `<label class="h-check" style="--c:${m.color}"><input type="checkbox" data-hc="mark" value="${m.id}" ${on ? 'checked' : ''} ${off ? 'disabled' : ''}><i></i><span>${esc(m.label)}${fixed ? ' <small class="muted">fest in der Halle</small>' : ''}</span></label>`; };
+  return `<div class="h-set">
+    <section><h3>Plan</h3>
+      <label class="field">Name<input class="input sm" data-hc="title" maxlength="80" value="${esc(p.title)}"></label>
+      <label class="field">Thema <small class="muted">ordnet die Sammlung</small><select class="select sm" data-hc="topic"><option value="">Ohne Thema</option>${tp.map(t => `<option value="${esc(t)}" ${t === p.topic ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="${NEW_TOPIC}">+ Neues Thema …</option></select></label>
+      <label class="field">Stunde <small class="muted">optional, z. B. Datum und Klasse</small><input class="input sm" data-hc="lesson" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 · Klasse 6">${datalist('h-lessons', lessons())}</label>
+      ${p.lesson ? `<label class="field h-inline">Phase <input class="input sm h-num" type="number" data-hc="phase" min="1" max="20" value="${p.phase || 1}"><small class="muted">Pläne derselben Stunde zeigst du oben mit den Pfeilen nacheinander.</small></label>` : ''}
+      <button class="btn ghost sm full ${p.rules ? 'on' : ''}" data-h="rules">${icon('list', 15)} ${p.rules ? `Spielregeln bearbeiten (${p.rules.items.length})` : 'Spielregeln anlegen'}</button>
+    </section>
+    <section><h3>Halle</h3>
+      <select class="select sm" data-hc="gym" aria-label="Halle dieses Plans">${gymOptions(cur)}<option value="__new">+ Neue Halle …</option></select>
+      <p class="muted small-text">Beim Wechsel passen sich Bereiche und Elemente der neuen Fläche an (rückgängig machbar).</p>
+      ${cur ? `<button class="btn ghost sm full" data-h="gym-edit">${icon('edit', 15)} Halle bearbeiten <small class="muted">Maße, Einrichtung</small></button>`
+        : `<button class="btn ghost sm full" data-h="gym-std" title="Die Standardhalle als eigene Halle anlegen – benennen, Maße ändern, Türen, Tore, Körbe einrichten">${icon('edit', 15)} Als eigene Halle anlegen</button>`}
+      ${lg && cur ? `<label class="check"><input type="checkbox" data-hc="gymdef" ${def === cur ? 'checked' : ''}><span>Standardhalle für „${esc(lg.name)}“ <small class="muted">neue Pläne entstehen hier</small></span></label>` : ''}
+      <label class="field h-inline">Boden <select class="select sm" data-hc="floor" aria-label="Hallenboden">${[['halle', 'Hallenfläche'], ['linien', 'mit Mittellinie'], ['leer', 'ohne Fläche']].map(([v, l]) => `<option value="${v}" ${p.floor === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </section>
+    <section><h3>Spielfeldlinien</h3>
+      ${p.floor === 'leer' ? '<p class="muted small-text">Bei „ohne Fläche“ gibt es keine Linien.</p>' : ''}
+      <div class="h-checks">${MARKS.filter(m => !m.gear).map(check).join('')}</div>
+      <h3>Geräte einblenden <small class="muted">an den üblichen Stellen</small></h3>
+      <div class="h-checks">${MARKS.filter(m => m.gear).map(check).join('')}</div>
+      <p class="muted small-text">Eingeblendete Geräte sind fest. Zum Verschieben das Gerät stattdessen aus „Elemente“ setzen.</p>
+    </section>
+    <section><h3>Bearbeiten</h3>
+      <label class="check"><input type="checkbox" data-hc="snap" ${snap ? 'checked' : ''}><span>Raster <small class="muted">beim Verschieben auf 0,5 m ausrichten</small></span></label>
+    </section>
+  </div>`;
+}
+function editorHtml(p) {
+  const presenting = document.body.classList.contains('presenting');
+  return `<div class="hall ${p.base ? 'gym-edit' : ''} ${presenting ? 'presenting' : ''} ${palHidden ? 'no-pal' : ''}">
+    ${p.base ? gymBarHtml(p) : headBarHtml(p)}
     <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
     <div class="hall-work">
-      ${palHidden ? '' : `<aside class="hall-palette no-print">${paletteHtml()}</aside>`}
+      ${palHidden ? '' : sideHtml(p)}
       <div class="hall-board" tabindex="0">
         ${boardSvg(p, { edit: true })}
-        <p class="hall-note">Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p>
+        <p class="hall-note">${p.base ? `Halle ${gymSize(gymById(p.gym))} · ` : ''}Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p>
       </div>
     </div>
-    <div class="print-only hall-print"><h1>${esc(p.title)}</h1>${boardSvg(p, { crop: true })}<p>Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p></div>
-    ${printsRules(p) ? `<div class="print-only hall-print-rules">${rulesHtml(p)}</div>` : ''}
+    ${p.base ? '' : `<div class="print-only hall-print"><h1>${esc(p.title)}</h1>${boardSvg(p, { crop: true })}<p>Schematisch · Abstände und nutzbaren Raum vor Ort prüfen</p></div>
+    ${printsRules(p) ? `<div class="print-only hall-print-rules">${rulesHtml(p)}</div>` : ''}`}
   </div>`;
 }
 
@@ -198,17 +242,20 @@ function gearTile(g) {
   const v = g.views[0], { w, h } = gear.gearSize(g.id, v), i = { kind: 'gear', gear: g.id, view: v, w, h };
   return `<button class="h-tile" data-add="gear" data-gear="${esc(g.id)}" title="${esc(g.name)}${g.views.length > 1 ? ` (${g.views.length} Ansichten)` : ''} – ziehen oder antippen"><svg viewBox="-4 -4 ${w + 8} ${h + 8}" class="h-tile-svg">${defs}${shape(i)}</svg><span>${esc(g.short)}</span></button>`;
 }
-function paletteHtml() {
+function paletteHtml(base = false) {
   const lib = sp().hallLib, byKey = new Map();
   for (const e of [...lib].sort((a, b) => (a.code || '~').localeCompare(b.code || '~') || a.name.localeCompare(b.name))) if (!byKey.has(e.key)) byKey.set(e.key, e);
   const cats = new Map();
   for (const e of byKey.values()) { if (!cats.has(e.cat)) cats.set(e.cat, []); cats.get(e.cat).push(e); }
   const imgTile = e => { const n = lib.filter(x => x.key === e.key).length; return `<button class="h-tile img" data-addimg="${esc(e.id)}" title="${esc(e.name)}${n > 1 ? ` (${n} Ansichten)` : ''} – ziehen oder antippen">${images.imgTag(e.id, 'h-thumb')}<span>${esc(e.name)}</span></button>`; };
   const gearCats = gear.GROUPS.map(c => [c, gear.gearList().filter(g => g.group === c)]);
-  return `<details open><summary>Planung</summary><div class="h-tiles">${PLAN_TOOLS.map(tile).join('')}</div></details>
+  const setup = SETUP_GEAR.map(id => gear.GEAR[id]).filter(Boolean);
+  // Beim Einrichten einer Halle: oben die passenden Geräte, Planungssymbole zugeklappt
+  return `${base ? `<details open><summary>Für die Einrichtung <span class="muted">${setup.length}</span></summary><div class="h-tiles gear">${setup.map(gearTile).join('')}</div></details><p class="h-head">Alle Geräte</p>` : ''}
+    ${base ? '' : `<details ${libOpen.has('plan-closed') ? '' : 'open'} data-cat="plan"><summary>Planung</summary><div class="h-tiles">${PLAN_TOOLS.map(tile).join('')}</div></details>
     <details data-cat="more" ${libOpen.has('more') ? 'open' : ''}><summary>Mehr <span class="muted">Wege, Schild, Text</span></summary><div class="h-tiles">${MORE_TOOLS.map(tile).join('')}</div></details>
-    <p class="h-head">Geräte</p>
-    ${gearCats.map(([c, list]) => `<details data-cat="${esc('g:' + c)}" ${libOpen.has('g:' + c) ? 'open' : ''}><summary>${esc(c)} <span class="muted">${list.length}</span></summary><div class="h-tiles gear">${list.map(gearTile).join('')}</div></details>`).join('')}
+    <p class="h-head">Geräte</p>`}
+    ${gearCats.map(([c, list]) => `<details data-cat="${esc('g:' + c)}" ${libOpen.has('g:' + c) && !base ? 'open' : ''}><summary>${esc(c)} <span class="muted">${list.length}</span></summary><div class="h-tiles gear">${list.map(gearTile).join('')}</div></details>`).join('')}
     ${cats.size ? '<p class="h-head">Eigene Bilder</p>' : ''}
     ${[...cats.entries()].map(([c, list]) => `<details data-cat="${esc(c)}" ${libOpen.has(c) ? 'open' : ''}><summary>${esc(c)} <span class="muted">${list.length}</span></summary><div class="h-tiles imgs">${list.map(imgTile).join('')}</div></details>`).join('')}
     <div class="h-lib">
@@ -220,15 +267,16 @@ function paletteHtml() {
 }
 
 const colorRow = cur => `<span class="h-colors">${COLORS.map(([c, n]) => `<button class="h-color ${cur === c ? 'on' : ''}" style="--c:${c}" data-h="color" data-color="${c}" title="${n}" aria-label="${n}"></button>`).join('')}</span>`;
-const sizeBtns = '<button class="icon-btn sm" data-h="size" data-d="0.85" title="Kleiner" aria-label="Kleiner">−</button><button class="icon-btn sm" data-h="size" data-d="1.18" title="Größer" aria-label="Größer">+</button>';
-const orderBtns = '<button class="btn ghost sm" data-h="dup" title="Kopie (Strg+D)">Kopie</button><button class="btn ghost sm" data-h="front" title="Nach vorn">Vorn</button><button class="btn ghost sm" data-h="back" title="Nach hinten">Hinten</button>';
+const sizeBtns = '<span class="h-grp" role="group" aria-label="Größe"><button class="icon-btn sm" data-h="size" data-d="0.85" title="Kleiner" aria-label="Kleiner">−</button><button class="icon-btn sm" data-h="size" data-d="1.18" title="Größer" aria-label="Größer">+</button></span>';
+const orderMenu = () => menu('Weitere Aktionen für die Auswahl', `${menuItem('dup', 'layers', 'Kopie', 'Strg+D')}${menuItem('front', 'up', 'Nach vorn', 'Liegt über anderen Elementen')}${menuItem('back', 'down', 'Nach hinten', 'Liegt unter anderen Elementen')}`, 'right');
 const delBtn = `<button class="icon-btn sm danger" data-h="del" title="Entfernen (Entf)" aria-label="Entfernen">${icon('trash', 16)}</button>`;
+// Auswahlleiste: links was gewählt ist und seine Eigenschaften, rechts Größe, Drehen, Entfernen und „⋯“
 function selBarHtml(p) {
   const items = selItems(p);
-  if (!items.length) return '<span class="muted small-text">Elemente aus der Leiste in die Halle ziehen oder antippen. Antippen zum Bearbeiten · Umschalt-Klick oder Rahmen ziehen wählt mehrere · Strg+A wählt alle.</span>';
+  if (!items.length) return `<span class="muted small-text">${p.base ? 'Geräte aus der Leiste an die Wände ziehen oder antippen.' : 'Elemente aus der Leiste in die Halle ziehen oder antippen.'} Antippen = bearbeiten · Rahmen ziehen oder Umschalt-Klick = mehrere wählen.</span>`;
   if (items.length > 1) {
     const colored = items.filter(hasColor), same = colored.length && colored.every(x => x.color === colored[0].color) ? colored[0].color : '';
-    return `<b class="small-text">${items.length} Elemente gewählt</b>${colored.length ? colorRow(same) : ''}${sizeBtns}${orderBtns}${delBtn}
+    return `<b class="small-text">${items.length} Elemente gewählt</b>${colored.length ? colorRow(same) : ''}<span class="hall-sep"></span>${sizeBtns}${delBtn}${orderMenu()}
       <button class="btn ghost sm" data-h="none">Auswahl aufheben</button>`;
   }
   const i = items[0];
@@ -238,13 +286,14 @@ function selBarHtml(p) {
   const label = i.kind === 'img' ? (cur ? cur.name + (cur.view ? ' · ' + cur.view : '') : 'Bild')
     : i.kind === 'gear' ? (g ? g.name + (g.views.length > 1 ? ' · ' + gear.viewLabel(g.views[vi]) : '') : 'Gerät') : KINDS[i.kind].label;
   return `<b class="small-text">${esc(label)}</b>
-    ${hasText(i.kind) ? (i.kind === 'zone' ? `<textarea class="input sm h-text" data-hc="text" rows="1" maxlength="60" aria-label="Beschriftung" placeholder="ohne Beschriftung">${esc(i.text || '')}</textarea>` : `<input class="input sm h-text" data-hc="text" maxlength="${i.kind === 'text' ? 60 : 8}" value="${esc(i.text || '')}" aria-label="Beschriftung" placeholder="ohne">`) : ''}
+    ${hasText(i.kind) ? (i.kind === 'zone' ? `<textarea class="input sm h-text" data-hc="text" rows="1" maxlength="60" aria-label="Beschriftung" placeholder="Beschriftung (optional)">${esc(i.text || '')}</textarea>` : `<input class="input sm h-text" data-hc="text" maxlength="${i.kind === 'text' ? 60 : 8}" value="${esc(i.text || '')}" aria-label="Beschriftung" placeholder="Beschriftung">`) : ''}
     ${i.kind === 'zone' ? formHtml(i) : ''}
     ${hasColor(i) ? colorRow(i.color) : ''}
-    ${views.length > 1 ? `<button class="btn ghost sm" data-h="view">${icon('repeat', 15)} Ansicht wechseln <span class="muted">${vi + 1}/${views.length}</span></button>` : ''}
-    ${KINDS[i.kind].rotate === false ? '' : `<button class="icon-btn sm" data-h="rot" data-d="-15" title="Nach links drehen" aria-label="Nach links drehen">${icon('reset', 16)}</button><button class="icon-btn sm h-flip" data-h="rot" data-d="15" title="Nach rechts drehen" aria-label="Nach rechts drehen">${icon('reset', 16)}</button>`}
-    ${sizeBtns}${orderBtns}${delBtn}
-    ${i.kind === 'zone' ? `<span class="h-kids"><label class="small-text">Kinder <input type="number" class="input sm h-num" data-hc="kidn" min="1" max="40" value="${kidCount}" aria-label="Anzahl Kinder"></label><button class="btn ghost sm" data-h="kids" title="So viele Kinder in der Farbe des Bereichs gleichmäßig darin aufstellen">Einsetzen</button></span>` : ''}`;
+    ${views.length > 1 ? `<button class="btn ghost sm" data-h="view">${icon('repeat', 15)} Ansicht <span class="muted">${vi + 1}/${views.length}</span></button>` : ''}
+    ${i.kind === 'zone' ? `<span class="h-kids"><label class="small-text">Kinder <input type="number" class="input sm h-num" data-hc="kidn" min="1" max="40" value="${kidCount}" aria-label="Anzahl Kinder"></label><button class="btn ghost sm" data-h="kids" title="So viele Kinder in der Farbe des Bereichs gleichmäßig darin aufstellen">Einsetzen</button></span>` : ''}
+    <span class="hall-sep"></span>
+    ${KINDS[i.kind].rotate === false ? '' : `<span class="h-grp" role="group" aria-label="Drehen"><button class="icon-btn sm" data-h="rot" data-d="-15" title="Nach links drehen" aria-label="Nach links drehen">${icon('reset', 16)}</button><button class="icon-btn sm h-flip" data-h="rot" data-d="15" title="Nach rechts drehen" aria-label="Nach rechts drehen">${icon('reset', 16)}</button></span>`}
+    ${sizeBtns}${delBtn}${orderMenu()}`;
 }
 
 // Form eines Bereichs (Rechteck, U, L, Rahmen) und Randbreite links/rechts bzw. vorn/hinten
@@ -326,14 +375,19 @@ async function onClick(e) {
   const t = e.target.closest('[data-add],[data-addimg]');
   if (t && e.detail === 0) return newItem(t.dataset.add || 'img', null, t.dataset.addimg ? libEntry(t.dataset.addimg) : null, t.dataset.gear); // Tastatur
   const b = e.target.closest('[data-h]'); if (!b) return;
+  b.closest('.h-menu')?.removeAttribute('open');
   const act = b.dataset.h, p = plan();
   switch (act) {
     case 'new': return newPlanDialog();
+    case 'side': return showSide(b.dataset.tab, true);
+    case 'side-close': palHidden = true; setPref('hallPalette', '0'); return attach(host);
+    case 'gym-edit': { const gy = gymOf(p); if (gy) gymDialog(gy); return; }
+    case 'gym-std': return gymDialog(null, { fromStd: true });
     case 'import-plan': return importPlansDialog();
     case 'export-plan': return downloadFile(`Hallenplan - ${fileName(p.title)}.json`, exportPlans([p], gymOf));
     case 'gym-done': return stopGymEdit();
     case 'gym-props': return gymDialog(gymById(p.gym));
-    case 'props': return propsDialog(p);
+    case 'props': return showSide('settings', false, '[data-hc=title]');
     case 'rules': return rulesEditDialog(p);
     case 'copy': return copyPlan(p, false);
     case 'next-phase': return copyPlan(p, true);
@@ -343,11 +397,9 @@ async function onClick(e) {
       sel = []; history.delete(p.id); baseEdit = null;
       return store.update(s => { s.sport.halls = s.sport.halls.filter(x => x.id !== p.id); s.sport.activeHall = sortPlans(s.sport.halls)[0]?.id ?? null; s.screen.widgets.forEach(w => { if (w.type === 'hall' && w.planId === p.id) w.planId = null; }); });
     }
-    case 'mark': return commit(x => { const m = b.dataset.mark, cur = x.lines || []; x.lines = cur.includes(m) ? cur.filter(y => y !== m) : MARKS.map(y => y.id).filter(y => y === m || cur.includes(y)); });
     case 'undo': return undo();
     case 'redo': return undo(true);
     case 'snap': snap = !snap; setPref('hallSnap', snap ? '1' : '0'); return attach(host);
-    case 'palette': palHidden = !palHidden; setPref('hallPalette', palHidden ? '0' : '1'); return attach(host);
     case 'import': return host.querySelector('[data-hc=files]').click();
     case 'lib': return libDialog();
     case 'none': return select([]);
@@ -389,9 +441,48 @@ async function onClick(e) {
     }
   }
 }
+// Seitenleiste zeigen (tab: 'tools' | 'settings'); toggle: derselbe Knopf noch einmal blendet sie aus
+function showSide(tab, toggle = false, focus = '') {
+  tab = tab === 'settings' && !plan()?.base ? 'settings' : 'tools';
+  if (toggle && !palHidden && (side === tab || plan()?.base)) palHidden = true;
+  else { palHidden = false; side = tab; setPref('hallSide', side); }
+  setPref('hallPalette', palHidden ? '0' : '1');
+  attach(host);
+  if (focus) { const f = host.querySelector(focus); f?.focus(); f?.select?.(); }
+}
+// Felder der Einstellungen; true = erledigt
+function onSettingChange(t, hc) {
+  const p = plan(); if (!p || p.base) return false;
+  if (hc === 'title') { const v = t.value.trim().slice(0, 80); if (!v) { t.value = p.title; toast('Der Plan braucht einen Namen.', { kind: 'warn' }); } else if (v !== p.title) commit(x => { x.title = v; }); return true; }
+  if (hc === 'topic') {
+    if (t.value !== NEW_TOPIC) { commit(x => { x.topic = t.value; }); return true; }
+    t.value = p.topic || '';
+    dialog({ title: 'Neues Thema', submit: 'Anlegen', body: '<label class="field">Name des Themas<input name="t" class="input" maxlength="60" placeholder="z. B. Badminton" required></label>',
+      onSubmit: fd => { const v = topicName(fd.get('t')); if (!v) throw new Error('Bitte einen Namen eingeben.'); store.update(s => addTopic(s, v), { silent: true }); commit(x => { x.topic = v; }); } });
+    return true;
+  }
+  if (hc === 'lesson') {
+    const v = t.value.trim().slice(0, 80); if (v === (p.lesson || '')) return true;
+    commit(x => { x.lesson = v; x.phase = v ? nextPhase(v) : 0; });
+    if (v) toast(`„${p.title}“ ist Phase ${plan().phase} von „${v}“.`);
+    return true;
+  }
+  if (hc === 'phase') { const v = clamp(Math.round(Number(t.value)) || 1, 1, 20); commit(x => { x.phase = v; }); return true; }
+  if (hc === 'mark') { const m = t.value; commit(x => { const cur = x.lines || []; x.lines = t.checked ? MARKS.map(y => y.id).filter(y => y === m || cur.includes(y)) : cur.filter(y => y !== m); }); return true; }
+  if (hc === 'snap') { snap = t.checked; setPref('hallSnap', snap ? '1' : '0'); return true; }
+  if (hc === 'gym') { if (t.value === '__new') { t.value = gymOf(p)?.id || ''; gymDialog(); } else setPlanGym(t.value); return true; }
+  if (hc === 'gymdef') {
+    const lg = groups.active(), cur = gymOf(p)?.id || ''; if (!lg) return true;
+    setGroupGym(lg.id, t.checked ? cur : '');
+    toast(t.checked ? `„${gymOf(p).name}“ ist jetzt die Standardhalle von „${lg.name}“ – neue Pläne entstehen dort.` : `„${lg.name}“ plant wieder in der Standardhalle (27 × 15 m).`);
+    return true;
+  }
+  return false;
+}
 function onChange(e) {
   const t = e.target, hc = t.dataset.hc; if (!hc) return;
   const id = primary();
+  if (onSettingChange(t, hc)) return;
   if (hc === 'floor') commit(x => { x.floor = t.value; });
   else if (hc === 'kidn') kidCount = clamp(Math.round(Number(t.value)) || 1, 1, 40);
   else if (hc === 'text') { const v = t.value.trim().slice(0, 60); commit(x => { const i = itemOf(x, id); if (i) { i.text = v; if (i.kind === 'text') i.w = Math.max(60, Math.round(v.length * i.h * .45 + 30)); } }); }
@@ -535,24 +626,18 @@ function startTileDrag(e, tileEl) {
 const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
 // Bereiche ohne Beschriftung (Gestaltungsregel 13.11.2026), Teams nur über die Farbe
 const zonesAcross = (n, g) => Array.from({ length: n }, (_, k) => { const w = (g.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, g.dep - 0.8, ZC[k % 4], '', g); });
-// Schalter unter „Spielfeldlinien“; Geräte (Körbe, Tore, Netz) auch ohne Linien, fest eingebaute Geräte der Halle sind immer an
-const markBtn = (p, m) => {
-  const fixed = m.gear && fixedGear(p, gymOf(p), m.id), on = fixed || p.lines?.includes(m.id);
-  const off = fixed || (!m.gear && p.floor === 'leer');
-  return `<button class="h-mark ${on ? 'on' : ''}" style="--c:${m.color}" data-h="mark" data-mark="${m.id}" aria-pressed="${on}" ${off ? 'disabled' : ''}${fixed ? ' title="Fest in der Halle eingebaut"' : m.gear ? ` title="${esc(m.label)} an den üblichen Stellen einblenden"` : ''}><i></i>${esc(m.label)}</button>`;
-};
 const TEMPLATES = [
-  { id: 'leer', label: 'Leere Halle', make: () => ({}) },
-  { id: 'z2', label: 'Zwei Bereiche', make: g => ({ items: zonesAcross(2, g) }) },
-  { id: 'z3', label: 'Drei Bereiche', make: g => ({ items: zonesAcross(3, g) }) },
-  { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: g => { const z = zonesAcross(4, g), w = (g.len - 1 - 3 * 0.6) / 4;
+  { id: 'leer', name: '', label: 'Leere Halle', make: () => ({}) },
+  { id: 'z2', name: 'Zwei Bereiche', label: 'Zwei Bereiche', make: g => ({ items: zonesAcross(2, g) }) },
+  { id: 'z3', name: 'Drei Bereiche', label: 'Drei Bereiche', make: g => ({ items: zonesAcross(3, g) }) },
+  { id: 'klein4', name: 'Vier Kleinfelder', label: 'Vier Kleinfelder (mit Kleintoren)', make: g => { const z = zonesAcross(4, g), w = (g.len - 1 - 3 * 0.6) / 4;
     return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, g.dep - 0.8, { ay: 0.8, g }), gearAt('kleintor', 'hinten', cx, 0.8, { ay: 0.97, g })]; })] }; } },
   // seit 2.14.0 über die Schalter Körbe, Tore und Netz (eingeblendet, nicht verschiebbar; zum Verschieben das Gerät aus der Leiste setzen)
-  { id: 'badminton', label: 'Badminton (Felder mit Netz)', make: () => ({ lines: ['badminton', 'netz'] }) },
-  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball', 'netz'] }) },
-  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball', 'koerbe'] }) },
-  { id: 'handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball', 'tore'] }) },
-  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball', 'tore'] }) },
+  { id: 'badminton', name: 'Badminton', label: 'Badminton (Felder mit Netz)', make: () => ({ lines: ['badminton', 'netz'] }) },
+  { id: 'volleyball', name: 'Volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball', 'netz'] }) },
+  { id: 'basketball', name: 'Basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball', 'koerbe'] }) },
+  { id: 'handball', name: 'Handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball', 'tore'] }) },
+  { id: 'fussball', name: 'Hallenfußball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball', 'tore'] }) },
 ];
 // Lehrkraft vorn an der Mittellinie (Nutzerentscheidung 14.11.2026: in jedem Plan, ohne Text, Größe 0,6)
 const teacherItem = g => itemAt('teacher', g.len / 2, 0.6, { size: FIGURE, g });
@@ -588,26 +673,43 @@ export function defaultGym() {
   return gymById(own)?.id || gymOf(plan())?.id || '';
 }
 const gymOptions = cur => `<option value="" ${cur ? '' : 'selected'}>${esc(gymLabel(null))}</option>${gyms().map(g => `<option value="${esc(g.id)}" ${g.id === cur ? 'selected' : ''}>${esc(gymLabel(g))}</option>`).join('')}`;
+// Plan nach einer Voreinstellung in einer Halle (ohne Geräte, die dort fest stehen) – für „Anlegen“ und die Vorschau
+function planFromTemplate(tplId, gy) {
+  const g = geo(gy), tpl = (TEMPLATES.find(x => x.id === tplId) || TEMPLATES[0]).make(g);
+  const fixed = new Set((gy?.items || []).filter(i => i.kind === 'gear').map(i => i.gear));
+  return { floor: 'halle', v: 3, lines: tpl.lines || [], items: [...(tpl.items || []).filter(i => i.kind !== 'gear' || !fixed.has(i.gear)), teacherItem(g)], ...(gy ? { gym: gy.id } : {}) };
+}
+// Neuer Hallenplan (seit 2.15.0): Voreinstellungen als Bildkacheln mit Vorschau in der gewählten Halle; Name wird vorgeschlagen
 export function newPlanDialog(topic = '', lesson = '') {
-  const cur = defaultGym();
-  dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', body: `
-    <label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen" required></label>
+  const cur = defaultGym(), lg = groups.active();
+  let tplId = 'leer';
+  const tiles = gy => TEMPLATES.map(t => `<button type="button" class="h-tpl ${t.id === tplId ? 'on' : ''}" data-tpl="${t.id}" aria-pressed="${t.id === tplId}" title="${esc(t.label)}">
+      <span class="h-tpl-img">${boardSvg({ id: 'vorschau', title: t.label, ...planFromTemplate(t.id, gy) })}</span><span class="h-tpl-l">${esc(t.name || t.label)}</span></button>`).join('');
+  const isDef = id => lg && (gymById(groups.sportView(lg).gym)?.id || '') === id;
+  dialog({ title: 'Neuer Hallenplan', submit: 'Anlegen', wide: true, body: `
     ${lesson ? `<p class="small-text">Stunde: <b>${esc(lesson)}</b> – wird dort als nächste Phase angelegt.</p>` : ''}
-    ${topicField(topic, '– ordnet die Sammlung')}
-    <label class="field">Halle<select name="gym" class="select">${gymOptions(cur)}</select></label>
-    <label class="field">Voreinstellung<select name="tpl" class="select">${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
-    <p class="muted small-text">Fläche und Spielfeldlinien passen sich der Halle an, Geräte sind maßstäblich (Kleingeräte etwas größer); die festen Geräte der Halle sind schon da. Die Lehrkraft steht vorn an der Mittellinie. Abstände, Türen und nutzbaren Raum vor Ort prüfen.</p>`,
+    <fieldset class="field h-dsec"><legend>Womit beginnen?</legend><div class="h-tpls" data-tpls>${tiles(gymById(cur))}</div></fieldset>
+    <div class="two"><label class="field">Name<input name="t" class="input" maxlength="80" placeholder="z. B. Passen in Gassen" required></label>
+    ${topicField(topic, '– ordnet die Sammlung')}</div>
+    <label class="field">Halle <small class="muted">${lg ? `– vorausgewählt: Standardhalle von „${esc(lg.name)}“` : ''}</small><select name="gym" class="select">${[['', gymLabel(null)], ...gyms().map(g => [g.id, gymLabel(g)])].map(([id, l]) => `<option value="${esc(id)}" ${id === cur ? 'selected' : ''}>${esc(l)}${isDef(id) ? ' ★' : ''}</option>`).join('')}</select></label>
+    <p class="muted small-text">Fläche und Linien passen sich der Halle an, ihre feste Einrichtung ist schon da. Die Lehrkraft steht vorn an der Mittellinie. Alles lässt sich danach ändern.</p>`,
+    onOpen: d => {
+      topicOpen(d);
+      const name = d.querySelector('[name=t]'), box = d.querySelector('[data-tpls]'), gsel = d.querySelector('[name=gym]');
+      let auto = '';   // zuletzt vorgeschlagener Name – wird ersetzt, solange er nicht geändert wurde
+      const suggest = () => { const t = TEMPLATES.find(x => x.id === tplId), v = t.name || ''; if (!name.value.trim() || name.value === auto) { name.value = v; auto = v; } };
+      box.onclick = e => { const b = e.target.closest('[data-tpl]'); if (!b) return; tplId = b.dataset.tpl;
+        box.querySelectorAll('[data-tpl]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }); suggest(); };
+      gsel.onchange = () => { box.innerHTML = tiles(gymById(gsel.value)); hydrateSvg(box); };
+      hydrateSvg(box);
+    },
     onSubmit: fd => {
       const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
       checkLimit();
-      const gy = gymById(String(fd.get('gym') || '')), g = geo(gy);
-      const tpl = (TEMPLATES.find(x => x.id === fd.get('tpl')) || TEMPLATES[0]).make(g);
-      // Geräte, die in der Halle fest stehen (z. B. Tore, Körbe), nicht noch einmal hineinstellen
-      const fixed = new Set((gy?.items || []).filter(i => i.kind === 'gear').map(i => i.gear));
-      const items = (tpl.items || []).filter(i => i.kind !== 'gear' || !fixed.has(i.gear));
-      const p = { id: uid(), title: t, topic: readTopic(fd), lesson, phase: lesson ? nextPhase(lesson) : 0, ...(gy ? { gym: gy.id } : {}), floor: 'halle', v: 3, lines: tpl.lines || [], items: [...items, teacherItem(g)] };
+      const gy = gymById(String(fd.get('gym') || ''));
+      const p = { id: uid(), title: t.slice(0, 80), topic: readTopic(fd), lesson, phase: lesson ? nextPhase(lesson) : 0, ...planFromTemplate(tplId, gy) };
       sel = []; baseEdit = null; store.update(s => { addTopic(s, p.topic); s.sport.halls.push(p); s.sport.activeHall = p.id; });
-    }, onOpen: topicOpen });
+    } });
 }
 
 // Geöffneten Plan in eine andere Halle legen ('' = Standardhalle); die Elemente passen sich der neuen Fläche an
@@ -625,27 +727,30 @@ export function setGroupGym(lgId, id) { store.update(s => { const k = groups.spo
 // Seit 2.11.0: Eine neue Halle entsteht aus einer Vorlage (leer, Einfeld-, Zweifeld-, Dreifeldhalle) mit fertiger Einrichtung
 // an den Wänden; Name und Maße sind frei, die Einrichtung ist danach wie jedes feste Gerät bearbeitbar.
 const freeName = base => { let n = base, k = 2; while (gyms().some(g => g.name.toLocaleLowerCase('de') === n.toLocaleLowerCase('de'))) n = `${base} ${k++}`; return n.slice(0, 40); };
-const EQUIP = 'Türen, Geräteraumtore, Tore, Basketballkörbe, Sprossenwände, Seilanlage, stehende Weichböden und Matten' ;
 export function gymDialog(gym = null, o = {}) {
   const lgs = groups.list(), active = groups.active(), p = plan() && !plan().base ? plan() : null;
   const isOf = lg => (gym ? groups.sportView(lg).gym === gym.id : lg.id === active?.id && !gymById(groups.sportView(lg).gym));
   const n = gym ? sp().halls.filter(x => x.gym === gym.id).length : 0;
   const tpl0 = gym ? null : GYM_TEMPLATES.find(t => t.id === (o.template || 'einfeld'));
-  dialog({ title: gym ? 'Halle bearbeiten' : o.fromStd ? 'Standardhalle als eigene Halle anlegen' : 'Neue Halle', submit: gym ? 'Speichern' : 'Anlegen', wide: true, body: `
-    ${o.fromStd ? '<p class="small-text muted">Die Standardhalle (27 × 15 m) bleibt als Schema erhalten. Als eigene Halle kannst du sie benennen, die Maße ändern und die Einrichtung anpassen.</p>' : ''}
-    ${gym ? '' : `<fieldset class="field gym-tpl"><legend>Vorlage <small class="muted">– fertig eingerichtet, danach frei bearbeitbar</small></legend>
+  dialog({ title: gym ? `Halle „${gym.name}“` : o.fromStd ? 'Standardhalle als eigene Halle anlegen' : 'Neue Halle', submit: gym ? 'Speichern' : 'Anlegen', wide: true, body: `
+    ${o.fromStd ? '<p class="small-text muted">Die Standardhalle (27 × 15 m) bleibt als Schema erhalten. Als eigene Halle kannst du sie benennen, die Maße ändern und Türen, Tore und Körbe dort einzeichnen, wo sie wirklich sind.</p>' : ''}
+    ${gym ? '' : `<fieldset class="field h-dsec gym-tpl"><legend>1 · Vorlage <small class="muted">fertig eingerichtet, danach frei bearbeitbar</small></legend>
       <div class="seg" role="group" aria-label="Vorlage">${GYM_TEMPLATES.map(t => `<button type="button" data-tpl="${t.id}" class="${t === tpl0 ? 'on' : ''}" aria-pressed="${t === tpl0}">${esc(t.label)} <small>${t.fields ? `${t.len} × ${t.dep} m` : 'eigene Maße'}</small></button>`).join('')}</div>
       <input type="hidden" name="tpl" value="${tpl0.id}">
-      <label class="check" data-equip ${tpl0.fields ? '' : 'hidden'}><input type="checkbox" name="equip" checked> <span>Einrichtung übernehmen <small class="muted">– ${EQUIP}${'; bei mehreren Hallenteilen Trennvorhänge'}</small></span></label></fieldset>`}
+      <label class="check" data-equip ${tpl0.fields ? '' : 'hidden'}><input type="checkbox" name="equip" checked> <span>Einrichtung übernehmen <small class="muted">Türen, Geräteraumtore, Tore, Körbe, Sprossenwände, Seilanlage, Matten; bei mehreren Hallenteilen Trennvorhänge</small></span></label></fieldset>`}
+    <fieldset class="field h-dsec"><legend>${gym ? '' : '2 · '}Name und Maße</legend>
     <label class="field">Name<input name="name" class="input" maxlength="40" value="${esc(gym?.name || (tpl0.fields ? freeName(tpl0.label) : ''))}" placeholder="z. B. Dreifeldhalle Schulzentrum" required></label>
     <div class="two"><label class="field">Länge in m <small class="muted">(von links nach rechts)</small><input name="len" type="number" class="input" min="${GYM_LEN[0]}" max="${GYM_LEN[1]}" step="0.5" value="${gym?.len ?? tpl0.len}" required></label>
     <label class="field">Breite in m <small class="muted">(von vorn nach hinten)</small><input name="dep" type="number" class="input" min="${GYM_DEP[0]}" max="${GYM_DEP[1]}" step="0.5" value="${gym?.dep ?? tpl0.dep}" required></label></div>
-    ${lgs.length ? `<fieldset class="field gym-groups"><legend>Standardhalle für <small class="muted">– neue Pläne dieser Lerngruppen entstehen in dieser Halle</small></legend>
-      ${lgs.map(lg => `<label class="check"><input type="checkbox" name="lg" value="${esc(lg.id)}" ${isOf(lg) ? 'checked' : ''}> ${esc(lg.name)} <small class="muted">${esc(lg.subject)}${!isOf(lg) && gymById(groups.sportView(lg).gym) ? ' · jetzt: ' + esc(gymById(groups.sportView(lg).gym).name) : ''}</small></label>`).join('')}</fieldset>` : ''}
-    ${!gym && p ? `<label class="check"><input type="checkbox" name="move" ${o.fromStd || !p.gym ? 'checked' : ''}> Den geöffneten Plan „${esc(p.title)}“ in diese Halle legen</label>` : ''}
-    ${gym ? `<p class="small-text muted">${n ? `${n} ${n === 1 ? 'Plan liegt' : 'Pläne liegen'} in dieser Halle. Neue Maße: Bereiche und Elemente passen sich an, Geräte bleiben maßstäblich.` : 'Noch kein Plan in dieser Halle.'}</p>
-      <p class="gym-actions"><button type="button" class="btn ghost sm" data-gym-base>${icon('edit', 15)} Einrichtung bearbeiten</button> <button type="button" class="btn ghost sm" data-gym-copy title="Kopie mit gleichen Maßen und gleicher Einrichtung anlegen, z. B. für eine ähnliche Halle">${icon('layers', 15)} Kopieren</button> <button type="button" class="btn ghost sm danger" data-gym-del>${icon('trash', 15)} Halle löschen</button></p>`
-      : `<p class="muted small-text">Danach siehst du die Einrichtung (${EQUIP} …) und passt sie an: verschieben, löschen oder aus der Leiste ergänzen. Sie steht in jedem Plan dieser Halle. Maße und Lage der Türen vor Ort prüfen.</p>`}`,
+    ${gym && n ? `<p class="small-text muted">${n} ${n === 1 ? 'Plan liegt' : 'Pläne liegen'} in dieser Halle. Bei neuen Maßen passen sich Bereiche und Elemente an, Geräte bleiben maßstäblich.</p>` : ''}</fieldset>
+    ${lgs.length ? `<fieldset class="field h-dsec gym-groups"><legend>${gym ? '' : '3 · '}Standardhalle für <small class="muted">neue Pläne dieser Lerngruppen entstehen hier</small></legend>
+      ${lgs.map(lg => `<label class="check"><input type="checkbox" name="lg" value="${esc(lg.id)}" ${isOf(lg) ? 'checked' : ''}> <span>${esc(lg.name)} <small class="muted">${esc(lg.subject)}${!isOf(lg) && gymById(groups.sportView(lg).gym) ? ' · jetzt: ' + esc(gymById(groups.sportView(lg).gym).name) : ''}</small></span></label>`).join('')}</fieldset>` : ''}
+    ${!gym && p ? `<label class="check"><input type="checkbox" name="move" ${o.fromStd || !p.gym ? 'checked' : ''}> <span>Den geöffneten Plan „${esc(p.title)}“ in diese Halle legen</span></label>` : ''}
+    ${gym ? `<fieldset class="field h-dsec"><legend>Einrichtung</legend>
+        <p class="small-text muted">Türen, Tore, Körbe, Sprossenwände, Seile und Matten an den Wänden – sie stehen in jedem Plan dieser Halle.</p>
+        <button type="button" class="btn ghost" data-gym-base>${icon('edit', 15)} Einrichtung bearbeiten</button></fieldset>
+      <fieldset class="field h-dsec"><legend>Weitere Aktionen</legend><p class="gym-actions"><button type="button" class="btn ghost sm" data-gym-copy title="Kopie mit gleichen Maßen und gleicher Einrichtung anlegen, z. B. für eine ähnliche Halle">${icon('layers', 15)} Halle kopieren</button> <button type="button" class="btn ghost sm danger" data-gym-del>${icon('trash', 15)} Halle löschen</button></p></fieldset>`
+      : `<p class="muted small-text">Nach „Anlegen“ siehst du die Einrichtung und passt sie an: verschieben, löschen oder aus der Leiste ergänzen. Maße und Lage der Türen vor Ort prüfen.</p>`}`,
     onOpen: (el, close) => {
       // Vorlage wählen: Maße setzen, Namen vorschlagen (solange er noch aus einer Vorlage stammt)
       const nameIn = el.querySelector('[name=name]'), auto = () => !nameIn.value.trim() || GYM_TEMPLATES.some(t => nameIn.value.trim().replace(/ \d+$/, '') === t.label);
@@ -715,22 +820,6 @@ async function deleteGym(gym) {
   toast(`Halle „${gym.name}“ gelöscht.`);
 }
 
-// Name, Thema, Stunde und Phase eines Plans
-function propsDialog(p) {
-  dialog({ title: 'Eigenschaften', submit: 'Speichern', body: `
-    <label class="field">Name<input name="t" class="input" maxlength="80" value="${esc(p.title)}" required></label>
-    ${topicField(p.topic || '')}
-    <div class="two"><label class="field">Stunde <small class="muted">(optional)</small><input name="lesson" class="input" maxlength="80" list="h-lessons" value="${esc(p.lesson || '')}" placeholder="z. B. 2026.11.18 · Klasse 6 · Werfen und Völkerball">${datalist('h-lessons', lessons())}</label>
-    <label class="field">Phase<input name="phase" type="number" class="input" min="1" max="20" value="${p.phase || 1}"></label></div>
-    <p class="muted small-text">Pläne mit derselben Stunde stehen in der Sammlung zusammen und lassen sich oben mit den Pfeilen nacheinander zeigen (z. B. Erwärmung, Übung, Spiel).</p>`,
-    onSubmit: fd => {
-      const t = String(fd.get('t')).trim(); if (!t) throw new Error('Bitte einen Namen eingeben.');
-      const lesson = String(fd.get('lesson') || '').trim().slice(0, 80);
-      const topic = readTopic(fd);
-      store.update(s => addTopic(s, topic), { silent: true });
-      commit(x => { x.title = t.slice(0, 80); x.topic = topic; x.lesson = lesson; x.phase = lesson ? clamp(Math.round(Number(fd.get('phase'))) || 1, 1, 20) : 0; });
-    } });
-}
 // Spielregeln dieses Plans (seit 2.2.0): eine Regel je Zeile, gedruckt auf Seite 2 der Schüleransicht
 function rulesEditDialog(p) {
   const r = p.rules;
@@ -827,5 +916,10 @@ function libDialog() {
     } });
 }
 
-// Details-Zustand der Bildgruppen merken (bleibt beim Neuzeichnen offen)
-document.addEventListener('toggle', e => { const d = e.target; if (d?.dataset?.cat === undefined || !d.closest?.('.hall-palette')) return; d.open ? libOpen.add(d.dataset.cat) : libOpen.delete(d.dataset.cat); }, true);
+// Details-Zustand der Bildgruppen merken (bleibt beim Neuzeichnen offen); „Planung“ ist offen, solange nicht zugeklappt
+document.addEventListener('toggle', e => { const d = e.target; if (d?.dataset?.cat === undefined || !d.closest?.('.hall-palette')) return;
+  if (d.dataset.cat === 'plan') return d.open ? libOpen.delete('plan-closed') : libOpen.add('plan-closed');
+  d.open ? libOpen.add(d.dataset.cat) : libOpen.delete(d.dataset.cat); }, true);
+// Menüs „⋯“ schließen, wenn daneben geklickt oder Esc gedrückt wird; nur eines zugleich offen
+document.addEventListener('click', e => { document.querySelectorAll('details.h-menu[open]').forEach(d => { if (!d.contains(e.target)) d.removeAttribute('open'); }); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('details.h-menu[open]').forEach(d => d.removeAttribute('open')); });

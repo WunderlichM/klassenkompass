@@ -1000,10 +1000,6 @@ body.presenting .confetti i { animation-name: confetti-fall-big; }
 .hall-svg .hf-line { stroke: #9aa3b2; stroke-width: 3; fill: none; }
 .hall-svg .hf-mark { fill: none; stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; }
 
-.h-mark { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
-.h-mark i { width: 16px; height: 4px; border-radius: 2px; background: var(--c); opacity: .45; }
-.h-mark.on { --b: color-mix(in srgb, var(--c) 65%, var(--ink)); border-color: var(--b); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--b); } .h-mark.on i { opacity: 1; height: 5px; }
-.h-mark:disabled { opacity: .45; cursor: default; }
 .hall-svg text { font-family: var(--font); font-weight: 700; }
 .hall-svg .h-label { fill: #1f2a3c; }
 .hall-svg .h-on-color { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.25); stroke-width: 2px; }
@@ -1674,3 +1670,72 @@ body.dcam-on { overflow: hidden; }
   .dcam-stepper span { min-width: 60px; }
 }
 @media (prefers-reduced-motion: reduce) { .dcam-dot { animation: none; } }
+
+/* Hallenpläne seit 2.15.0: schlanke Kopfzeile, Seitenleiste „Elemente / Einstellungen“, Menüs „⋯“ */
+.hall-head { gap: 6px; }
+.hall-gap { width: 6px; }
+.hall-title-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--ink); font: inherit; padding: 4px 6px; margin-left: -4px; border-radius: 8px; cursor: pointer; min-width: 0; }
+.hall-title-btn:hover { background: var(--soft); } .hall-title-btn .ic { color: var(--muted); flex: none; }
+.hall-title-btn .hall-title { max-width: 320px; font-size: 15.5px; }
+.h-menu { position: relative; display: inline-block; }
+.h-menu > summary { list-style: none; margin: 0; padding: 0; display: inline-grid; place-items: center; font-size: inherit; }
+.h-menu > summary::-webkit-details-marker { display: none; }
+.h-menu[open] > summary { background: var(--accent-soft); color: var(--accent-dark); }
+.h-menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 270px; display: grid; gap: 2px; padding: 6px; background: var(--card, var(--surface)); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.16); }
+.h-menu-item { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+.h-menu-item:hover, .h-menu-item:focus-visible { background: var(--soft); }
+.h-menu-item .ic { margin-top: 2px; flex: none; color: var(--muted); }
+.h-menu-item small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+.h-menu-item.danger, .h-menu-item.danger .ic { color: var(--danger); }
+.h-menu-list hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.h-grp { display: inline-flex; gap: 2px; }
+.hall-selbar .hall-sep { min-width: 4px; }
+.hall-side { padding-top: 0; }
+.h-side-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 -10px 4px; padding: 8px 8px 8px 12px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; }
+.h-set { display: grid; gap: 4px; }
+.h-set section { padding: 6px 0 12px; border-bottom: 1px solid var(--line); }
+.h-set section:last-child { border-bottom: 0; }
+.h-set h3 { margin: 8px 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.h-set h3 small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.h-set .field { margin-bottom: 10px; font-size: 13px; }
+.h-set .field small { font-weight: 400; }
+.h-set .field .input, .h-set .field .select, .h-set > section > .select { width: 100%; margin-top: 4px; }
+.h-set .field.h-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.h-set .field.h-inline .select, .h-set .field.h-inline .input { width: auto; margin-top: 0; flex: 1; }
+.h-set .field.h-inline .h-num { flex: 0 0 72px; }
+.h-set .field.h-inline small { flex-basis: 100%; }
+.h-set .btn.full { justify-content: flex-start; margin: 4px 0; }
+.h-set .btn small { font-weight: 400; margin-left: auto; }
+.h-set p { margin: 2px 0 8px; }
+.h-set .check { margin: 8px 0; font-size: 13.5px; align-items: flex-start; }
+.h-set .check small { display: block; }
+.h-checks { display: grid; gap: 2px; margin-bottom: 6px; }
+.h-check { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 9px; font-size: 14px; cursor: pointer; }
+.h-check:hover { background: var(--soft); }
+.h-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex: none; }
+.h-check i { width: 18px; height: 5px; border-radius: 3px; background: var(--c); flex: none; }
+.h-check span { flex: 1; } .h-check small { display: block; font-size: 11.5px; }
+.h-check:has(input:disabled) { cursor: default; opacity: .7; } .h-check:has(input:disabled):hover { background: transparent; }
+.hall-lib .btn.full { justify-content: center; }
+/* Einrichtung einer Halle: eigener, farbig markierter Modus */
+.hall-gymbar { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.hall-gymbar-text { display: flex; align-items: flex-start; gap: 10px; min-width: 260px; flex: 1 1 380px; color: var(--accent-dark); }
+.hall-gymbar-text .ic { margin-top: 2px; flex: none; }
+.hall-gymbar-text b { color: var(--ink); }
+.hall-gymbar-text small { display: block; color: var(--ink); opacity: .8; font-size: 12.5px; margin-top: 2px; }
+@media (pointer: coarse) { .h-check { padding: 9px 8px; } .h-check input { width: 22px; height: 22px; } .h-menu-item { padding: 11px 10px; } }
+@media (max-width: 700px) { .h-menu-list { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(10px + env(safe-area-inset-bottom)); min-width: 0; max-height: 70dvh; overflow: auto; z-index: 300; } }
+/* Dialoge „Neuer Hallenplan“ und „Halle“ (seit 2.15.0): Vorschaukacheln und Abschnitte */
+.h-dsec { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 10px; margin: 0 0 14px; min-width: 0; }
+.h-dsec > legend { padding: 0 6px; font-size: 13.5px; font-weight: 700; }
+.h-dsec > legend small { font-weight: 400; }
+.h-dsec .field:last-child { margin-bottom: 4px; }
+.h-tpls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.h-tpl { display: grid; gap: 4px; padding: 6px; border: 1.5px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 600; text-align: center; cursor: pointer; min-width: 0; }
+.h-tpl:hover { border-color: var(--accent); }
+.h-tpl.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent); color: var(--accent-dark); }
+.h-tpl-img { display: block; background: #fff; border-radius: 7px; overflow: hidden; pointer-events: none; }
+.h-tpl-img svg { display: block; width: 100%; height: auto; aspect-ratio: 1600 / 740; }
+.h-tpl-l { line-height: 1.2; }
+@media (max-width: 600px) { .h-tpls { grid-template-columns: repeat(2, 1fr); } }
+.field[hidden], .check[hidden] { display: none; }
