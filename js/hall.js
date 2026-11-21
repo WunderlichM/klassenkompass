@@ -11,8 +11,8 @@ import * as gear from './hallgear.js';
 import { esc, icon, dialog, confirmDialog, toast, downloadFile, hooks } from './ui.js';
 import * as groups from './groups.js';
 
-import { BW, BH, K, MARKS, badmintonCourts, geo, STD, GYM_LEN, GYM_DEP } from './hallfloor.js';
-import { KINDS, clamp, num, shape, defs, boardSvg as drawBoard, zoneAt, gearAt, itemAt, parsePlans, exportPlans, refitItems, GYM_TEMPLATES, gymTemplateItems, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
+import { BW, BH, K, MARKS, geo, STD, GYM_LEN, GYM_DEP } from './hallfloor.js';
+import { KINDS, clamp, num, shape, defs, boardSvg as drawBoard, zoneAt, gearAt, fixedGear, itemAt, parsePlans, exportPlans, refitItems, GYM_TEMPLATES, gymTemplateItems, ZONE_FORMS, bandOf, normRules, printsRules, rulesHtml, RULES_MAX } from './hallplan.js';
 export { BW, BH };
 const COLORS = [['#2e7d4f', 'Grün'], ['#d9a521', 'Gelb'], ['#c94040', 'Rot'], ['#3d6fb5', 'Blau'], ['#7b57b0', 'Lila'], ['#e07b2a', 'Orange'], ['#6b7280', 'Grau'], ['#25272e', 'Schwarz']];
 
@@ -173,7 +173,9 @@ function editorHtml(p) {
     </div>
     <div class="hall-bar hall-marks no-print"><button class="btn ghost sm" data-h="palette" aria-pressed="${!palHidden}" title="Leiste mit Elementen ein- oder ausblenden">${icon('list', 15)} ${palHidden ? 'Leiste zeigen' : 'Leiste ausblenden'}</button>
       <span class="small-text muted">Spielfeldlinien</span>
-      ${MARKS.map(m => `<button class="h-mark ${p.lines?.includes(m.id) ? 'on' : ''}" style="--c:${m.color}" data-h="mark" data-mark="${m.id}" aria-pressed="${p.lines?.includes(m.id) ? 'true' : 'false'}" ${p.floor === 'leer' ? 'disabled' : ''}><i></i>${esc(m.label)}</button>`).join('')}
+      ${MARKS.filter(m => !m.gear).map(m => markBtn(p, m)).join('')}
+      <span class="small-text muted">Geräte</span>
+      ${MARKS.filter(m => m.gear).map(m => markBtn(p, m)).join('')}
     </div>
     <div class="hall-selbar no-print" data-selbar>${selBarHtml(p)}</div>
     <div class="hall-work">
@@ -533,20 +535,24 @@ function startTileDrag(e, tileEl) {
 const ZC = ['#2e7d4f', '#d9a521', '#c94040', '#3d6fb5'];
 // Bereiche ohne Beschriftung (Gestaltungsregel 13.11.2026), Teams nur über die Farbe
 const zonesAcross = (n, g) => Array.from({ length: n }, (_, k) => { const w = (g.len - 1 - (n - 1) * 0.6) / n, x0 = 0.5 + k * (w + 0.6); return zoneAt(x0, x0 + w, 0.8, g.dep - 0.8, ZC[k % 4], '', g); });
-// Tore auf den Torlinien des Handballfeldes, Körbe über den Grundlinien (Felder passen sich der Halle an, siehe hallfloor.js)
-const goals = g => { const x = (g.len - Math.min(40, g.len - 2)) / 2; return [gearAt('tor', 'gespiegelt', x, g.dep / 2, { ax: 0.82, ay: 0.76, g }), gearAt('tor', 'seitlich', g.len - x, g.dep / 2, { ax: 0.18, ay: 0.76, g })]; };
-const baskets = g => { const x = (g.len - Math.min(28, g.len - 1)) / 2 + 1.2; return [gearAt('basketballkorb', 'gespiegelt', x, g.dep / 2, { ax: 0.25, ay: 1.12, g }), gearAt('basketballkorb', 'seitlich', g.len - x, g.dep / 2, { ax: 0.75, ay: 1.12, g })]; };
+// Schalter unter „Spielfeldlinien“; Geräte (Körbe, Tore, Netz) auch ohne Linien, fest eingebaute Geräte der Halle sind immer an
+const markBtn = (p, m) => {
+  const fixed = m.gear && fixedGear(p, gymOf(p), m.id), on = fixed || p.lines?.includes(m.id);
+  const off = fixed || (!m.gear && p.floor === 'leer');
+  return `<button class="h-mark ${on ? 'on' : ''}" style="--c:${m.color}" data-h="mark" data-mark="${m.id}" aria-pressed="${on}" ${off ? 'disabled' : ''}${fixed ? ' title="Fest in der Halle eingebaut"' : m.gear ? ` title="${esc(m.label)} an den üblichen Stellen einblenden"` : ''}><i></i>${esc(m.label)}</button>`;
+};
 const TEMPLATES = [
   { id: 'leer', label: 'Leere Halle', make: () => ({}) },
   { id: 'z2', label: 'Zwei Bereiche', make: g => ({ items: zonesAcross(2, g) }) },
   { id: 'z3', label: 'Drei Bereiche', make: g => ({ items: zonesAcross(3, g) }) },
   { id: 'klein4', label: 'Vier Kleinfelder (mit Kleintoren)', make: g => { const z = zonesAcross(4, g), w = (g.len - 1 - 3 * 0.6) / 4;
     return { items: [...z, ...z.flatMap((_, k) => { const cx = 0.5 + k * (w + 0.6) + w / 2; return [gearAt('kleintor', 'frontal', cx, g.dep - 0.8, { ay: 0.8, g }), gearAt('kleintor', 'hinten', cx, 0.8, { ay: 0.97, g })]; })] }; } },
-  { id: 'badminton', label: 'Badminton (Felder mit Netz)', make: g => ({ lines: ['badminton'], items: badmintonCourts(g).map(([x0]) => gearAt('netz', 'quer', x0 + 3.05, g.dep / 2, { ay: 0.97, L: 6.3, g })) }) },
-  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: g => ({ lines: ['volleyball'], items: [gearAt('netz', 'laengs', g.len / 2, g.dep / 2, { L: Math.min(9.6, g.dep - 0.6), ax: 0.5, ay: 0.65, g })] }) },
-  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: g => ({ lines: ['basketball'], items: baskets(g) }) },
-  { id: 'handball', label: 'Handball (Feld mit Toren)', make: g => ({ lines: ['handball'], items: goals(g) }) },
-  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: g => ({ lines: ['fussball'], items: goals(g) }) },
+  // seit 2.14.0 über die Schalter Körbe, Tore und Netz (eingeblendet, nicht verschiebbar; zum Verschieben das Gerät aus der Leiste setzen)
+  { id: 'badminton', label: 'Badminton (Felder mit Netz)', make: () => ({ lines: ['badminton', 'netz'] }) },
+  { id: 'volleyball', label: 'Volleyball (Feld mit Netz)', make: () => ({ lines: ['volleyball', 'netz'] }) },
+  { id: 'basketball', label: 'Basketball (Feld mit Körben)', make: () => ({ lines: ['basketball', 'koerbe'] }) },
+  { id: 'handball', label: 'Handball (Feld mit Toren)', make: () => ({ lines: ['handball', 'tore'] }) },
+  { id: 'fussball', label: 'Hallenfußball (Feld mit Toren)', make: () => ({ lines: ['fussball', 'tore'] }) },
 ];
 // Lehrkraft vorn an der Mittellinie (Nutzerentscheidung 14.11.2026: in jedem Plan, ohne Text, Größe 0,6)
 const teacherItem = g => itemAt('teacher', g.len / 2, 0.6, { size: FIGURE, g });

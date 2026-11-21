@@ -40,6 +40,10 @@ export const MARKS = [
   { id: 'volleyball', label: 'Volleyball', color: '#3d6fb5' },
   { id: 'badminton', label: 'Badminton', color: '#2e9a5a' },
   { id: 'fussball', label: 'Hallenfußball', color: '#e07b2a' },
+  // seit 2.14.0: Geräte zum Einblenden (an den üblichen Stellen, im Plan nicht verschiebbar; siehe hallplan.js markGear)
+  { id: 'koerbe', label: 'Körbe', color: '#e2581c', gear: 'basketballkorb' },
+  { id: 'tore', label: 'Tore', color: '#c94040', gear: 'tor' },
+  { id: 'netz', label: 'Netz', color: '#3d6fb5', gear: 'netz' },
 ];
 const arc = (cx, cy, r, a0, a1, n = 28) => Array.from({ length: n + 1 }, (_, i) => { const t = (a0 + (a1 - a0) * i / n) * Math.PI / 180; return [cx + r * Math.cos(t), cy + r * Math.sin(t)]; });
 const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
@@ -97,7 +101,7 @@ export function badmintonCourts(h = HALL) {
 }
 const cache = new Map();
 export function marksSvg(ids, g = STD) {
-  return MARKS.filter(m => ids?.includes(m.id)).map(m => {
+  return MARKS.filter(m => !m.gear && ids?.includes(m.id)).map(m => {
     const key = m.id + '|' + g.key;
     if (!cache.has(key)) cache.set(key, DRAW[m.id](g.len, g.dep).map(l => `<polyline points="${l.ps.map(p => g.fp(p[0], p[1]).map(n1).join(',')).join(' ')}"${l.dash ? ' stroke-dasharray="12 9"' : ''}/>`).join(''));
     return `<g class="hf-mark" stroke="${m.color}">${cache.get(key)}</g>`;

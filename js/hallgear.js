@@ -6,7 +6,7 @@ import { K, STD } from './hallfloor.js';
 export { K };
 const U = 110;            // Zeichen-Einheiten je Meter (im Plan auf den Maßstab der Halle verkleinert, siehe scaleOf)
 const F = 0.62;           // Verkürzung der Tiefe
-const SW = 3.5, INK = '#1f2a3c';
+const SW = 3.5, INK = '#1f2a3c', QUIET_INK = '#a9b1bc';
 const n1 = v => Math.round(v * 10) / 10;
 
 // ---------- Farben ----------
@@ -15,7 +15,9 @@ const mix = (c, t, f) => { const a = rgb(c), b = rgb(t); return '#' + a.map((v, 
 const light = (c, f = 0.2) => mix(c, '#ffffff', f), dark = (c, f = 0.18) => mix(c, '#000000', f);
 const C = { wood: '#dcb27a', woodD: '#b8874f', mat: '#3f78b8', soft: '#8bb6e2', leather: '#93593a', metal: '#b3bac3', metalD: '#69727e',
   white: '#f7f7f4', red: '#c94040', orange: '#e07b2a', yellow: '#e8c33a', green: '#4f8f5b', black: '#2b2f36', rope: '#d9b77e',
-  board: '#2f5d4a', tt: '#2f6f9a', curtain: '#8aa293', shadow: '#c9ced6', hole: '#c3c8d0' };
+  board: '#2f5d4a', tt: '#2f6f9a', curtain: '#8aa293', shadow: '#c9ced6', hole: '#c3c8d0', basket: '#e2581c',
+  // Türen und Geräteraumtore (seit 2.14.0 zurückhaltend, damit Geräte und Körbe davor gut zu sehen sind)
+  frame: '#cfd4da', leaf: '#e8dccb', gate: '#ece2d2', gateD: '#d9cbb5' };
 
 // ---------- Zeichenwerkzeug ----------
 // swap: Gerät um 90° auf dem Boden gedreht (Länge nach hinten), die Reihenfolge der Teile ergibt sich aus der Tiefe.
@@ -201,7 +203,7 @@ const FLAGS = { laengs: [1, 0, 0], seitlich: [1, 0, 0], gespiegelt: [1, 1, 0], h
 const SWAP = { has: v => !!FLAGS[v]?.[0] };
 const list = [];
 // def: views = Ansichten (laengs/seitlich = um 90° gedreht), build(b, L, view), len = Länge in m, stretch = in der Länge dehnbar
-const def = (id, name, group, o) => list.push({ id, name, group, views: o.views || ['quer'], build: o.build, len: o.len || 1, stretch: !!o.stretch, color: o.color || null, short: o.short || name });
+const def = (id, name, group, o) => list.push({ id, name, group, views: o.views || ['quer'], build: o.build, len: o.len || 1, stretch: !!o.stretch, color: o.color || null, short: o.short || name, quiet: !!o.quiet, boost: o.boost || 1 });
 const QL = ['quer', 'laengs'], FS = ['frontal', 'seitlich'], FRONT4 = ['frontal', 'seitlich', 'hinten', 'gespiegelt'], SIDE4 = ['quer', 'laengs', 'quergespiegelt', 'laengsgespiegelt'];
 const G0 = GROUPS[0], G1 = GROUPS[1], G2 = GROUPS[2], G3 = GROUPS[3], G4 = GROUPS[4], G5 = GROUPS[5];
 
@@ -245,16 +247,22 @@ def('reck', 'Reck', G1, { views: FS, build: b => {
 def('reckpfosten', 'Reckpfosten', G1, { views: ['stehend'], build: b => { b.box(-0.14, -0.14, 0, 0.28, 0.28, 0.05, C.metalD); b.rod([0, 0, 0.05], [0, 0, 2.3], 10, C.metal, { layer: 1 }); } });
 
 // Hängen, Springen
-def('basketballkorb', 'Basketballkorb', G2, { views: FRONT4, short: 'Basketballkorb', build: b => {
+// seit 2.14.0 kräftiger (Rahmen, Ring und Netz deutlicher) und im Plan etwas größer als maßstäblich (boost),
+// damit Körbe neben Toren und Türen gut zu sehen sind
+def('basketballkorb', 'Basketballkorb', G2, { views: FRONT4, short: 'Basketballkorb', boost: 1.45, build: b => {
   b.group([0, 0, 1], () => {
     b.box(0, 0, 1.0, 1.8, 0.05, 1.05, C.white);
-    if (b.front) b.poly([[0.62, 0, 1.18], [1.18, 0, 1.18], [1.18, 0, 1.58], [0.62, 0, 1.58]], 'none', { stroke: C.orange, sw: 5 });
+    // Rand auch von hinten sichtbar (Korb auf der rechten Seite)
+    b.poly([[0.04, 0, 1.04], [1.76, 0, 1.04], [1.76, 0, 2.01], [0.04, 0, 2.01]], 'none', { stroke: C.basket, sw: 6 });
+    if (b.front) {
+      b.poly([[0.6, 0, 1.16], [1.2, 0, 1.16], [1.2, 0, 1.6], [0.6, 0, 1.6]], 'none', { stroke: C.basket, sw: 8 });
+    }
   });
   b.group([0.9, -0.55, 0.75], () => {
-    const top = b.hcircle(0.9, -0.3, 1.16, 0.24, 24), bot = b.hcircle(0.9, -0.3, 0.84, 0.16, 24);
-    top.forEach((p, i) => { if (i % 3 === 0) b.line(p, bot[i], 2, '#7c8694'); });
-    b.curve(bot, 2, '#ffffff', { closed: true });
-    b.curve(top, 5, C.orange, { closed: true });
+    const top = b.hcircle(0.9, -0.3, 1.16, 0.26, 24), bot = b.hcircle(0.9, -0.3, 0.8, 0.17, 24);
+    top.forEach((p, i) => { if (i % 2 === 0) b.line(p, bot[i], 3, '#4f5865'); });
+    b.curve(bot, 3, '#ffffff', { closed: true });
+    b.curve(top, 9, C.basket, { closed: true });
   });
 } });
 def('kletterseile', 'Kletterseile', G2, { views: FS, build: b => {
@@ -412,27 +420,27 @@ def('trennwand', 'Trennwand', G5, { views: QL, len: 3, stretch: true, build: (b,
     const y = b.swap ? 0.06 : 0; for (let x = 0.4; x < L - 0.1; x += 0.4) b.line([x, y, 0.32], [x, y, 2.35], 2, dark(C.curtain, 0.3));
   });
 } });
-def('tuer', 'Tür', G5, { views: FRONT4, build: b => {
+def('tuer', 'Tür', G5, { views: FRONT4, quiet: true, build: b => {
   b.group([-0.08, 0, 0], () => {
-    b.box(-0.08, -0.01, 0, 1.16, 0.08, 2.22, '#9aa3ad');
-    b.box(0, -0.02, 0, 1.0, 0.06, 2.12, '#c49564');
-    if (b.front) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 5, C.metalD);
+    b.box(-0.08, -0.01, 0, 1.16, 0.08, 2.22, C.frame);
+    b.box(0, -0.02, 0, 1.0, 0.06, 2.12, C.leaf);
+    if (b.front) b.rod([0.78, -0.03, 1.05], [0.9, -0.03, 1.05], 4, C.metal);
   });
 } });
 // Doppeltür (seit 2.11.0): Eingang oder Notausgang mit zwei Flügeln
-def('doppeltuer', 'Doppeltür', G5, { views: FRONT4, build: b => {
+def('doppeltuer', 'Doppeltür', G5, { views: FRONT4, quiet: true, build: b => {
   b.group([-0.08, 0, 0], () => {
-    b.box(-0.08, -0.01, 0, 2.16, 0.08, 2.22, '#9aa3ad');
-    [0, 1.0].forEach(x => b.box(x, -0.02, 0, 0.98, 0.06, 2.12, '#c49564'));
-    if (b.front) [0.8, 1.2].forEach(x => b.rod([x - 0.06, -0.03, 1.05], [x + 0.06, -0.03, 1.05], 5, C.metalD));
+    b.box(-0.08, -0.01, 0, 2.16, 0.08, 2.22, C.frame);
+    [0, 1.0].forEach(x => b.box(x, -0.02, 0, 0.98, 0.06, 2.12, C.leaf));
+    if (b.front) [0.8, 1.2].forEach(x => b.rod([x - 0.06, -0.03, 1.05], [x + 0.06, -0.03, 1.05], 4, C.metal));
   });
 } });
 // Geräteraumtor: breites Holztor mit waagrechten Brettern (seams zeichnen sie auch von der Seite), in der Breite dehnbar
-def('geraeteraumtor', 'Geräteraumtor', G5, { views: FRONT4, len: 3, stretch: true, short: 'Geräteraumtor', build: (b, L) => {
+def('geraeteraumtor', 'Geräteraumtor', G5, { views: FRONT4, len: 3, stretch: true, short: 'Geräteraumtor', quiet: true, build: (b, L) => {
   b.group([0, 0, 0], () => {
-    b.box(-0.1, -0.01, 0, L + 0.2, 0.08, 2.6, C.woodD);
-    b.box(0, -0.02, 0, L, 0.06, 2.45, C.wood, { seams: Array.from({ length: 7 }, (_, k) => 0.3 * (k + 1)) });
-    if (b.front) b.rod([L / 2 - 0.25, -0.04, 0.12], [L / 2 + 0.25, -0.04, 0.12], 5, C.metalD);
+    b.box(-0.1, -0.01, 0, L + 0.2, 0.08, 2.6, C.gateD);
+    b.box(0, -0.02, 0, L, 0.06, 2.45, C.gate, { seams: Array.from({ length: 3 }, (_, k) => 0.6 * (k + 1)) });
+    if (b.front) b.rod([L / 2 - 0.25, -0.04, 0.12], [L / 2 + 0.25, -0.04, 0.12], 4, C.metal);
   });
 } });
 def('lautsprecher', 'Lautsprecher', G5, { views: FRONT4, build: b => {
@@ -476,7 +484,8 @@ export function gearSize(id, view, L) {
 export const isStretch = (id, view) => !!GEAR[id]?.stretch && !SWAP.has(view);
 // Maßstab im Plan: Geräte passen zur Halle (g = Geometrie aus hallfloor.geo, ohne Angabe die Standardhalle 27 m × 15 m);
 // Kleingeräte bleiben zur Erkennbarkeit größer und in jeder Halle gleich groß
-export const scaleOf = (id, g = STD) => (GEAR[id]?.group === G4 ? 0.8 : g.s / U);
+// boost: einzelne Geräte etwas größer als maßstäblich, damit sie im Plan erkennbar bleiben (Basketballkorb, seit 2.14.0)
+export const scaleOf = (id, g = STD) => (GEAR[id]?.group === G4 ? 0.8 : g.s / U * (GEAR[id]?.boost || 1));
 // Länge (m) und Größenfaktor eines Elements aus seinem Rahmen; dehnbare Geräte werden länger statt verzerrt
 export function fit(i) {
   const g = GEAR[i.gear]; if (!g) return { L: 1, s: 1 };
@@ -498,6 +507,7 @@ export function gearSvg(i) {
   const { L, view } = fit(i);
   const r = render(g, view, L, g.color ? (i.color || g.color) : null), sx = w / r.w, sy = h / r.h;
   // Kontur bleibt auch bei kleinen Geräten sichtbar
-  const sw = Math.min(6.5, Math.max(SW, 2.3 / Math.sqrt(sx * sy)));
-  return `<g transform="scale(${n1(sx * 1000) / 1000} ${n1(sy * 1000) / 1000}) translate(${n1(-r.x)} ${n1(-r.y)})" stroke="${INK}" stroke-width="${n1(sw)}" stroke-linejoin="round" stroke-linecap="round">${r.svg}</g>`;
+  // Türen und Tore (quiet) mit heller, dünner Kontur: sie bleiben im Hintergrund (seit 2.14.0)
+  const sw = Math.min(6.5, Math.max(SW, 2.3 / Math.sqrt(sx * sy))) * (g.quiet ? 0.6 : 1);
+  return `<g transform="scale(${n1(sx * 1000) / 1000} ${n1(sy * 1000) / 1000}) translate(${n1(-r.x)} ${n1(-r.y)})" stroke="${g.quiet ? QUIET_INK : INK}" stroke-width="${n1(sw)}" stroke-linejoin="round" stroke-linecap="round">${r.svg}</g>`;
 }
