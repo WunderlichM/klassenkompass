@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as account from './account.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks, helpCard } from './ui.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
@@ -190,7 +190,7 @@ function drawHome() {
         <p class="sub">Jede Karte eine Stimme – ohne Handys für die Kinder.</p>
       </div>
       <div class="picker">
-        <label class="eyebrow" for="quiz-class">Deine Klasse</label>
+        <label class="eyebrow" for="quiz-class" title="Quiz-Klassen kennen keine Namen – nur Kinderzahl und Tierkarten">Quiz-Klasse</label>
         <div class="picker-row">
           <select id="quiz-class" class="select">${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeClassId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}${q.classes.length ? '' : '<option>Noch keine Klasse</option>'}</select>
           <button class="icon-btn" data-act="classes" title="Klassen verwalten" aria-label="Klassen verwalten">${icon('sliders')}</button>
@@ -204,18 +204,18 @@ function drawHome() {
           <div class="card-head">
             <div><p class="eyebrow">Fragensatz</p>
               <div class="picker-row"><select id="quiz-set" class="select">${sets.map(x => `<option value="${esc(x.id)}" ${x.id === t?.id ? 'selected' : ''}>${esc(x.title)} (${x.questions.length})${setTag(x)}</option>`).join('')}${sets.length ? '' : `<option>${c ? 'Noch kein Fragensatz für diese Klasse' : 'Noch kein Fragensatz'}</option>`}</select>
-              <button class="icon-btn" data-act="set-new" title="Neuer Fragensatz" aria-label="Neuer Fragensatz">${icon('plus')}</button>
-              <button class="icon-btn" data-act="set-import" title="Fragensätze importieren (Datei oder Text)" aria-label="Fragensätze importieren">${icon('upload')}</button>
-              ${t ? `<button class="icon-btn" data-act="set-edit" title="Umbenennen, kopieren oder löschen" aria-label="Fragensatz bearbeiten">${icon('edit')}</button>` : ''}</div>
+              ${t ? `<button class="btn ghost sm" data-act="set-edit" title="Umbenennen, Klasse ändern, kopieren, exportieren oder löschen">${icon('edit', 15)} Bearbeiten</button>` : ''}
+              <button class="btn ghost sm" data-act="set-new" title="Neuen Fragensatz anlegen">${icon('plus', 15)} Neu</button>
+              <button class="btn ghost sm" data-act="set-import" title="Fragensätze aus einer Datei oder eingefügtem Text übernehmen">${icon('upload', 15)} Importieren</button></div>
             </div>
           </div>
           ${t && c ? (!t.classId ? `<p class="notice">Dieser Fragensatz hat noch keine Klasse und lässt sich so nicht starten. <button class="link" data-act="set-assign">„${esc(c.name)}“ zuordnen</button> · <button class="link" data-act="set-edit">andere Auswahl</button></p>`
             : `<p class="muted small-text">${t.classId === ALL ? 'Für <b>alle Klassen</b> freigegeben.' : `Nur für <b>${esc(c.name)}</b> – in anderen Klassen erscheint dieser Fragensatz nicht.`}</p>`) : ''}
-          ${t ? questionList(t) : `<p class="muted">Lege einen Fragensatz an oder starte mit „Schnellstart“ und stelle die Fragen mündlich.</p>`}
+          ${t ? questionList(t) : `<p class="muted">Lege einen Fragensatz an oder starte „Ohne Fragen“ und stelle die Fragen mündlich oder an der Tafel.</p>`}
           <div class="card-foot">
             <button class="btn ghost" data-act="q-add" ${t ? '' : 'disabled'}>${icon('plus', 16)} Frage hinzufügen</button>
             <div class="tools">
-              <button class="btn ghost" data-act="start-quick" ${c ? '' : 'disabled'} title="Ohne vorbereitete Fragen: Du stellst die Frage mündlich oder an der Tafel">Schnellstart</button>
+              <button class="btn ghost" data-act="start-quick" ${c ? '' : 'disabled'} title="Ohne vorbereitete Fragen: Du stellst jede Frage mündlich oder an der Tafel, die Kinder antworten mit den Karten A–D">Ohne Fragen starten</button>
               <button class="btn primary big" data-act="start" ${c && t?.questions.length ? '' : 'disabled'}>${icon('play', 16)} Quiz starten</button>
             </div>
           </div>
@@ -243,16 +243,13 @@ function drawHome() {
           <div class="card-head small"><h3>${icon('sliders', 16)} Differenzierung</h3><div class="tools"><button class="btn ghost sm" data-act="diff">Einstellen</button></div></div>
           <p class="muted small-text">${esc(diffSummary())}</p>
         </div>
-        <div class="card">
-          <h3>${icon('help', 16)} So geht’s</h3>
-          <ol class="help-list steps small-text">
+        ${helpCard('quiz', `${icon('help', 16)} So geht’s`, `          <ol class="help-list steps small-text">
             <li>Einen Kartensatz drucken (am besten auf festem Papier) – er passt für alle Klassen. Jede Karte trägt Nummer und Tier. Mit dem Zuordnungsblatt notieren die Kinder einmal, welches Tier sie haben; das Blatt bleibt bei dir.</li>
             <li>Quiz starten und am Beamer zeigen. Die Kinder halten ihre Karte so, dass ihre Antwort <b>oben</b> steht.</li>
             <li>Mit dem Handy scannen: Mit Konto auf dem Handy einfach „Karten scannen“ – sonst das Quiz direkt auf dem Gerät mit Kamera starten.</li>
             <li>Fehlt ein Kind, vor dem Start bei „Klasse &amp; Karten“ auf das Personensymbol tippen (oder im Quiz auf sein Tier → „Fehlt heute“). Sobald alle anwesenden Kinder erfasst sind, wird automatisch aufgelöst (abschaltbar). „Auflösen“ zeigt die Verteilung. Nach „Beenden“ erscheint ein Podium mit den Besten; die Ergebnisse werden gespeichert.</li>
             <li>Unter „Differenzierung“ lassen sich bei Bedarf Zweite Chance, G- und M-Fassung, Klassenziel, ein Abschluss ohne Podium und das Vorlesen einschalten.</li>
-          </ol>
-        </div>
+          </ol>`)}
       </aside>
     </div>
   </section>`;

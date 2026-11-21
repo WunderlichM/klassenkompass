@@ -201,3 +201,15 @@ document.addEventListener('keydown', e => {
     window.dispatchEvent(new Event('resize'));
   }
 });
+
+// Zuklappbare Erklärkarte (seit 2.17.0): offen, bis sie einmal zugeklappt wird; der Zustand gilt je Gerät
+const HELP_KEY = 'klassenkompass.helpClosed';
+const helpClosed = () => { try { return new Set(JSON.parse(localStorage.getItem(HELP_KEY) || '[]')); } catch { return new Set(); } };
+export function helpCard(id, title, body, cls = '') {
+  return `<details class="card help-card ${cls}" data-help="${esc(id)}" ${helpClosed().has(id) ? '' : 'open'}><summary><h3>${title}</h3><span class="help-toggle muted small-text" aria-hidden="true"></span></summary><div class="help-body">${body}</div></details>`;
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if (!d?.dataset?.help) return;
+  const s = helpClosed(); d.open ? s.delete(d.dataset.help) : s.add(d.dataset.help);
+  try { localStorage.setItem(HELP_KEY, JSON.stringify([...s])); } catch { /* privater Modus: Zustand gilt nur bis zum Neuladen */ }
+}, true);

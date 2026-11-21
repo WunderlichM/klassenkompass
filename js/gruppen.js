@@ -275,10 +275,13 @@ function room(c, d, off, r = null) {
   return wrap('arena', rows.map(row => `<div class="arena-row" style="--n:${per}">${row.map(x => seatBox(c, x, off)).join('')}</div>`).join(''));
 }
 const stepper = (label, k, val, { min = true, max = true, text = val, disabled = false } = {}) => `<label ${disabled ? 'class="disabled"' : ''}>${label}<span class="stepper"><button data-act="step" data-k="${k}" data-d="-1" data-base="${val}" ${!disabled && min ? '' : 'disabled'}>−</button><output>${text}</output><button data-act="step" data-k="${k}" data-d="1" data-base="${val}" ${!disabled && max ? '' : 'disabled'}>+</button></span></label>`;
-const layoutCard = cur => `<div class="card">
-        <h3>${icon('sliders', 16)} Organisationsform</h3>
-        <div class="layout-grid">${LAYOUTS.map(l => `<button class="layout-opt ${l.id === cur ? 'on' : ''}" data-act="layout" data-id="${l.id}" title="${esc(l.hint)}"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.4">${LAYOUT_PICS[l.id]}</svg><span>${esc(l.name)}</span></button>`).join('')}</div>
-      </div>`;
+// Seitenkarten zum Zuklappen (seit 2.17.0): am Handy zu Beginn zu, mit dem aktuellen Wert in der Kopfzeile; am PC offen
+const isPhone = () => matchMedia('(max-width: 700px)').matches;
+const secOpen = new Map();   // id → offen (nur bis zum Neuladen)
+const sec = (id, title, value, body) => `<details class="card side-sec" data-sec="${id}" ${secOpen.get(id) ?? !isPhone() ? 'open' : ''}><summary><h3>${title}</h3>${value ? `<span class="sec-val">${value}</span>` : ''}</summary>${body}</details>`;
+document.addEventListener('toggle', e => { const d = e.target; if (d?.dataset?.sec) secOpen.set(d.dataset.sec, d.open); }, true);
+const layoutCard = cur => sec('layout', `${icon('sliders', 16)} Organisationsform`, esc(LAYOUTS.find(l => l.id === cur)?.name || ''), `
+        <div class="layout-grid">${LAYOUTS.map(l => `<button class="layout-opt ${l.id === cur ? 'on' : ''}" data-act="layout" data-id="${l.id}" title="${esc(l.hint)}"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.4">${LAYOUT_PICS[l.id]}</svg><span>${esc(l.name)}</span></button>`).join('')}</div>`);
 
 // Raumauswahl oben neben der Lerngruppe (seit 2.8.0): Raum wählen, als Standardraum der Lerngruppe merken, bearbeiten
 function roomPickerHtml(g) {
@@ -286,10 +289,10 @@ function roomPickerHtml(g) {
   return `<div class="picker room-picker no-print">
     <label class="eyebrow" for="room-select">Raum</label>
     <div class="picker-row">
-      <select id="room-select" class="select"><option value="" ${cur ? '' : 'selected'}>Kein Raum (Standard)${def ? '' : ' ★'}</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}${x.id === def ? ' ★' : ''}</option>`).join('')}<option value="__new">+ Neuer Raum …</option></select>
-      <button class="icon-btn ${isDef ? 'on' : ''}" data-act="room-default" aria-pressed="${isDef}" title="${isDef ? `Standardraum von ${esc(g.name)}` : `Als Standardraum für ${esc(g.name)} merken`}" aria-label="Als Standardraum merken">${icon('star')}</button>
+      <select id="room-select" class="select" title="Raum für die Sitzordnung – ★ = Standardraum von ${esc(g.name)}"><option value="" ${cur ? '' : 'selected'}>Ohne Raum (allgemeiner Plan)${def ? '' : ' ★'}</option>${all.map(x => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}${x.id === def ? ' ★' : ''}</option>`).join('')}<option value="__new">+ Neuer Raum …</option></select>
       ${r ? `<button class="icon-btn" data-act="room-edit" title="Raum bearbeiten (Grundriss und Plätze je Organisationsform)" aria-label="Raum bearbeiten">${icon('edit')}</button>` : ''}
     </div>
+    <label class="check room-def" title="Mit diesem Raum öffnet die Sitzordnung von ${esc(g.name)}"><input type="checkbox" id="room-def" ${isDef ? 'checked' : ''} ${!cur && isDef ? 'disabled' : ''}> <span>Standardraum für „${esc(g.name)}“</span></label>
   </div>`;
 }
 function seatHtml(g) {
@@ -298,10 +301,10 @@ function seatHtml(g) {
   const L = d ? d.layout : c.settings.layout, layout = LAYOUTS.find(l => l.id === L) || LAYOUTS[0], r = roomOf(g), cus = rooms.custom(r, L);
   const usesTables = TABLE_LAYOUTS.includes(L) && !cus, minT = minimumTables(present, c.settings.groups);
   const head = `<div class="seg mode-seg no-print" role="group" aria-label="Fassung der Sitzordnung">
-            <button class="${mode === 'std' ? 'on' : ''}" data-act="seat-mode" data-v="std" title="Wer normalerweise wo sitzt">Standardsitzplan</button>
-            <button class="${mode === 'mix' ? 'on' : ''}" data-act="seat-mode" data-v="mix" title="Gruppen nach Anwesenheit mischen">Gemischt</button></div>`;
+            <button class="${mode === 'std' ? 'on' : ''}" data-act="seat-mode" data-v="std" title="Fest gespeichert: wer normalerweise wo sitzt – ändert sich nicht beim Mischen">Fester Sitzplan</button>
+            <button class="${mode === 'mix' ? 'on' : ''}" data-act="seat-mode" data-v="mix" title="Gruppen werden nach Anwesenheit neu gemischt">Gemischte Gruppen</button></div>`;
   const flipBtn = `<button class="btn ghost sm" data-act="flip" aria-pressed="${flip}" title="Den Raum von der Tafel aus zeigen (für dich) oder von hinten (für die Klasse)">${icon('repeat', 15)} ${flip ? 'Blick von der Tafel' : 'Blick von hinten'}</button>`;
-  const title = `<p class="print-only print-title">${esc(g.name)} · ${mode === 'std' ? 'Standardsitzplan' : esc(layout.name)}${r ? ' · ' + esc(r.name) : ''}${flip ? ' · Blick von der Tafel' : ''} · ${new Date().toLocaleDateString('de-DE')}</p>`;
+  const title = `<p class="print-only print-title">${esc(g.name)} · ${mode === 'std' ? 'Fester Sitzplan' : esc(layout.name)}${r ? ' · ' + esc(r.name) : ''}${flip ? ' · Blick von der Tafel' : ''} · ${new Date().toLocaleDateString('de-DE')}</p>`;
   const where = r ? `${esc(r.name)} · ${esc(layout.name)}` : esc(layout.name);
   // Hinweis zu den Plätzen im Raum (angepasst oder automatisch)
   const roomNote = r ? `<p class="muted small-text">${cus ? `Die Plätze für ${esc(layout.name)} sind im Raum „${esc(r.name)}“ fest angeordnet (${rooms.seatCount(rooms.compose(r, cus))} Plätze).` : `Im Raum „${esc(r.name)}“ stellt die App ${esc(layout.name)} selbst passend auf.`} <button class="linkish" data-act="room-edit">Im Raumplaner ${cus ? 'ändern' : 'anpassen'}</button></p>` : '';
@@ -316,33 +319,31 @@ function seatHtml(g) {
     return `<div class="work-grid">
     <div class="card room-card print-area">
       <div class="card-head">
-        <div><p class="eyebrow">Dein Raum · ${where}</p><h2>Standardsitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
+        <div><p class="eyebrow">Dein Raum · ${where}</p><h2>Fester Sitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
         <div class="tools no-print">${d ? flipBtn : ''}${head}</div>
       </div>
       ${title}
       ${d ? `${tray.length ? `<div class="tray no-print no-present" data-tray><b>${tray.length === 1 ? '1 Kind hat' : tray.length + ' Kinder haben'} ${r ? 'hier' : 'noch'} keinen festen Platz:</b>${tray.map(p => `<span class="chip" data-pid="${esc(p.id)}">${esc(p.name)}</span>`).join('')}<button class="btn ghost sm" data-act="std-seat-missing">Auf freie Plätze setzen</button></div>` : ''}
       <div class="room-wrap">${inRoom ? inRoom.html : room(c, d, off)}</div>
       <p class="hint no-print no-present">${icon('check', 14)} Kind auf ein anderes ziehen: Die beiden tauschen. Auf einen freien Platz ziehen: Das Kind zieht um. Wer heute fehlt, ist grau – der Platz bleibt.</p>`
-      : `<div class="room-wrap"><div class="room-empty"><p><b>Noch kein Standardsitzplan.</b><br>Hier steht, wer normalerweise wo sitzt – fest gespeichert, unabhängig vom Mischen und vom Raum.</p>
+      : `<div class="room-wrap"><div class="room-empty"><p><b>Noch kein fester Sitzplan.</b><br>Hier steht, wer normalerweise wo sitzt – fest gespeichert, unabhängig vom Mischen und vom Raum.</p>
           <div class="tools">${c.plan ? `<button class="btn primary" data-act="std-from-mix">${icon('check', 16)} Jetzige Verteilung übernehmen</button>` : ''}<button class="btn ${c.plan ? 'ghost' : 'primary'}" data-act="std-alpha">Alphabetisch füllen</button></div>
           <p class="muted small-text">Danach ordnest du die Kinder durch Ziehen an ihre Plätze.</p></div></div>`}
     </div>
     <aside class="side no-print">
-      ${d ? `<div class="card">
-        <h3>${icon('grid', 16)} Tische</h3>
+      ${d ? sec('tables', `${icon('grid', 16)} Tische`, usesTables && !cus ? `${d.tables} Tische` : '', `
         ${cus ? '' : `<div class="num-row">
           ${stepper('Anzahl Tische', 'tables', d.tables, { min: d.tables > Math.max(1, used), max: d.tables < 40, disabled: !usesTables })}
           ${L === 'omnibus' ? stepper('Tische nebeneinander', 'cols', colsOf(d.cols, d.tables), { min: colsOf(d.cols, d.tables) > 2, max: colsOf(d.cols, d.tables) < 5 }) : ''}
           ${L === 'gruppen' ? stepper('Tischgruppen', 'groups', d.groups, { min: d.groups > 1, max: d.groups < Math.min(20, d.tables) }) + stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
         </div>`}
         ${roomNote}
-        <p class="muted small-text">${cus ? 'Die Reihenfolge der Plätze bleibt in jedem Raum und jeder Organisationsform gleich (von vorn links nach hinten rechts).' : usesTables ? 'Ein Tisch hat zwei Plätze. Leere Tische am Ende lassen sich wieder entfernen.' : 'Diese Organisationsform braucht keine Tische; die Reihenfolge der Plätze bleibt.'}</p>
-      </div>` : ''}
+        <p class="muted small-text">${cus ? 'Die Reihenfolge der Plätze bleibt in jedem Raum und jeder Organisationsform gleich (von vorn links nach hinten rechts).' : usesTables ? 'Ein Tisch hat zwei Plätze. Leere Tische am Ende lassen sich wieder entfernen.' : 'Diese Organisationsform braucht keine Tische; die Reihenfolge der Plätze bleibt.'}</p>`) : ''}
       ${d ? layoutCard(L) : ''}
       ${groups.peopleCardHtml(g, search)}
       ${d ? `<div class="card">
-        ${c.plan ? `<button class="btn ghost full" data-act="std-from-mix" title="Ersetzt den Standardsitzplan durch die jetzige gemischte Verteilung">Gemischte Verteilung übernehmen</button>` : ''}
-        <button class="btn ghost full danger-text" data-act="std-clear" style="margin-top:8px">${icon('trash', 15)} Standardsitzplan löschen</button>
+        ${c.plan ? `<button class="btn ghost full" data-act="std-from-mix" title="Ersetzt den festen Sitzplan durch die jetzige gemischte Verteilung">Gemischte Verteilung übernehmen</button>` : ''}
+        <button class="btn ghost full danger-text" data-act="std-clear" style="margin-top:8px">${icon('trash', 15)} Festen Sitzplan löschen</button>
         <p class="muted small-text center">Alle Änderungen werden automatisch gespeichert.</p>
       </div>` : ''}
     </aside>
@@ -367,8 +368,7 @@ function seatHtml(g) {
       ${c.plan ? `<p class="hint no-print no-present">${icon('check', 14)} Die Farben zeigen die Gruppen – dieselben wie unter Teams. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</p>` : ''}
     </div>
     <aside class="side no-print">
-      <div class="card">
-        <h3>${icon('users', 16)} Gruppen und Tische</h3>
+      ${sec('groups', `${icon('users', 16)} Gruppen und Tische`, `${c.settings.groups} Gruppen${usesTables && !cus ? ` · ${c.settings.tables} Tische` : ''}`, `
         <div class="num-row">
           ${stepper('Anzahl Gruppen', 'groups', c.settings.groups, { min: c.settings.groups > 2, max: c.settings.groups < 20 })}
           ${cus ? '' : stepper('Anzahl Tische', 'tables', c.settings.tables, { min: c.settings.tables > minT, disabled: !usesTables })}
@@ -376,13 +376,12 @@ function seatHtml(g) {
           ${L === 'gruppen' && !cus ? stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
         </div>
         <p class="muted small-text">${cus ? `Die Plätze kommen aus dem Raumplaner; jede Gruppe bekommt eigene Tische.` : usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Organisationsform braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
-        ${roomNote}
-      </div>
+        ${roomNote}`)}
       ${layoutCard(L)}
       ${groups.peopleCardHtml(g, search)}
       <div class="card">
         <button class="btn ghost full" data-act="rules">${icon('sliders', 16)} Einteilung anpassen</button>
-        ${c.plan ? `<button class="btn ghost full" data-act="std-from-mix" style="margin-top:8px" title="Speichert diese Verteilung als festen Sitzplan">${icon('check', 15)} Als Standardsitzplan speichern</button>` : ''}
+        ${c.plan ? `<button class="btn ghost full" data-act="std-from-mix" style="margin-top:8px" title="Speichert diese Verteilung als festen Sitzplan">${icon('check', 15)} Als festen Sitzplan speichern</button>` : ''}
         <p class="muted small-text center">Alle Einstellungen werden automatisch gespeichert.</p>
       </div>
     </aside>
@@ -533,6 +532,10 @@ function onChange(e) {
     if (t.value === '__new') { t.value = roomOf(g)?.id || ''; newRoom(g); return; }
     roomSel.set(g.id, t.value); draw(); return;
   }
+  if (t.id === 'room-def' && g) {   // seit 2.17.0 Häkchen statt Stern
+    const r = roomOf(g), cur = t.checked ? r?.id || '' : '';
+    setDefaultRoom(g, cur); toast(cur ? `„${r.name}“ ist jetzt der Standardraum von „${g.name}“.` : `„${g.name}“ öffnet jetzt ohne Raum.`); return;
+  }
   if (t.id === 'lg-select') { search = ''; groups.setActive(t.value); }
   else if (t.id === 'team-count' && g) store.update(s => { groups.sportPart(s, g.id).teamCount = Number(t.value); });
 }
@@ -559,7 +562,7 @@ async function onClick(e) {
     case 'flip': flip = !flip; try { localStorage.setItem(FLIP_KEY, flip ? '1' : '0'); } catch {} draw(); break;
     case 'std-from-mix': {
       const c = groups.seatView(g); if (!c.plan) return;
-      if (c.standard && !(await confirmDialog('Standardsitzplan ersetzen', 'Den bisherigen Standardsitzplan durch die jetzige gemischte Verteilung ersetzen?', 'Ersetzen'))) return;
+      if (c.standard && !(await confirmDialog('Festen Sitzplan ersetzen', 'Den bisherigen festen Sitzplan durch die jetzige gemischte Verteilung ersetzen?', 'Ersetzen'))) return;
       // jede Gruppe behält ihre Tische (auch als Tischgruppe); Einzelplätze bleiben neben einem freien Platz
       const per = Math.max(...c.plan.groups.map(x => Math.ceil(x.length / 2)), 1), island = c.settings.layout === 'gruppen';
       const seats = c.plan.groups.flatMap(x => { const r = x.slice(); const n = island ? per * 2 : Math.ceil(r.length / 2) * 2; while (r.length < n) r.push(null); return r; });
@@ -572,7 +575,7 @@ async function onClick(e) {
         store.update(s => { groups.seatPart(s, g.id).standard = { layout: c.settings.layout, tables: Math.min(40, Math.max(1, flat.length / 2)), groups: c.plan.groups.length, cols: c.settings.cols || 0, icols: c.settings.icols || 0, seats: flat, savedAt: new Date().toISOString() }; });
       } else store.update(s => { groups.seatPart(s, g.id).standard = { layout: c.settings.layout, tables, groups: c.plan.groups.length, cols: c.settings.cols || 0, icols: c.settings.icols || 0, seats, savedAt: new Date().toISOString() }; });
       // Kinder, die heute fehlen, stehen danach bei „ohne Platz“
-      modeOf.set(g.id, 'std'); draw(); toast('Als Standardsitzplan gespeichert.');
+      modeOf.set(g.id, 'std'); draw(); toast('Als festen Sitzplan gespeichert.');
       break;
     }
     case 'std-alpha': {
@@ -588,10 +591,10 @@ async function onClick(e) {
       break;
     }
     case 'std-clear': {
-      if (!(await confirmDialog('Standardsitzplan löschen', `Den Standardsitzplan von „${g.name}“ löschen? Die gemischten Gruppen bleiben.`))) return;
+      if (!(await confirmDialog('Festen Sitzplan löschen', `Den festen Sitzplan von „${g.name}“ löschen? Die gemischten Gruppen bleiben.`))) return;
       const old = groups.seatView(g).standard;
       store.update(s => { delete groups.seatPart(s, g.id).standard; });
-      toast('Standardsitzplan gelöscht.', { action: 'Rückgängig', onAction: () => store.update(s => { groups.seatPart(s, g.id).standard = old; }) });
+      toast('Fester Sitzplan gelöscht.', { action: 'Rückgängig', onAction: () => store.update(s => { groups.seatPart(s, g.id).standard = old; }) });
       break;
     }
     case 'layout': {
