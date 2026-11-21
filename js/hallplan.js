@@ -170,7 +170,7 @@ export function shape(i) {
       const zp = zonePath(i), body = zp ? `<path d="${zp}" fill-rule="evenodd"` : `<polygon points="${para(w, h)}"`;
       // seit 2.14.1 deutlicher: helle Farben kräftiger gefüllt, Rand immer in einer dunkleren Stufe der Farbe
       const L = lum(c);
-      return `${body} fill="${c}" fill-opacity="${L > 0.7 ? '.6' : L > 0.45 ? '.3' : '.2'}" stroke="${shade(c, 'b', L > 0.7 ? 0.5 : 0.25)}" stroke-width="5"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
+      return `${body} fill="${c}" fill-opacity="${L > 0.7 ? '.5' : L > 0.45 ? '.26' : '.17'}" stroke="${shade(c, 'b', L > 0.7 ? 0.5 : 0.25)}" stroke-width="5"/>${i.text ? textLines(i.text, w / 2 + h * K * 0.35, fs * 1.4, fs, 'h-label') : ''}`;
     }
     case 'cone':
       return coneSvg(i, c);
