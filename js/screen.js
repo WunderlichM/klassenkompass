@@ -30,7 +30,7 @@ const allAdd = [...ADD, ...extra.ADD];
 const ADD_GROUPS = (() => {
   const g = [['Zeit', ['digital', 'circle', 'egg', 'stopwatch', 'people', 'interval']],
     ['Ablauf', ['agenda', 'mode', 'task', 'signal', 'stations']],
-    ['Klasse', ['pick', 'duty', 'queue', 'score']],
+    ['Klasse', ['pick', 'wheel', 'duty', 'queue', 'score']],
     ['Anzeige', ['board', 'qr', 'hall']]];
   const rest = allAdd.map(a => a.kind).filter(k => !g.some(([, ks]) => ks.includes(k)));
   return rest.length ? [...g, ['Weitere', rest]] : g;
@@ -159,7 +159,7 @@ function widgetHtml(w) {
   if (w.type === 'timer') {
     const running = w.endsAt !== null;
     const sound = `<button class="round-btn" data-act="sound" aria-label="Ton ein/aus" title="${w.sound ? 'Ton an' : 'Ton aus'}">${icon(w.sound ? 'volume' : 'mute', 18)}</button>`;
-    if (w.style === 'circle') return frame(w, `<div class="circle-timer"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" class="track"/><path data-live="pie" class="pie"/></svg><div class="time" data-live="time"></div></div>${ctrl(w, running, sound)}<p class="w-state" data-live="state"></p>`, 'timer circle');
+    if (w.style === 'circle') return frame(w, `<div class="circle-timer"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="48.5" class="ct-rim"/><circle cx="50" cy="50" r="44.5" class="track"/><path data-live="pie" class="pie"/>${CT_TICKS}<circle cx="50" cy="50" r="4.6" class="ct-hub"/></svg><div class="time" data-live="time"></div></div>${ctrl(w, running, sound)}<p class="w-state" data-live="state"></p>`, 'timer circle');
     if (w.style === 'egg') return frame(w, `<div class="egg-timer" data-live="egg">${eggSvg()}</div><div class="time" data-live="time"></div>${ctrl(w, running, sound)}<p class="w-state" data-live="state"></p>`, 'timer egg');
     return frame(w, `<div class="time big" data-live="time"></div><div class="bar"><span data-live="bar"></span></div>${ctrl(w, running, sound)}<p class="w-state" data-live="state"></p>`, 'timer digital');
   }
@@ -190,6 +190,15 @@ function widgetHtml(w) {
   if (extra.TYPES.includes(w.type)) { const [inner, cls] = extra.html(w, { ctrl }); return frame(w, inner, cls); }
   return '';
 }
+
+// Zifferblatt des Kreis-Timers (seit 2.19.0): 60 Striche, jeder fünfte länger – wie bei einer Zeitdauer-Uhr
+const CT_TICKS = `<g class="ct-ticks">${Array.from({ length: 60 }, (_, i) => { const a = i * Math.PI / 30, r0 = i % 5 ? 40.2 : 36.8, c = Math.sin(a), d = -Math.cos(a); return `<line class="${i % 5 ? '' : 'major'}" x1="${(50 + r0 * c).toFixed(2)}" y1="${(50 + r0 * d).toFixed(2)}" x2="${(50 + 43 * c).toFixed(2)}" y2="${(50 + 43 * d).toFixed(2)}"/>`; }).join('')}</g>`;
+// Farbe des Timers nach verbleibender Zeit (seit 2.19.0): Grün, dann Gelb, zuletzt Orange-Rot
+const T_STOPS = [[0, [229, 72, 77]], [0.12, [240, 138, 44]], [0.3, [242, 178, 51]], [0.55, [88, 176, 74]], [1, [47, 158, 115]]];
+const timeColor = frac => {
+  const f = clamp(frac, 0, 1), i = Math.max(1, T_STOPS.findIndex(([p]) => p >= f)), [p0, c0] = T_STOPS[i - 1], [p1, c1] = T_STOPS[i], t = (f - p0) / (p1 - p0 || 1);
+  return `rgb(${c0.map((c, k) => Math.round(c + (c1[k] - c) * t)).join(' ')})`;
+};
 
 function eggSvg() {
   // eigenes, schlichtes Motiv: Ei bekommt mit der Zeit immer mehr Risse und bricht am Ende auf;
@@ -295,6 +304,8 @@ function updateLive(now, withSound) {
       setText(q('time'), mmss(rem));
       el.classList.toggle('done', done);
       el.classList.toggle('low', !done && w.endsAt !== null && rem <= 10000);
+      el.classList.toggle('run', !done && w.endsAt !== null);
+      const col = timeColor(frac); if (el.dataset.col !== col) { el.dataset.col = col; el.style.setProperty('--tcol', col); }
       const pet = done && w.style === 'egg' ? petIndex(w.id, w.endsAt) : -1;
       setText(q('state'), pet >= 0 ? petText(pet) : done ? 'Zeit abgelaufen' : w.endsAt !== null ? 'läuft' : rem === w.durationMs ? 'Bereit' : 'pausiert');
       const petEl = q('pet'); if (petEl && pet >= 0 && petEl.dataset.pet !== String(pet)) { petEl.dataset.pet = pet; petEl.innerHTML = petSvg(pet); }
@@ -440,7 +451,7 @@ document.addEventListener('submit', e => {
 function onPointerDown(e) {
   const wEl = e.target.closest('[data-wid]'); if (!wEl || e.button > 0 || isStack()) return;
   const resize = e.target.closest('[data-resize]');
-  const onFree = e.target.closest('[data-drag]') || (e.pointerType !== 'touch' && e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label,.bd-svg,.bd-bar'));
+  const onFree = e.target.closest('[data-drag]') || (e.pointerType !== 'touch' && e.target.closest('.w-body') && !e.target.closest('button,input,textarea,select,a,form,.results,label,.bd-svg,.bd-bar,.wh-svg'));
   if (!resize && !onFree) return;
   if (e.target.closest('button')) return;
   e.preventDefault();
@@ -589,11 +600,12 @@ function layoutsDialog() {
 function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
-      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.</li>
+      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Glücksrad, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.</li>
       <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und den Endton einstellen: Klangschale (Standard), Glockenspiel, Windspiel, Gong, Wecker oder Pfiff – mit Probehören, Lautstärke, Wiederholungen und leisem Vorwarnton. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter. Die Zeiten gibt es auch als Tabelle (CSV).</li>
+      <li><b>Glücksrad:</b> Ein Klick bzw. Tippen aufs Rad dreht es. Im Zahnrad wählst du, wofür das Rad gilt – Bewegung, Retrospektive, Meckerrunde, Honigdusche, Zahlen 1–8, deine Lerngruppe oder eigene Felder – und kannst die Felder ändern oder einfügen (eine Zeile je Feld). Auf Wunsch werden gezogene Felder herausgenommen, bis alle dran waren.</li>
       <li><b>Zufallsauswahl:</b> Zieht ein Kind (oder mehrere) aus einer Lerngruppe, aus den Tieren des Kartenquiz oder aus Nummern – ohne Wiederholung, bis alle dran waren. Kinder, die im Bereich Gruppen als „fehlt heute“ markiert sind, werden übersprungen.</li>
       <li><b>Arbeitsform:</b> Zeigt groß Stille, Flüstern, Partnerarbeit, Gruppenarbeit oder „Alle hören zu“. Am Zahnrad lässt sich eine Lautstärke-Ampel mit dem Mikrofon zuschalten; es wird nichts aufgenommen.</li>
       <li><b>Auftragskarte:</b> Pflicht, Zusatz, Material und Hilfe – bleibt die ganze Arbeitsphase sichtbar.</li>

@@ -46,6 +46,7 @@ const ICONS = {
   forward: '<path d="M9 5l7 7-7 7"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
   cards: '<rect x="3" y="6" width="12" height="15" rx="2"/><path d="M8 3h11a2 2 0 0 1 2 2v13"/><path d="M7 10h4v4H7z"/>',
+  wheel: '<circle cx="12" cy="13" r="8.5"/><path d="M12 13V4.5M12 13l7.4 4.2M12 13l-7.4 4.2M12 13l7.4-4.2M12 13l-7.4-4.2M12 13v8.5"/><path d="M10 1.5h4L12 4.5z" fill="currentColor"/>',
   dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M12 12h.01M9 15h.01M15 15h.01"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>',
   clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/>',

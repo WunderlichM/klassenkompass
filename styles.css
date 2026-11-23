@@ -251,9 +251,28 @@ textarea.input { resize: vertical; min-height: 80px; }
 .widget.done .w-state { color: #b23b3b; font-weight: 600; }
 .circle-timer { position: relative; width: min(78cqw, 60cqh); aspect-ratio: 1; }
 .circle-timer svg { width: 100%; height: 100%; }
-.circle-timer .track { fill: #f2efe8; stroke: #e2ded2; stroke-width: 1.5; }
-.circle-timer .pie { fill: color-mix(in srgb, var(--accent) 75%, #fff); }
+.circle-timer .track { fill: #fff; }
+.circle-timer .pie { fill: var(--tcol, var(--accent)); transition: fill .6s; }
 .circle-timer .time { position: absolute; inset: 0; display: grid; place-items: center; font-size: min(14cqw, 11cqh); color: #2c2e36; text-shadow: 0 0 6px var(--card), 0 0 12px var(--card); }
+/* Timer schöner (seit 2.19.0): Zifferblatt mit Strichen, Farbe nach Restzeit (Grün → Gelb → Orange-Rot), weicher Verlauf,
+   Lauf-Anzeige und pulsierender Rahmen bei abgelaufener Zeit */
+.circle-timer svg { overflow: visible; filter: drop-shadow(0 6px 14px rgba(30,40,70,.16)); }
+.circle-timer .ct-rim { fill: #eef0f5; stroke: #dfe3ec; stroke-width: .8; }
+.circle-timer .ct-ticks line { stroke: rgba(40,44,60,.28); stroke-width: .55; stroke-linecap: round; }
+.circle-timer .ct-ticks line.major { stroke: rgba(40,44,60,.55); stroke-width: 1.1; }
+.circle-timer .ct-hub { fill: #fff; stroke: rgba(40,44,60,.35); stroke-width: 1; }
+.circle-timer .time { inset: auto; left: 50%; top: 70%; transform: translate(-50%, -50%); padding: .06em .32em .1em; border-radius: .38em; background: rgba(255,255,255,.9); box-shadow: 0 2px 10px rgba(30,40,70,.12); text-shadow: none; font-weight: 800; }
+.widget.timer { background: radial-gradient(130% 85% at 50% 0%, color-mix(in srgb, var(--tcol, var(--accent)) 11%, #fff) 0%, #fff 62%); transition: background .6s; }
+.timer.digital .time { font-weight: 800; letter-spacing: -.035em; color: #23252e; }
+.timer .bar { height: clamp(9px, 5cqh, 18px); background: #ecebe6; box-shadow: inset 0 1px 3px rgba(0,0,0,.1); }
+.timer .bar span { background: linear-gradient(90deg, color-mix(in srgb, var(--tcol, var(--accent)) 65%, #fff), var(--tcol, var(--accent))); box-shadow: 0 0 14px color-mix(in srgb, var(--tcol, var(--accent)) 55%, transparent); }
+.timer .round-btn.primary { background: var(--tcol, var(--accent)); box-shadow: 0 4px 12px -3px color-mix(in srgb, var(--tcol, var(--accent)) 70%, transparent); transition: background .6s; }
+.timer.run .w-state::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-right: .4em; border-radius: 50%; background: var(--tcol, var(--accent)); vertical-align: .05em; animation: t-dot 1.2s ease-in-out infinite; }
+@keyframes t-dot { 50% { opacity: .25; transform: scale(.7); } }
+.widget.timer.done { animation: t-alarm 1s ease-in-out infinite; }
+@keyframes t-alarm { 0%, 100% { box-shadow: 0 0 0 0 rgba(214,58,58,.55), 0 8px 30px rgba(30,40,60,.12); } 50% { box-shadow: 0 0 0 10px rgba(214,58,58,0), 0 8px 30px rgba(30,40,60,.12); } }
+.widget.timer.done .time { color: #c23434; }
+@media (prefers-reduced-motion: reduce) { .widget.timer.done, .timer.run .w-state::before { animation: none; } }
 .egg-timer { width: min(60cqw, 46cqh); aspect-ratio: 1; }
 .egg-svg { width: 100%; height: 100%; }
 .egg-svg { overflow: visible; }
@@ -1806,3 +1825,41 @@ body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
 .side-sec .sec-val { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .side-sec[open] .sec-val { display: none; }
 .dcam-side { min-width: 0; } .dcam-side .dcam-privacy-out { margin: 12px 0 0; }
+
+/* ---------- Glücksrad (seit 2.19.0) ---------- */
+.widget.wheel .w-body { gap: 6px; padding: 6px 10px 10px; cursor: default; }
+.wh-box { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; container-type: size; }
+.wh-svg { width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); overflow: visible; cursor: pointer; filter: drop-shadow(0 10px 18px rgba(30,40,70,.28)); -webkit-tap-highlight-color: transparent; user-select: none; }
+.wh-rim { fill: #2b3150; }
+.wh-bulb { fill: #ffe9a8; } .wh-bulb.b { fill: #fff8e1; opacity: .45; }
+.widget.wheel.spinning .wh-bulb.a { animation: wh-bulb .32s steps(2) infinite; }
+.widget.wheel.spinning .wh-bulb.b { animation: wh-bulb .32s steps(2) infinite reverse; }
+.widget.wheel.won .wh-bulb { opacity: 1; fill: #ffe066; animation: wh-glow .9s ease-in-out 3; }
+@keyframes wh-bulb { 50% { opacity: .25; } }
+@keyframes wh-glow { 50% { fill: #fff; } }
+.wh-seg path, .wh-seg circle { transition: filter .4s, opacity .4s; }
+.wh-seg text { fill: #1d2232; font-weight: 800; font-family: inherit; letter-spacing: -.01em; pointer-events: none; }
+.wh-sep { stroke: rgba(255,255,255,.95); stroke-width: 1.3; }
+.wh-shine { fill: url(#wh-shade); pointer-events: none; }
+.wh-edge { fill: none; stroke: #f5c84c; stroke-width: 2.4; }
+.widget.wheel.won .wh-seg:not(.won) { opacity: .5; }
+.widget.wheel.won .wh-seg.won path, .widget.wheel.won .wh-seg.won circle { filter: brightness(1.1) saturate(1.25); }
+/* Mitte: KlassenKompass-Logo (Kompass) in der Farbe des Bereichs */
+.wh-hub-ring { fill: #2b3150; }
+.wh-hub-face { fill: var(--accent); stroke: #f5c84c; stroke-width: 1.4; }
+.wh-hub-dot { fill: var(--accent); }
+.wh-hub { transition: transform .2s; transform-box: fill-box; transform-origin: center; }
+.wh-svg:hover .wh-hub { transform: scale(1.08); }
+.wh-pointer { fill: #ff4757; stroke: #fff; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); transform-box: fill-box; transform-origin: 50% 12%; }
+.widget.wheel.spinning .wh-pointer { animation: wh-flick .14s ease-in-out infinite alternate; }
+@keyframes wh-flick { from { transform: rotate(-7deg); } to { transform: rotate(3deg); } }
+.wh-pin { fill: #fff; stroke: #c9303c; stroke-width: 1; }
+.wh-result { margin: 0; min-height: 1.35em; max-width: 100%; text-align: center; font-weight: 800; line-height: 1.15; font-size: clamp(16px, min(6.5cqw, 7cqh), 56px); color: #2c2e36; }
+.wh-result.show { padding: .18em .75em .24em; border-radius: 999px; background: linear-gradient(135deg, #ffe066, #ffa94d); color: #3b2500; box-shadow: 0 8px 22px -8px rgba(255,140,40,.8); animation: wh-pop .55s cubic-bezier(.2,1.6,.4,1) both; }
+.wh-hint { font-size: 13.5px; font-weight: 500; color: var(--muted); }
+@keyframes wh-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.stage-wrap.stack .widget.wheel .wh-box { flex: none; height: min(82vw, 460px); }
+body.presenting .wh-hint { font-size: 18px; }
+body.presenting .stage-wrap.stack .widget.wheel { height: max(420px, calc(86dvh - 60px)) !important; }
+body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto; }
+@media (prefers-reduced-motion: reduce) { .widget.wheel .wh-bulb, .wh-pointer, .wh-result.show { animation: none !important; } }

@@ -11,6 +11,7 @@ import { play, TONES, DEFAULT_INTERVAL_TONES } from './sound.js';
 
 export const ADD = [
   { kind: 'pick', label: 'Zufallsauswahl', ic: 'dice' },
+  { kind: 'wheel', label: 'Glücksrad', ic: 'wheel' },
   { kind: 'mode', label: 'Arbeitsform', ic: 'mic' },
   { kind: 'task', label: 'Auftragskarte', ic: 'clipboard' },
   { kind: 'agenda', label: 'Stundenablauf', ic: 'list' },
@@ -22,12 +23,13 @@ export const ADD = [
   { kind: 'board', label: 'Tafel', ic: 'edit' },
 ];
 export const TYPES = ADD.map(a => a.kind);
-export const MIN = { pick: [240, 220], mode: [240, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330], board: [300, 240] };
+export const MIN = { pick: [240, 220], wheel: [240, 280], mode: [240, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330], board: [300, 240] };
 
 const arr = v => (Array.isArray(v) ? v : []);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const patch = (id, fn, opts) => store.update(s => { const w = s.screen.widgets.find(x => x.id === id); if (w) fn(w); }, opts);
-const lastPts = new Map();   // zuletzt gezeigter Punktestand je Anzeigetafel und Seite (für die kurze Animation)
+const lastPts = new Map();
+const wheelTick = new Map();   // zuletzt unter dem Zeiger stehendes Feld je Glücksrad (für das Klicken)   // zuletzt gezeigter Punktestand je Anzeigetafel und Seite (für die kurze Animation)
 const lines = (v, max = 12, len = 80) => String(v ?? '').split(/\n/).map(l => l.trim().slice(0, len)).filter(Boolean).slice(0, max);
 
 export function create(kind) {
@@ -35,6 +37,7 @@ export function create(kind) {
   const src = g ? { src: g.id, count: 16 } : { src: 'animals', count: 16 };
   switch (kind) {
     case 'pick': return { type: 'pick', ...src, n: 1, drawn: [], current: [], width: 340, height: 300 };
+    case 'wheel': return { type: 'wheel', preset: 'bewegung', items: WHEEL_PRESETS.bewegung.items.join('\n'), remove: false, sound: true, used: [], spin: null, rot: 0, label: 'Glücksrad – ' + WHEEL_PRESETS.bewegung.name, width: 440, height: 520 };
     case 'mode': return { type: 'mode', mode: 'stille', mic: false, adj: 0, alarm: false, width: 320, height: 330 };
     case 'task': return { type: 'task', must: '', extra: '', material: '', help: '', width: 620, height: 380 };
     case 'agenda': return { type: 'agenda', start: '', items: [{ min: 10, text: 'Einstieg' }, { min: 25, text: 'Arbeitsphase' }, { min: 10, text: 'Aufräumen und Abschluss' }], tone: 'none', width: 380, height: 330 };
@@ -46,6 +49,74 @@ export function create(kind) {
     case 'stations': return { type: 'stations', trainMs: 180000, pauseMs: 30000, sets: 4, rounds: 1, roundPauseMs: 0, groupsN: 4, names: '', planId: null, volume: 70, tones: { ...DEFAULT_INTERVAL_TONES }, elapsedMs: 0, startedAt: null, width: 420, height: 440 };
   }
   return null;
+}
+
+// ---------- Glücksrad (seit 2.19.0) ----------
+// Vorlagen nach rad.internetquatsch.de („Glücksräder ohne Schnickschnack“); die Texte lassen sich frei ändern.
+export const WHEEL_PRESETS = {
+  bewegung: { name: 'Bewegung', items: ['Kniebeugen', 'Hampelmann', 'Hand zu Fuß', 'Strecken', 'Hüpfen', 'Rennen', 'Klatschen', 'Liegestützen'] },
+  retro: { name: 'Retrospektive', items: ['Wichtigstes Learning', 'Offene Frage', 'Guter Vorsatz', 'Idee zum besser Machen', 'Was ich sonst noch sagen will', 'Am meisten … hat mich erstaunt', 'Danke an …', 'Das war toll'] },
+  mecker: { name: 'Meckerrunde', items: ['Das fehlt …', 'Das stört …', 'Das ist ein falscher Ansatz …', 'Das ist dumm …', 'Das geht zu schnell …', 'Das ist … ungerecht', 'Das geht zu langsam …', 'Das ist zu schwierig …'] },
+  honig: { name: 'Honigdusche', items: ['Ich mochte … weil …', 'Ich habe mich über … gefreut', 'Danke an … weil …', 'Über … konnte ich lachen', '… hat mir geholfen', 'Am schönsten fand ich …', 'Überrascht hat mich … weil …', 'Beeindruckt hat mich …'] },
+  zahlen: { name: 'Zahlen 1–8', items: ['1', '2', '3', '4', '5', '6', '7', '8'] },
+  gruppe: { name: 'Lerngruppe', items: [] },
+  eigene: { name: 'Eigene Felder', items: ['Feld 1', 'Feld 2', 'Feld 3', 'Feld 4'] },
+};
+const WHEEL_COLORS = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#38d9a9', '#4dabf7', '#748ffc', '#da77f2', '#f783ac', '#a9e34b'];
+const SPIN_MS = 5200;
+// Felder des Rads: Lerngruppe (ohne „fehlt heute“) oder die eingetragenen Zeilen
+function wheelAll(w) {
+  if (w.preset === 'gruppe') { const g = groups.byId(w.src) || groups.active(); if (!g) return []; const off = groups.absent(g.id); return g.students.filter(p => !off.has(p.id)).map(p => p.name).slice(0, 40); }
+  return lines(w.items, 40, 60);
+}
+const wheelPool = w => { const all = wheelAll(w), used = new Set(arr(w.used)); const rest = w.remove ? all.filter(t => !used.has(t)) : all; return rest.length ? rest : all; };
+// gezeigte Felder: während und nach einer Drehung die Felder dieser Drehung (das gezogene bleibt bis zur nächsten stehen)
+const wheelShown = w => (w.spin && arr(w.spin.items).length ? w.spin.items : wheelPool(w));
+const easeOut = t => 1 - Math.pow(1 - t, 4);
+function wheelAngle(w, now) {
+  const sp = w.spin; if (!sp) return Number(w.rot) || 0;
+  const t = clamp((now - sp.start) / sp.dur, 0, 1);
+  return sp.from + (sp.to - sp.from) * easeOut(t);
+}
+const wheelDone = (w, now) => !w.spin || now >= w.spin.start + w.spin.dur;
+// Text in einem Feld: bei langen Texten zwei Zeilen; Schriftgröße nach Länge und Feldbreite
+function segText(t, n) {
+  const words = t.split(' ');
+  let rows = [t];
+  if (t.length > 13 && words.length > 1) {
+    let best = null;
+    for (let i = 1; i < words.length; i++) { const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), m = Math.max(a.length, b.length); if (!best || m < best[0]) best = [m, a, b]; }
+    rows = [best[1], best[2]];
+  }
+  const longest = Math.max(...rows.map(r => r.length));
+  const arc = (2 * Math.PI * 58) / n;           // Feldbreite in der Mitte des Textes
+  const fs = Math.max(4.2, Math.min(13, 62 / Math.max(3, longest) * 1.75, arc / (rows.length * 1.25)));
+  return { rows, fs };
+}
+function wheelSvg(w, items, won) {
+  const n = items.length, R = 92, step = 360 / n;
+  const pt = (a, r) => { const rad = (a - 90) * Math.PI / 180; return [(r * Math.cos(rad)).toFixed(2), (r * Math.sin(rad)).toFixed(2)]; };
+  const color = i => WHEEL_COLORS[(n % WHEEL_COLORS.length === 1 && i === n - 1) ? 1 : i % WHEEL_COLORS.length];
+  const segs = items.map((t, i) => {
+    const a0 = i * step, a1 = (i + 1) * step, [x0, y0] = pt(a0, R), [x1, y1] = pt(a1, R), mid = a0 + step / 2;
+    const path = n === 1 ? `<circle r="${R}" fill="${color(0)}"/>` : `<path d="M0 0L${x0} ${y0}A${R} ${R} 0 ${step > 180 ? 1 : 0} 1 ${x1} ${y1}Z" fill="${color(i)}"/>`;
+    const { rows, fs } = segText(t, n), lh = fs * 1.12, y = -((rows.length - 1) * lh) / 2;
+    // Text liegt entlang des Radius, von innen nach außen lesbar
+    const txt = `<text transform="rotate(${(mid - 90).toFixed(2)}) translate(57 0)" font-size="${fs.toFixed(2)}" text-anchor="middle" dominant-baseline="central">${rows.map((r, k) => `<tspan x="0" y="${(y + k * lh).toFixed(2)}">${esc(r)}</tspan>`).join('')}</text>`;
+    return `<g class="wh-seg ${won === i ? 'won' : ''}" data-i="${i}">${path}${txt}</g>`;
+  }).join('');
+  const bulbs = Array.from({ length: 24 }, (_, i) => { const [x, y] = pt(i * 15, 97.2); return `<circle class="wh-bulb ${i % 2 ? 'b' : 'a'}" cx="${x}" cy="${y}" r="1.9"/>`; }).join('');
+  return `<svg class="wh-svg" viewBox="-104 -112 208 216" role="img" aria-label="Glücksrad – zum Drehen anklicken" data-act="x-wheel-spin">
+    <defs><radialGradient id="wh-shade"><stop offset="0.55" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.2"/></radialGradient></defs>
+    <circle r="102" class="wh-rim"/>${bulbs}
+    <g class="wh-rot" data-live="wheel" transform="rotate(${wheelAngle(w, Date.now()).toFixed(2)})"><circle r="${R}" fill="#fff"/>${segs}
+      ${n > 1 ? items.map((_, i) => { const [x, y] = pt(i * step, R); return `<line x1="0" y1="0" x2="${x}" y2="${y}" class="wh-sep"/>`; }).join('') : ''}
+      <circle r="${R}" class="wh-shine"/></g>
+    <circle r="92.5" class="wh-edge"/>
+    <g class="wh-hub"><circle r="20" class="wh-hub-ring"/><circle r="17.2" class="wh-hub-face"/>
+      <g transform="scale(.7) translate(-32 -32)"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#f2b84b"/><circle cx="32" cy="32" r="2.4" class="wh-hub-dot"/></g></g>
+    <path class="wh-pointer" d="M0 -84 L-9.5 -107 Q0 -113 9.5 -107 Z"/><circle class="wh-pin" cx="0" cy="-104" r="3"/>
+  </svg>`;
 }
 
 // ---------- Wer macht mit? Lerngruppe (ohne „fehlt heute“), Tiere des Kartenquiz oder Nummern ----------
@@ -202,6 +273,15 @@ document.addEventListener('pointercancel', penUp);
 const emptyBtn = (text, label) => `<div class="hall-pick"><p class="muted small-text">${text}</p><button class="btn primary sm" data-act="settings">${icon('gear', 15)} ${label}</button></div>`;
 export function html(w, { ctrl }) {
   switch (w.type) {
+    case 'wheel': {
+      const items = wheelShown(w), now = Date.now();
+      if (!items.length) return [emptyBtn(w.preset === 'gruppe' ? 'In dieser Lerngruppe ist heute niemand da.' : 'Trage die Felder des Glücksrads ein – eine Zeile je Feld.', 'Felder eintragen'), 'wheel'];
+      const done = wheelDone(w, now), won = w.spin && done ? w.spin.idx : -1;
+      const left = w.remove ? wheelPool(w).length : 0;
+      return [`<div class="wh-box">${wheelSvg(w, items, won)}</div>
+        <p class="wh-result ${won >= 0 ? 'show' : ''}" data-live="whres" aria-live="polite">${won >= 0 ? esc(items[won]) : w.spin ? '…' : '<span class="wh-hint">Zum Drehen aufs Rad tippen</span>'}</p>
+        ${w.remove && arr(w.used).length ? `<p class="w-state no-present">${left === wheelAll(w).length ? 'Alle waren dran – es geht von vorn los.' : `noch ${left} von ${wheelAll(w).length} Feldern`} · <button class="link" data-act="x-wheel-reset">alle zurück</button></p>` : ''}`, `wheel ${w.spin && !done ? 'spinning' : ''} ${won >= 0 ? 'won' : ''}`];
+    }
     case 'pick': {
       const ps = people(w), by = new Map(ps.map(p => [p.id, p])), cur = arr(w.current).map(id => by.get(id)).filter(Boolean), left = ps.filter(p => !arr(w.drawn).includes(p.id)).length;
       if (srcMissing(w)) return [emptyBtn('Diese Lerngruppe gibt es nicht mehr.', 'Auswahl ändern'), 'pick'];
@@ -277,6 +357,23 @@ export function html(w, { ctrl }) {
 // ======================================================================
 const lastAgenda = new Map();
 export function live(w, el, q, now, { withSound, muted, st }) {
+  if (w.type === 'wheel') {
+    const g = q('wheel'); if (!g || !w.spin) return;
+    const ang = wheelAngle(w, now), done = wheelDone(w, now);
+    g.setAttribute('transform', `rotate(${ang.toFixed(2)})`);
+    // Klicken des Zeigers bei jedem Feldwechsel; am Ende Fanfare und das gezogene Feld hervorheben
+    const n = arr(w.spin.items).length || 1, seg = Math.floor((((-ang % 360) + 360) % 360) / (360 / n));
+    const key = w.spin.start + ':' + seg, prev = wheelTick.get(w.id);
+    if (!done && prev !== undefined && prev !== key && withSound && !muted && w.sound !== false) play('tick', 0.35);
+    wheelTick.set(w.id, key);
+    if (done && !el.classList.contains('won')) {
+      el.classList.remove('spinning'); el.classList.add('won');
+      el.querySelector(`.wh-seg[data-i="${w.spin.idx}"]`)?.classList.add('won');
+      const r = q('whres'); if (r) { r.textContent = arr(w.spin.items)[w.spin.idx] || ''; r.classList.add('show'); }
+      if (withSound && !muted && w.sound !== false && now - (w.spin.start + w.spin.dur) < 1500) play('success', 0.7);
+    }
+    return;
+  }
   if (w.type === 'mode' && w.mic) {
     const lv = micRead(), lim = limitOf(w), meter = q('meter'); if (!meter) return;
     const bar = q('level'); if (bar) bar.style.width = lv.toFixed(0) + '%';
@@ -304,7 +401,7 @@ export function live(w, el, q, now, { withSound, muted, st }) {
     });
   }
 }
-export const wantsFrame = w => (w.type === 'mode' && w.mic && mic.state === 'on');
+export const wantsFrame = w => (w.type === 'mode' && w.mic && mic.state === 'on') || (w.type === 'wheel' && !wheelDone(w, Date.now()));
 
 // ======================================================================
 // Bedienung
@@ -338,6 +435,24 @@ export function click(act, w, b) {
       return true;
     }
     case 'x-pick-reset': patch(id, x => { x.drawn = []; x.current = []; }); return true;
+    case 'x-wheel-spin': {
+      const now = Date.now(); if (!wheelDone(w, now)) return true;           // dreht schon
+      const items = wheelPool(w); if (!items.length) return toast('Das Glücksrad hat noch keine Felder.'), true;
+      if (w.remove && arr(w.used).length && items.length === wheelAll(w).length && arr(w.used).length >= items.length) toast('Alle waren dran – es geht von vorn los.');
+      const idx = Math.floor(Math.random() * items.length), n = items.length, step = 360 / n;
+      const from = ((wheelAngle(w, now) % 360) + 360) % 360;
+      // Feldmitte unter den Zeiger (oben) bringen, zufällig etwas aus der Mitte, dazu 5–7 volle Umdrehungen
+      const inner = (Math.random() - 0.5) * step * 0.7, target = ((360 - (idx * step + step / 2 + inner)) % 360 + 360) % 360;
+      const to = from + (5 + Math.floor(Math.random() * 3)) * 360 + ((target - from + 360) % 360);
+      const pick = items[idx], all = wheelAll(w);
+      patch(id, x => {
+        let used = arr(x.used).filter(t => all.includes(t)); if (used.length >= all.length) used = [];
+        x.used = x.remove ? [...used, pick] : [];
+        x.spin = { items, idx, from, to, start: now, dur: SPIN_MS + Math.round(Math.random() * 1200) }; x.rot = to % 360;
+      });
+      return true;
+    }
+    case 'x-wheel-reset': patch(id, x => { x.used = []; x.spin = null; }); return true;
     case 'x-mode': patch(id, x => { x.mode = b.dataset.mode; }); return true;
     case 'x-mic': micStart().then(() => patch(id, () => {})); return true;
     case 'x-mic-off': micStop(); patch(id, () => {}); return true;
@@ -371,6 +486,34 @@ const volField = v => `<label class="field">Lautstärke <output>${v} %</output><
 
 export function settings(w, { durField, readDur, toneFields, readTone }) {
   switch (w.type) {
+    case 'wheel': {
+      const list = groups.list(), presetOpts = Object.entries(WHEEL_PRESETS).map(([k, v]) => `<option value="${k}" ${w.preset === k ? 'selected' : ''}>${v.name}</option>`).join('');
+      return { body: `<label class="field">Wofür ist das Rad?<select name="preset" class="select">${presetOpts}</select></label>
+        <div data-wh-items ${w.preset === 'gruppe' ? 'hidden' : ''}>${area('items', 'Felder <small class="muted">(eine Zeile je Feld, 2–40 Felder; Texte lassen sich einfügen)</small>', w.items, 8)}</div>
+        <div data-wh-group ${w.preset === 'gruppe' ? '' : 'hidden'}><label class="field">Lerngruppe<select name="src" class="select">${list.map(g => `<option value="${esc(g.id)}" ${(w.src || groups.active()?.id) === g.id ? 'selected' : ''}>${esc(g.name)} (${g.students.length})</option>`).join('')}</select></label>
+          <p class="muted small-text">Es stehen nur Kinder auf dem Rad, die im Bereich Gruppen nicht als „fehlt heute“ markiert sind.</p></div>
+        <label class="check"><input type="checkbox" name="remove" ${w.remove ? 'checked' : ''}> Gezogene Felder herausnehmen, bis alle einmal dran waren</label>
+        <label class="check"><input type="checkbox" name="sound" ${w.sound !== false ? 'checked' : ''}> Klicken beim Drehen und Ton am Ende</label>
+        <p class="muted small-text">Wähle eine Vorlage und passe die Felder an – die Vorlage füllt die Liste neu. Gedreht wird mit einem Klick bzw. Tippen aufs Rad.</p>`,
+        onOpen: el => {
+          const sel = el.querySelector('[name=preset]'), ta = el.querySelector('[name=items]');
+          sel.onchange = () => {
+            const p = WHEEL_PRESETS[sel.value]; el.querySelector('[data-wh-items]').hidden = sel.value === 'gruppe'; el.querySelector('[data-wh-group]').hidden = sel.value !== 'gruppe';
+            if (p && sel.value !== 'gruppe') ta.value = p.items.join('\n');
+            const lab = el.querySelector('[name=label]'); if (lab && (/^Glücksrad( – .*)?$/.test(lab.value.trim()) || !lab.value.trim())) lab.value = 'Glücksrad – ' + (p?.name || '');
+          };
+        },
+        apply: (fd, x) => {
+          const preset = WHEEL_PRESETS[fd.get('preset')] ? String(fd.get('preset')) : 'eigene';
+          const items = lines(fd.get('items'), 40, 60);
+          if (preset !== 'gruppe' && items.length < 2) throw new Error('Bitte mindestens zwei Felder eintragen – eine Zeile je Feld.');
+          const changed = preset !== x.preset || items.join('\n') !== String(x.items || '') || (preset === 'gruppe' && String(fd.get('src')) !== x.src);
+          x.preset = preset; x.items = items.join('\n'); if (preset === 'gruppe') x.src = String(fd.get('src') || '');
+          x.remove = fd.get('remove') === 'on'; x.sound = fd.get('sound') === 'on';
+          if (!x.label || /^Glücksrad( – .*)?$/.test(x.label)) x.label = 'Glücksrad – ' + (preset === 'gruppe' ? groups.byId(x.src)?.name || 'Lerngruppe' : WHEEL_PRESETS[preset].name);
+          if (changed || !x.remove) { x.used = []; x.spin = null; }
+        } };
+    }
     case 'pick': return { body: `${srcField(w)}<label class="field">Wie viele auf einmal?<select name="n" class="select">${[1, 2, 3, 4, 5, 6].map(n => `<option ${Number(w.n) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <p class="muted small-text">Wer gezogen wurde, kommt erst wieder dran, wenn alle an der Reihe waren.</p>`,
       apply: (fd, x) => { readSrc(fd, x); x.n = clamp(Number(fd.get('n')) || 1, 1, 6); } };
