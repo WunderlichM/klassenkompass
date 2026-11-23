@@ -263,7 +263,8 @@ textarea.input { resize: vertical; min-height: 80px; }
 .circle-timer .ct-hub { fill: #fff; stroke: rgba(40,44,60,.35); stroke-width: 1; }
 .circle-timer .time { inset: auto; left: 50%; top: 70%; transform: translate(-50%, -50%); padding: .06em .32em .1em; border-radius: .38em; background: rgba(255,255,255,.9); box-shadow: 0 2px 10px rgba(30,40,70,.12); text-shadow: none; font-weight: 800; }
 .widget.timer { background: radial-gradient(130% 85% at 50% 0%, color-mix(in srgb, var(--tcol, var(--accent)) 11%, #fff) 0%, #fff 62%); transition: background .6s; }
-.timer.digital .time { font-weight: 800; letter-spacing: -.035em; color: #23252e; }
+.timer.digital .time { font-weight: 800; letter-spacing: -.035em; }
+.timer.digital:not(.low):not(.done) .time { color: #23252e; }
 .timer .bar { height: clamp(9px, 5cqh, 18px); background: #ecebe6; box-shadow: inset 0 1px 3px rgba(0,0,0,.1); }
 .timer .bar span { background: linear-gradient(90deg, color-mix(in srgb, var(--tcol, var(--accent)) 65%, #fff), var(--tcol, var(--accent))); box-shadow: 0 0 14px color-mix(in srgb, var(--tcol, var(--accent)) 55%, transparent); }
 .timer .round-btn.primary { background: var(--tcol, var(--accent)); box-shadow: 0 4px 12px -3px color-mix(in srgb, var(--tcol, var(--accent)) 70%, transparent); transition: background .6s; }
@@ -1611,8 +1612,9 @@ body.presenting .qs-lv .qs-opt { min-height: clamp(70px, 10.5vh, 140px); font-si
 .gym-tpl .check { margin: 8px 0 0; }
 
 /* ---------- 2.13: Delay-Cam (js/delaycam.js) ---------- */
-body.t-dcam { --accent: #a83f5e; --accent-dark: #86304a; --accent-soft: #f7e6ec; }
-@media screen { :root[data-theme="dark"] body.t-dcam { --accent: #c95d7c; --accent-dark: #f0a9bd; --accent-soft: #3a2129; } }
+/* Farbe seit 2.19.1: Bernstein statt Rosa (Wunsch der Lehrkraft) – passt zu den goldenen Bedienelementen der laufenden Kamera */
+body.t-dcam { --accent: #94650f; --accent-dark: #6e4a0a; --accent-soft: #f7ecd6; }
+@media screen { :root[data-theme="dark"] body.t-dcam { --accent: #c58b25; --accent-dark: #f0c878; --accent-soft: #342a17; } }
 .dcam-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .dcam-grid .card + .card { margin-top: 0; }
 .dcam-delay { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; }
@@ -1647,7 +1649,7 @@ body.dcam-on { overflow: hidden; }
 .dcam-badge { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.45); backdrop-filter: blur(6px); border-radius: 14px; padding: 8px 14px; min-width: 0; transition: transform .3s; }
 .dcam-badge b { font-size: clamp(22px, 4vw, 40px); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dcam-badge small { font-size: 12.5px; opacity: .8; }
-.dcam-dot { width: 12px; height: 12px; border-radius: 50%; background: #e2475f; box-shadow: 0 0 0 4px rgba(226,71,95,.25); flex: none; animation: dcam-pulse 1.6s ease-in-out infinite; }
+.dcam-dot { width: 12px; height: 12px; border-radius: 50%; background: #e5484d; box-shadow: 0 0 0 4px rgba(229,72,77,.25); flex: none; animation: dcam-pulse 1.6s ease-in-out infinite; }
 .dcam.paused .dcam-dot { background: #f2b84b; box-shadow: 0 0 0 4px rgba(242,184,75,.25); animation: none; }
 .dcam.filling .dcam-dot { background: #8fb7ff; box-shadow: 0 0 0 4px rgba(143,183,255,.25); }
 @keyframes dcam-pulse { 50% { opacity: .35; } }
@@ -1655,7 +1657,7 @@ body.dcam-on { overflow: hidden; }
 .dcam-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 50px; min-width: 50px; padding: 0 12px; border: 0; border-radius: 14px; background: rgba(255,255,255,.18); color: #fff; font-weight: 600; font-size: 15px; backdrop-filter: blur(6px); cursor: pointer; }
 .dcam-btn:hover { background: rgba(255,255,255,.28); }
 .dcam-btn.on { background: rgba(255,255,255,.42); }
-.dcam-btn.done { background: #a83f5e; }
+.dcam-btn.done { background: #94650f; }
 .dcam-btn.main { background: #fff; color: #222; }
 .dcam-btn.resume { background: #3f9a5c; }
 .dcam-btn[hidden] { display: none; }
@@ -1854,7 +1856,7 @@ body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
 .widget.wheel.spinning .wh-pointer { animation: wh-flick .14s ease-in-out infinite alternate; }
 @keyframes wh-flick { from { transform: rotate(-7deg); } to { transform: rotate(3deg); } }
 .wh-pin { fill: #fff; stroke: #c9303c; stroke-width: 1; }
-.wh-result { margin: 0; min-height: 1.35em; max-width: 100%; text-align: center; font-weight: 800; line-height: 1.15; font-size: clamp(16px, min(6.5cqw, 7cqh), 56px); color: #2c2e36; }
+.wh-result { margin: 0; min-height: 1.35em; max-width: 100%; text-align: center; font-weight: 800; line-height: 1.15; font-size: clamp(16px, min(6.5cqw, 7cqh), 56px); color: var(--ink); }
 .wh-result.show { padding: .18em .75em .24em; border-radius: 999px; background: linear-gradient(135deg, #ffe066, #ffa94d); color: #3b2500; box-shadow: 0 8px 22px -8px rgba(255,140,40,.8); animation: wh-pop .55s cubic-bezier(.2,1.6,.4,1) both; }
 .wh-hint { font-size: 13.5px; font-weight: 500; color: var(--muted); }
 @keyframes wh-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -1863,3 +1865,23 @@ body.presenting .wh-hint { font-size: 18px; }
 body.presenting .stage-wrap.stack .widget.wheel { height: max(420px, calc(86dvh - 60px)) !important; }
 body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto; }
 @media (prefers-reduced-motion: reduce) { .widget.wheel .wh-bulb, .wh-pointer, .wh-result.show { animation: none !important; } }
+
+/* Dunkles Design für die neuen Timer und das Glücksrad (seit 2.19.1): helle Zahlen, dunkles Zifferblatt, Schild dunkel */
+@media screen {
+  [data-theme="dark"] .widget.timer { background: radial-gradient(130% 85% at 50% 0%, color-mix(in srgb, var(--tcol, var(--accent)) 18%, #262830) 0%, rgba(38,40,48,.97) 62%); }
+  [data-theme="dark"] .timer.digital:not(.low):not(.done) .time { color: #f1f2f7; }
+  [data-theme="dark"] .timer .bar { background: #353843; box-shadow: inset 0 1px 3px rgba(0,0,0,.45); }
+  [data-theme="dark"] .circle-timer svg { filter: drop-shadow(0 6px 14px rgba(0,0,0,.45)); }
+  [data-theme="dark"] .circle-timer .ct-rim { fill: #363946; stroke: #4a4e5c; }
+  [data-theme="dark"] .circle-timer .track { fill: #1c1e25; stroke: none; }
+  [data-theme="dark"] .circle-timer .pie { fill: var(--tcol, var(--accent)); }
+  [data-theme="dark"] .circle-timer .ct-ticks line { stroke: rgba(255,255,255,.28); }
+  [data-theme="dark"] .circle-timer .ct-ticks line.major { stroke: rgba(255,255,255,.62); }
+  [data-theme="dark"] .circle-timer .ct-hub { fill: #eceef4; stroke: none; }
+  [data-theme="dark"] .circle-timer .time { background: rgba(22,24,30,.9); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+  [data-theme="dark"] .circle-timer:not(.x) .time { color: #f3f4f8; }
+  [data-theme="dark"] .widget.low .circle-timer .time { color: #f0a066; }
+  [data-theme="dark"] .widget.done .circle-timer .time { color: #ff8080; }
+  [data-theme="dark"] .wh-rim { stroke: rgba(255,255,255,.14); stroke-width: 1; }
+  [data-theme="dark"] .wh-svg { filter: drop-shadow(0 10px 22px rgba(0,0,0,.55)); }
+}

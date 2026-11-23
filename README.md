@@ -2,6 +2,11 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.19.1
+
+- **Dunkles Design (`styles.css`):** Die neuen Timer und das Glücksrad sind im dunklen Design gut lesbar – helle Ziffern beim digitalen Timer, dunkles Zifferblatt mit hellen Strichen und dunklem Zeitschild beim Kreis-Timer, Farbschein nach Restzeit auch im Dunkeln. Die Warnfarben bei wenig Zeit und abgelaufener Zeit bleiben in beiden Designs erhalten.
+- **Delay-Cam in Bernstein statt Rosa (`styles.css`, `js/app.js`):** Neue Bereichsfarbe (hell #94650f, dunkel #c58b25), passend zu den goldenen Bedienelementen der laufenden Kamera; der Aufnahmepunkt ist jetzt rot statt rosa.
+
 ## Neu in 2.19.0
 
 - **Neues Objekt Glücksrad (`js/widgets.js`, `styles.css`):** Unter *Klasse* im Bildschirm. Gedreht wird mit einem Klick bzw. Tippen aufs Rad (5–6 Sekunden, sanft auslaufend, Klicken des Zeigers bei jedem Feld und Ton am Ende; abschaltbar). Das gezogene Feld leuchtet auf und steht groß darunter, die anderen treten zurück. Im Zahnrad: „Wofür ist das Rad?“ mit den Vorlagen Bewegung, Retrospektive, Meckerrunde, Honigdusche und Zahlen 1–8 (Texte nach rad.internetquatsch.de), Lerngruppe (ohne „fehlt heute“) und Eigene Felder; die Felder lassen sich ändern oder einfügen (eine Zeile je Feld, 2–40). Auf Wunsch werden gezogene Felder herausgenommen, bis alle dran waren („alle zurück“ setzt zurück). Gestaltung: kräftige Farben, Lichterkranz (blinkt beim Drehen), goldener Rand, roter Zeiger, in der Mitte das KlassenKompass-Logo. Neuer Objekttyp `wheel` in `store.js`.

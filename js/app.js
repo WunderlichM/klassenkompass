@@ -17,14 +17,14 @@ import * as importer from './importer.js';
 import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.19.0';
+export const VERSION = '2.19.1';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   hallenplaene: { mod: hallen, title: 'Hallenpläne', theme: '#2d6f7d', cls: 't-hall' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' },
-  delaycam: { mod: delaycam, title: 'Delay-Cam', theme: '#a83f5e', cls: 't-dcam' } };
+  delaycam: { mod: delaycam, title: 'Delay-Cam', theme: '#94650f', cls: 't-dcam' } };
 // Frühere Adressen: #/sport öffnet Gruppen → Teams, #/gruppen ist dasselbe wie #/
 const ALIASES = { gruppen: '', sport: '', technik: '', hallenplan: 'hallenplaene', delay: 'delaycam', 'delay-cam': 'delaycam' };
 
