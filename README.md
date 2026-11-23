@@ -2,6 +2,14 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.18.0
+
+- **Große Ansicht passt sich jedem Bildschirm an (`js/ui.js`):** Neue Hilfen `onViewportChange` (beobachtet Fenstergröße, Drehen des Geräts, ein- und ausfahrende Browserleiste und Vollbild; weil Handys die neue Größe nach dem Drehen oft verspätet melden, wird sofort, im nächsten Bild und nach 200 und 600 ms neu eingepasst) und `fitZoom` (größter Zoom, bei dem der Inhalt ohne Scrollen passt – vergrößert also auch, wenn Platz frei ist; vorher wurde nur verkleinert).
+- **Gruppen (`js/gruppen.js`):** Sitzplan und Teams füllen in der großen Ansicht den Bildschirm. Bei den Teams wird die Spaltenzahl gewählt, bei der die Namen am größten werden, ohne dass ein Name abgeschnitten oder ein Teamname umbrochen wird (Handy hochkant meist 2, Beamer 4). Maßstäbliche Räume dürfen am großen Bildschirm breiter als 1500 px werden. „Turnier mit diesen Teams“ ist in der großen Ansicht ausgeblendet; bei wenig Höhe (z. B. Handy quer) ist der Kopf schlanker.
+- **Bildschirm (`js/screen.js`):** In der großen Ansicht füllt der Bereich mit den Objekten den Bildschirm statt der ganzen 16:9-Bühne – keine breiten leeren Ränder mehr am 4:3-Beamer, am Tablet oder bei Objekten, die nur einen Teil der Bühne belegen (höchstens vierfach vergrößert).
+- **Quiz (`js/quiz.js`):** Fragekarte, Start und Podium werden in der großen Ansicht so groß wie möglich und passen ganz auf den Bildschirm – auch nach dem Drehen und nachdem Bilder geladen sind. Die Kinderliste darunter lässt sich weiter scrollen.
+- Kein neuer Datenstand.
+
 ## Neu in 2.17.0
 
 - **Handy: Bereichsleiste unten (`js/app.js`, `styles.css`):** Bis 700 px Breite stehen die sechs Bereiche als feste Leiste am unteren Rand (Symbol über kurzem Wort, im Daumenbereich, mit Abstand zum Home-Balken); oben bleiben nur Logo, Installieren und Zahnrad. Die Leiste ist ein eigenes Element (`.nav-bottom`), weil fest positionierte Elemente in der Kopfzeile wegen des Weichzeichners nicht am Bildschirmrand haften. Hinweise und Menüs „⋯“ erscheinen darüber; in der großen Ansicht, beim Scannen und in der Delay-Cam ist sie verdeckt bzw. ausgeblendet.

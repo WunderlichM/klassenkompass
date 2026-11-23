@@ -454,6 +454,14 @@ body.presenting .tabs-row { justify-content: flex-end; margin-bottom: 8px; }
 body.presenting .gruppen .card-head { margin-bottom: 10px; }
 body.presenting .gruppen .room-card, body.presenting .gruppen .main-col .card { padding-top: 14px; padding-bottom: 12px; }
 body.presenting .gruppen .hint { margin-top: 8px; }
+/* Große Ansicht bei wenig Höhe (seit 2.18.0, z. B. Handy quer): Kopf schlanker, damit Sitzplan und Teams mehr Platz haben */
+@media (max-height: 520px) {
+  body.presenting main { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  body.presenting .tabs-row { margin-bottom: 4px; }
+  body.presenting .gruppen .eyebrow { display: none; }
+  body.presenting .gruppen .card-head { margin-bottom: 6px; }
+  body.presenting .gruppen .room-card, body.presenting .gruppen .main-col .card { padding-top: 8px; padding-bottom: 8px; }
+}
 body.presenting .gruppen .room-wrap > .room, body.presenting .gruppen .team-grid { transform-origin: top center; }
 body.presenting .team-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: clamp(12px, 1.4vw, 28px); }
 body.presenting .team h4 { font-size: clamp(16px, 1.3vw + 6px, 30px); padding: .55em .8em; }

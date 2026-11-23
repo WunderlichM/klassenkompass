@@ -4,7 +4,7 @@ import * as store from './store.js';
 import * as groups from './groups.js';
 import { mixGroups, minimumTables, uid, swapMembers, TABLE_LAYOUTS } from './engine.js';
 import { enableDrag } from './drag.js';
-import { esc, icon, toast, palStyle, toggleFullscreen, rulesDialog, confirmDialog } from './ui.js';
+import { esc, icon, toast, palStyle, toggleFullscreen, rulesDialog, confirmDialog, onViewportChange, fitZoom, textLines } from './ui.js';
 import { tournamentDialog } from './turniere.js';
 import * as rooms from './room.js';
 import { art } from './roomart.js';
@@ -55,14 +55,13 @@ export function mount(el) {
   el.onclick = onClick;
   el.onchange = onChange;
   el.oninput = e => { if (e.target.id === 'lg-search') { search = e.target.value; drawPeople(); } };
-  const onResize = () => fitRoom();
-  addEventListener('resize', onResize);
+  const offView = onViewportChange(() => { if (root) fitRoom(); });
   document.fonts?.ready.then(() => { if (root) fitRoom(); });
   // Kind auf ein anderes ziehen: Die beiden tauschen ihre Plätze (Teams, Sitzplan)
   const offDrag = enableDrag(el, { item: '[data-pid]', target: '[data-pid],[data-seat],[data-tray]', onDrop: (a, b) => drop(a, b) });
   const offRoom = rooms.attach(el, () => draw());
   render();
-  return () => { off(); offDrag(); offRoom(); removeEventListener('resize', onResize); el.onclick = el.onchange = el.oninput = null; root = null; };
+  return () => { off(); offDrag(); offRoom(); offView(); el.onclick = el.onchange = el.oninput = null; root = null; };
 }
 
 // Einteilung der gezeigten Ansicht aktuell halten (js/groups.js): mischen, wenn noch keine da ist oder die Anzahl
@@ -388,23 +387,31 @@ function seatHtml(g) {
   </div>`;
 }
 
-// Vollbild (seit 2.8.0): Sitzplan bzw. Teams so verkleinern, dass alles ohne Scrollen auf einen Bildschirm passt.
-// Räume (maßstäblich) werden schmaler, alle anderen Darstellungen über zoom (mehrere Schritte, weil sich die
-// Darstellung bei kleinerer Breite neu umbricht). Rückgabe true = Vollbild erledigt.
+// Vollbild (seit 2.8.0): Sitzplan bzw. Teams so einpassen, dass alles ohne Scrollen auf einen Bildschirm passt.
+// Räume (maßstäblich) über ihre Breite, alle anderen Darstellungen über zoom – seit 2.18.0 in beide Richtungen
+// (auch vergrößern, wenn Platz frei ist; vorher wurde nur verkleinert). Rückgabe true = Vollbild erledigt.
 function fitPresent() {
   if (!root || !document.body.classList.contains('presenting')) return false;
   const el = root.querySelector('.room-wrap > .room, .team-grid'); if (!el) return true;
-  const rp = el.querySelector('.rp'), doc = document.documentElement, over = () => doc.scrollHeight - innerHeight;
+  const rp = el.querySelector('.rp'), doc = document.documentElement, over = () => doc.scrollHeight - (window.visualViewport?.height || innerHeight);
   el.style.zoom = ''; if (rp) rp.style.maxWidth = '';
   if (rp) {
-    for (let i = 0; i < 3; i++) { const o = over(); if (o <= 1) break; const w = rp.getBoundingClientRect().width, h = rp.getBoundingClientRect().height; rp.style.maxWidth = Math.max(220, (w * (h - o - 2)) / h) + 'px'; }
+    // so breit wie möglich (auch über 1500 px am großen Bildschirm), dann auf die Höhe einpassen
+    rp.style.maxWidth = 'none';
+    for (let i = 0; i < 4; i++) { const o = over(); if (o <= 1) break; const w = rp.getBoundingClientRect().width, h = rp.getBoundingClientRect().height; rp.style.maxWidth = Math.max(220, (w * (h - o - 2)) / h) + 'px'; }
     return true;
   }
-  for (let i = 0; i < 6; i++) {
-    const o = over(); if (o <= 1) break;
-    const h = el.getBoundingClientRect().height; if (h < 40) break;
-    el.style.zoom = String(Math.max(0.25, (parseFloat(el.style.zoom) || 1) * Math.max(0.5, (h - o - 2) / h)));
+  if (el.classList.contains('team-grid')) {
+    // Teams: die Spaltenzahl wählen, bei der die Namen am größten werden (Handy hochkant eher 1–2, Beamer 4 und mehr)
+    // Bedingung: kein Name abgeschnitten, Teamname in einer Zeile
+    const ok = () => [...el.querySelectorAll('.team li')].every(e => e.scrollWidth <= e.clientWidth + 1) && [...el.querySelectorAll('.team h4')].every(e => textLines(e) <= 1);
+    const n = el.querySelectorAll('.team').length; let best = [0, 0];
+    for (let c = 1; c <= Math.min(n, 8); c++) { el.style.gridTemplateColumns = `repeat(${c}, minmax(0, 1fr))`; const z = fitZoom(el, { ok }); if (z > best[1] + 0.01) best = [c, z]; }
+    el.style.gridTemplateColumns = best[0] ? `repeat(${best[0]}, minmax(0, 1fr))` : '';
+    if (best[0]) { fitZoom(el, { ok }); return true; }
+    el.style.gridTemplateColumns = '';
   }
+  if (!fitZoom(el, { box: el.closest('.room-wrap') })) el.style.zoom = '0.25';
   return true;
 }
 // Höhe, die der Sitzplan im Fenster hat (seit 2.9.5): Fensterhöhe ohne Kopfleiste und die Ränder des Raumrahmens
@@ -419,7 +426,7 @@ function availHeight(wrap) {
 // über zoom (mehrere Schritte, weil sich die Darstellung bei kleinerer Breite neu umbricht).
 function fitRoom() {
   if (fitPresent()) return rooms.fitSeats(root);
-  root?.querySelectorAll('.team-grid, .rp').forEach(e => { e.style.zoom = ''; e.style.maxWidth = ''; });
+  root?.querySelectorAll('.team-grid, .rp').forEach(e => { e.style.zoom = ''; e.style.maxWidth = ''; e.style.gridTemplateColumns = ''; });
   const wrap = root?.querySelector('.room-wrap'), r = wrap?.querySelector('.room'); if (!r) return;
   r.style.zoom = '';
   const maxH = availHeight(wrap), rp = r.querySelector('.rp');
@@ -461,7 +468,7 @@ function teamsHtml(g) {
       ${k.teams.length ? `<div class="team-grid">${k.teams.map((t, i) => `<div class="team" style="${palStyle(i)}"><h4><span class="gdot"></span>${esc(t.name)}<span class="count">${t.members.length}</span></h4><ul>${t.members.map(id => { const p = person(id); return p ? `<li data-pid="${esc(id)}">${esc(p.name)}${p.className ? `<small>${esc(p.className)}</small>` : ''}</li>` : ''; }).join('')}</ul></div>`).join('')}</div>`
         : '<div class="room-empty"><p>Noch keine Teams.</p></div>'}
       ${problem ? `<p class="notice no-print">${esc(problem)}</p>` : ''}
-      <div class="card-foot no-print"><span class="muted small-text no-present">${icon('check', 14)} Teams sind möglichst gleich groß. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</span>
+      <div class="card-foot no-print no-present"><span class="muted small-text">${icon('check', 14)} Teams sind möglichst gleich groß. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</span>
         <button class="btn ghost" data-act="new-tournament" ${k.teams.length >= 2 && !problem ? '' : 'disabled'}>Turnier mit diesen Teams →</button></div>
     </div></div>
     <aside class="side no-print">

@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import * as account from './account.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks, helpCard } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, todayISO, displayDate, downloadFile, toggleFullscreen, hooks, helpCard, onViewportChange, fitZoom } from './ui.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { cardSvg, CARD_COUNT, LETTERS } from './cards.js';
 import { openScanner } from './scan.js';
@@ -88,9 +88,10 @@ export function mount(el) {
   root.onclick = onClick;
   root.onchange = onChange;
   draw();
+  const offView = onViewportChange(fitPresent);
   homeTimer = setInterval(pollHome, 4000); pollHome();
   document.addEventListener('visibilitychange', onVisible);
-  return () => { off(); removeEventListener('kk-images', onImages); document.removeEventListener('visibilitychange', onVisible); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; keepAwake(false); sound.quizMusic(false); root.onclick = root.onchange = null; root = null; };
+  return () => { off(); offView(); removeEventListener('kk-images', onImages); document.removeEventListener('visibilitychange', onVisible); clearInterval(homeTimer); stopScanPoll(); scanner?.close(); podiumId = null; keepAwake(false); sound.quizMusic(false); root.onclick = root.onchange = null; root = null; };
 }
 
 function draw() {
@@ -101,6 +102,17 @@ function draw() {
     if (p) drawPodium(p); else if (r) drawRanking(r); else { podiumId = rankId = null; drawHome(); } }
   images.hydrate(root);
   keepAwake(!!(s || podiumId));
+  fitPresent();
+}
+
+// Große Ansicht (seit 2.18.0): die Fragekarte bzw. das Podium so groß wie möglich, aber ganz auf dem Bildschirm –
+// auch nach dem Drehen des Geräts. Die Kinderliste darunter darf weiterhin gescrollt werden.
+function fitPresent() {
+  const el = root?.querySelector('.quiz-run .qs, .quiz-podium .qs'); if (!el) return;
+  if (!document.body.classList.contains('presenting')) { el.style.zoom = ''; return; }
+  if (!fitZoom(el, { own: true, max: 2.5 })) el.style.zoom = '0.25';
+  // Bilder, die erst noch laden, ändern die Höhe: danach noch einmal einpassen
+  el.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', () => fitPresent(), { once: true }); });
 }
 
 // ---------- Bildschirm anlassen, solange ein Quiz läuft oder das Podium steht (Screen Wake Lock) ----------

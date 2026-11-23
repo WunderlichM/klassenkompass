@@ -195,6 +195,50 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) document.body.classList.remove('presenting');
   window.dispatchEvent(new Event('resize'));
 });
+
+// Bildschirmgröße beobachten (seit 2.18.0): Fenstergröße, Drehen des Geräts, ein- und ausfahrende Browserleiste
+// (visualViewport) und Vollbild. Handys melden die neue Größe nach dem Drehen oft erst verzögert – deshalb wird
+// sofort, im nächsten Bild und noch zweimal kurz danach neu eingepasst. Rückgabe: Funktion zum Abmelden.
+export function onViewportChange(fn) {
+  let raf = 0; const timers = [];
+  const run = () => {
+    cancelAnimationFrame(raf); timers.splice(0).forEach(clearTimeout);
+    fn(); raf = requestAnimationFrame(() => fn());
+    timers.push(setTimeout(fn, 200), setTimeout(fn, 600));
+  };
+  const vv = window.visualViewport, so = screen.orientation;
+  addEventListener('resize', run); addEventListener('orientationchange', run);
+  vv?.addEventListener('resize', run); so?.addEventListener?.('change', run);
+  return () => {
+    cancelAnimationFrame(raf); timers.splice(0).forEach(clearTimeout);
+    removeEventListener('resize', run); removeEventListener('orientationchange', run);
+    vv?.removeEventListener('resize', run); so?.removeEventListener?.('change', run);
+  };
+}
+
+// In der großen Ansicht einpassen (seit 2.18.0): größter Zoom, bei dem el ohne Scrollen ins Fenster passt –
+// vergrößert also auch, wenn Platz frei ist (vorher wurde nur verkleinert). Weil sich Raster bei anderem Zoom neu
+// umbrechen (z. B. weniger Team-Spalten, dafür größer), wird schrittweise gesucht. box: Element, das nicht seitlich
+// scrollen darf (z. B. der Raumrahmen); ok: zusätzliche Bedingung (z. B. Namen nicht abgeschnitten); own: nur el selbst
+// muss auf den Bildschirm passen (darunter darf die Seite weitergehen, z. B. die Kinderliste im Quiz). Rückgabe: Zoom.
+export function fitZoom(el, { min = 0.25, max = 3, box = null, ok = null, own = false } = {}) {
+  const doc = document.documentElement, vh = () => window.visualViewport?.height || innerHeight;
+  const fits = () => (own ? el.getBoundingClientRect().bottom <= vh() + 1 : doc.scrollHeight <= Math.ceil(vh()) + 1) && doc.scrollWidth <= innerWidth + 1
+    && (!box || box.scrollWidth <= box.clientWidth + 1) && (!ok || ok());
+  const at = z => { el.style.zoom = String(z); return fits(); };
+  let lo, hi;
+  if (at(1)) { lo = 1; hi = max; if (at(hi)) return hi; } else { lo = min; hi = 1; if (!at(lo)) return 0; }
+  for (let i = 0; i < 10 && hi - lo > 0.005; i++) { const m = (lo + hi) / 2; if (at(m)) lo = m; else hi = m; }
+  at(lo);
+  return lo;
+}
+// Zeilen, auf die sich der Text eines Elements verteilt (für „Überschrift bleibt einzeilig“)
+export function textLines(el) {
+  const r = document.createRange(); r.selectNodeContents(el);
+  const tops = [...r.getClientRects()].filter(x => x.width > 1 && x.height > 1).map(x => x.top + x.height / 2).sort((a, b) => a - b);
+  const gap = parseFloat(getComputedStyle(el).fontSize) * 0.8 * (parseFloat(el.style.zoom || getComputedStyle(el).zoom) || 1);
+  return tops.reduce((n, t, i) => n + (i && t - tops[i - 1] > gap ? 1 : 0), tops.length ? 1 : 0);
+}
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.body.classList.contains('presenting') && !document.querySelector('dialog[open]')) {
     document.body.classList.remove('presenting');

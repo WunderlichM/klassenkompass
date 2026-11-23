@@ -2,7 +2,7 @@
 import * as store from './store.js';
 import { SCREEN_H, SCREEN_W, SCREEN_W_WIDE } from './store.js';
 import { uid } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen, downloadFile, todayISO } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, toggleFullscreen, downloadFile, todayISO, onViewportChange } from './ui.js';
 import { qrSvg } from './qr.js';
 import * as hall from './hall.js';
 import { petIndex, petSvg, petText } from './hatch.js';
@@ -58,12 +58,10 @@ export function mount(el) {
   el.onchange = onChange;
   el.onpointerdown = onPointerDown;
   el.onkeydown = onKey;
-  addEventListener('resize', fit);
-  addEventListener('orientationchange', fitSoon);
-  window.visualViewport?.addEventListener('resize', fit);
+  const offView = onViewportChange(fit);
   draw();
   raf = requestAnimationFrame(tick);
-  return () => { off(); cancelAnimationFrame(raf); keepAwake(false); removeEventListener('resize', fit); removeEventListener('orientationchange', fitSoon); window.visualViewport?.removeEventListener('resize', fit); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
+  return () => { off(); cancelAnimationFrame(raf); keepAwake(false); offView(); el.onclick = el.onchange = el.onpointerdown = el.onkeydown = null; root = null; };
 }
 
 function draw() {
@@ -109,8 +107,6 @@ function bottomInset() {
   if (!insetProbe) { insetProbe = document.createElement('div'); insetProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom,0px)'; document.body.append(insetProbe); }
   return insetProbe.offsetHeight || 0;
 }
-let fitTimer = 0;
-function fitSoon() { clearTimeout(fitTimer); fit(); fitTimer = setTimeout(fit, 350); }
 
 function fit() {
   const wrap = root?.querySelector('#stage-wrap'), stage = root?.querySelector('#stage'); if (!wrap || !stage) return;
@@ -127,7 +123,19 @@ function fit() {
   const vh = window.visualViewport?.height || innerHeight;
   const top = wrap.getBoundingClientRect().top + (window.scrollY || 0);
   const availH = presenting ? vh - top - Math.max(12, bottomInset()) - 2 : Math.max(320, vh - wrap.getBoundingClientRect().top - 150);
-  if (z === 'fit' || presenting) scale = Math.min(availW / W(), availH / SCREEN_H);
+  if (presenting) {
+    // Große Ansicht (seit 2.18.0): Nicht die ganze 16:9-Bühne, sondern der Bereich mit den Objekten füllt den
+    // Bildschirm – bei jedem Seitenverhältnis (4:3-Beamer, Tablet, Handy quer) ohne breite leere Ränder.
+    const ws = scr().widgets, pad = 16;
+    const b = ws.length ? ws.reduce((a, w) => [Math.min(a[0], w.x), Math.min(a[1], w.y), Math.max(a[2], w.x + w.width), Math.max(a[3], w.y + w.height)], [Infinity, Infinity, -Infinity, -Infinity]) : [0, 0, W(), SCREEN_H];
+    const bx = Math.max(0, b[0] - pad), by = Math.max(0, b[1] - pad), bw = Math.max(1, b[2] + pad - bx), bh = Math.max(1, b[3] + pad - by);
+    scale = Math.min(availW / bw, availH / bh, 4);
+    const tx = (availW - bw * scale) / 2 - bx * scale, ty = (availH - bh * scale) / 2 - by * scale;
+    stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    stage.style.marginLeft = '0'; wrap.style.height = availH + 'px'; wrap.classList.remove('scroll-x');
+    return;
+  }
+  if (z === 'fit') scale = Math.min(availW / W(), availH / SCREEN_H);
   else if (z === 'auto') scale = Math.max(0.4, Math.min(availW / W(), 1.6, innerWidth >= 1800 ? availH / SCREEN_H : Infinity));
   else scale = Number(z) || 1;
   stage.style.transform = `scale(${scale})`;
