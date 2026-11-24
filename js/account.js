@@ -261,7 +261,7 @@ export async function login(email, password, { register = false, decide } = {}) 
   try { row = await pull(); } catch (e) { throw new Error(friendly(e)); }
   if (row) {
     const remote = await decrypt(row);
-    const s = store.get(), localHasOwn = s.technik.classes.some(c => !c.demo) || s.sport.groups.some(g => !g.demo) || s.quiz.classes.some(c => !c.demo) || s.quiz.sets.some(t => !t.demo);
+    const s = store.get(), localHasOwn = s.technik.classes.some(c => !c.demo) || s.sport.groups.some(g => !g.demo) || s.quiz.classes.some(c => !c.demo) || s.quiz.sets.some(t => !t.demo) || (s.quiz.boards || []).length > 0;
     const choice = localHasOwn ? await decide(remote) : 'remote';
     if (choice === 'local') { meta.version = row.version; dirty = true; meta.dirty = true; saveMeta(); }
     else apply(remote, row.version);

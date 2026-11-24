@@ -100,3 +100,26 @@ Bilder sind nicht Teil der Datei. Für gute Fragen gelten die Quizregeln aus `KW
 ## Sicherung der ganzen App
 
 Die verschlüsselte Sicherung („Daten exportieren“) und ältere unverschlüsselte Sicherungen werden im selben Dialog erkannt; danach folgen wie bisher Passwort und die Wahl „hinzufügen“ oder „ersetzen“.
+
+
+## Jeopardy-Spielbretter (`boards`, seit 2.20.0)
+
+```json
+{ "boards": [ { "title": "Klassenarbeit Holz – Klasse 6",
+  "categories": [
+    { "name": "Werkzeuge", "questions": [
+      { "text": "Womit sägst du eine Kurve aus?", "answer": "Mit der Laubsäge" },
+      { "text": "…", "answer": "…" } ] } ] } ] }
+```
+
+| Feld | Bedeutung |
+|---|---|
+| `title` | Titel (bis 80 Zeichen). Gibt es ihn schon, hängt die App „(2)“ an – nichts wird überschrieben. |
+| `categories` | 2 bis 6 Kategorien (gedacht: 4). |
+| `categories[].name` | Name der Kategorie (bis 40 Zeichen, Pflicht). |
+| `categories[].questions` | 1 bis 5 Fragen. Die Reihenfolge bestimmt die Punkte: 20, 40, 60, 80, 100. |
+| `questions[].text` | Frage (bis 400 Zeichen), auch `q`/`question`. |
+| `questions[].answer` | Die richtige Antwort (bis 300 Zeichen), auch `a`/`antwort`. Am Beamer erst nach „Richtig“, „Niemand“ oder „Antwort zeigen“ sichtbar. |
+
+- Gespielt wird unter **Quiz → Jeopardy**; die Teams kommen aus Gruppen → Teams. Bilder sind nicht enthalten.
+- Jede Frage braucht genau **eine** eindeutige Antwort, die die Lehrkraft mündlich prüfen kann.

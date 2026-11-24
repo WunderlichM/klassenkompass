@@ -9,6 +9,7 @@ import { openScanner } from './scan.js';
 import * as images from './images.js';
 import * as sound from './sound.js';
 import * as groups from './groups.js';
+import { modeSeg } from './jeopardy.js';
 
 // Jedes Gerät bekommt eine zufällige Kennung, damit klar ist, wo ein Quiz läuft
 const DEVICE = (() => { const k = 'klassenkompass.device'; try { let d = localStorage.getItem(k); if (!d) { d = uid(); localStorage.setItem(k, d); } return d; } catch { return uid(); } })();
@@ -200,6 +201,7 @@ function drawHome() {
         <p class="eyebrow">Quiz · Abfrage</p>
         <h1>Kartenquiz<span class="dot">.</span></h1>
         <p class="sub">Jede Karte eine Stimme – ohne Handys für die Kinder.</p>
+        ${modeSeg('quiz')}
       </div>
       <div class="picker">
         <label class="eyebrow" for="quiz-class" title="Quiz-Klassen kennen keine Namen – nur Kinderzahl und Tierkarten">Quiz-Klasse</label>

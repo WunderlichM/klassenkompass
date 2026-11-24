@@ -5,6 +5,7 @@ import * as store from './store.js';
 import * as groups from './groups.js';
 import * as hall from './hall.js';
 import { applySets } from './quiz.js';
+import { applyBoards } from './jeopardy.js';
 import { esc, icon, dialog, toast } from './ui.js';
 import { readImport, rawParts, bundleText, summary, nq, FORMAT_HELP } from './importformat.js';
 
@@ -18,7 +19,7 @@ async function textOf(files) {
   if (list.some(f => f.size > MAX_SIZE)) throw new Error('Die Datei ist zu groß.');
   const texts = await Promise.all(list.map(f => f.text()));
   if (texts.length === 1) return texts[0];
-  const all = { groups: [], sets: [], plans: [] };
+  const all = { groups: [], sets: [], plans: [], boards: [] };
   texts.forEach((t, i) => {
     let p; try { p = rawParts(t); } catch (e) { throw new Error(`${list[i].name}: ${e.message}`); }
     if (p.backup) throw new Error(`${list[i].name} ist eine Sicherung der ganzen App – bitte einzeln importieren.`);
@@ -37,7 +38,7 @@ export function open({ text = '', files = null, onBackup } = {}) {
       <button type="button" class="btn ghost" data-clip>${icon('cards', 16)} Aus Zwischenablage</button>
       <span class="muted small-text imp-hint">oder Datei hierher ziehen</span>
     </div>
-    <label class="field">Inhalt <small class="muted">– Fragensätze, Hallenpläne, Lerngruppen (auch gemeinsam), eine Namensliste oder eine Sicherung</small><textarea name="json" class="input imp-text" rows="6" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{ "sets": [ … ], "plans": [ … ], "groups": [ … ] }'></textarea></label>
+    <label class="field">Inhalt <small class="muted">– Fragensätze, Jeopardy-Spielbretter, Hallenpläne, Lerngruppen (auch gemeinsam), eine Namensliste oder eine Sicherung</small><textarea name="json" class="input imp-text" rows="6" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{ "sets": [ … ], "plans": [ … ], "groups": [ … ] }'></textarea></label>
     <div class="imp-preview" data-preview aria-live="polite"></div>
     <div data-opts></div>
     <details class="imp-help"><summary>Format und Beispiel</summary><pre>${esc(FORMAT_HELP)}</pre><button type="button" class="btn ghost sm" data-copy>${icon('download', 15)} Format kopieren (z. B. für eine KI)</button></details>`,
@@ -82,6 +83,7 @@ function optionsHtml(c) {
   if (c.groups.length) h += `<label class="check"><input type="checkbox" name="gquiz"> Für jede Lerngruppe auch eine Quiz-Klasse mit gleicher Kinderzahl anlegen</label><p class="muted small-text">Gibt es eine Lerngruppe mit gleichem Namen schon, kommen nur fehlende Kinder dazu. Bitte nur Vornamen.</p>`;
   if (free) h += `<label class="field">Fragensätze gehören zu<select name="qclass" class="select">${q.classes.map(x => `<option value="${esc(x.id)}" ${x.id === q.activeClassId ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}<option value="*">Alle Klassen (bewusst freigeben)</option>${c.groups.length ? '<option value="@group">Quiz-Klasse der importierten Lerngruppe</option>' : ''}</select></label>`;
   if (c.sets.length) h += `<p class="muted small-text">Fragensätze kommen dazu, nichts wird überschrieben${c.sets.some(t => t.className && t.className !== '*') ? '; Sätze mit „class“ kommen zu der genannten Quiz-Klasse (fehlt sie, zur gewählten)' : ''}. Bilder sind nicht enthalten.</p>`;
+  if (c.boards?.length) h += `<p class="muted small-text">Jeopardy-Spielbretter kommen unter Quiz → Jeopardy dazu, nichts wird überschrieben.</p>`;
   if (c.plans.length) h += `<div class="two"><label class="field">Thema <small class="muted">– für Pläne ohne Thema in der Datei</small><input name="topic" class="input" maxlength="60" list="imp-topics"><datalist id="imp-topics">${hall.topicList().map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>
     <label class="check imp-check"><input type="checkbox" name="replace"> Vorhandene Pläne mit gleichem Namen ersetzen</label></div>`;
   return h;
@@ -106,6 +108,10 @@ function apply(c, fd) {
     const replaced = hall.applyPlans(c.plans, { replace: fd.get('replace') === 'on', topic: String(fd.get('topic') || '') });
     done.push(`${c.plans.length} Hallenpl${c.plans.length === 1 ? 'an' : 'äne'}${replaced ? ` (${replaced} ersetzt)` : ''}`);
   }
+  if (c.boards?.length) {
+    applyBoards(c.boards);
+    done.push(`${c.boards.length} Jeopardy-Spielbrett${c.boards.length === 1 ? '' : 'er'}`);
+  }
   toast('Importiert: ' + done.join(' · ') + '.');
 }
 
@@ -122,7 +128,7 @@ export function listen(onBackup) {
   document.addEventListener('paste', e => {
     if (busy() || e.target.closest?.('input,textarea,select,[contenteditable]')) return;
     const t = e.clipboardData?.getData('text') || '';
-    if (!/^\s*(```|[{[])/.test(t) || !/"(sets|plans|groups|questions|items|students|app)"/.test(t)) return;
+    if (!/^\s*(```|[{[])/.test(t) || !/"(sets|plans|groups|boards|categories|questions|items|students|app)"/.test(t)) return;
     e.preventDefault(); open({ text: t, onBackup });
   });
 }

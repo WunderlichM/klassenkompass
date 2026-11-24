@@ -1890,3 +1890,69 @@ body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto;
 
 /* ---------- 2.19.2: Logo im Sonnenaufgang auch in der Einführung ---------- */
 .tour-ic:has(.kk-logo) { background: var(--sun); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+
+/* ---------- 2.20.0: Jeopardy unter Quiz (js/jeopardy.js) ---------- */
+.jeo-mode { margin-top: 12px; }
+.seg a.btn-seg { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; color: var(--muted); background: var(--surface); text-decoration: none; font-weight: 600; font-size: 14px; }
+.seg a.btn-seg + a.btn-seg { border-left: 1px solid var(--line); }
+.seg a.btn-seg.on { background: var(--accent-soft); color: var(--accent-dark); }
+.jeo-prev { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 8px; overflow-x: auto; }
+.jp-col { display: flex; flex-direction: column; gap: 6px; min-width: 130px; }
+.jp-cat { text-align: center; padding: 6px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-dark); font-size: 13.5px; }
+.jp-q { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 8px; background: var(--soft); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.3; }
+.jp-q small { color: #2c6b40; font-weight: 600; } .jp-q.empty { opacity: .6; }
+.jp-pts { align-self: flex-start; font-size: 11px; font-weight: 800; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; }
+.jeo-teams-mini li { align-items: flex-start; } .jeo-teams-mini li .gdot { margin-top: 6px; } .jeo-teams-mini small { margin-left: 0; }
+.jeo-ed { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.jeo-ed-cat { border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px 10px; margin: 0; min-width: 0; }
+.jeo-ed-cat legend { padding: 0; width: 100%; } .jeo-ed-cat legend .input { font-weight: 700; }
+.jeo-ed-row { display: grid; grid-template-columns: 36px 1fr; gap: 4px 8px; margin-top: 8px; align-items: start; }
+.jeo-ed-row .jp-pts { margin-top: 8px; } .jeo-ed-row .input { grid-column: 2; }
+.jeo-ed-row textarea.input { resize: vertical; min-height: 44px; }
+.jeo-ed-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.jeo-adj { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+/* Spielbrett auf der Bühne */
+.jeo-stage { display: flex; flex-direction: column; gap: clamp(12px, 1.6vw, 24px); }
+.jb { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: clamp(6px, .9vw, 14px); }
+.jb-cat { display: grid; place-items: center; text-align: center; min-height: 3.4em; padding: .4em .5em; border-radius: 12px; background: rgba(255,255,255,.14); color: #fff; font-weight: 800; font-size: clamp(14px, 1.5vw, 26px); line-height: 1.15; overflow-wrap: anywhere; }
+.jb-tile { display: grid; place-items: center; min-height: clamp(54px, 9vh, 120px); border: 0; border-radius: 12px; background: linear-gradient(180deg, #2a4fc0, #1a3591); color: #f6c945; font-size: clamp(22px, 3vw, 54px); font-weight: 900; letter-spacing: .02em; text-shadow: 0 2px 0 rgba(0,0,0,.35); box-shadow: 0 5px 0 rgba(0,0,0,.28); cursor: pointer; transition: transform .12s, filter .12s; }
+.jb-tile:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.jb-tile:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.28); }
+.jb-tile.used { background: rgba(255,255,255,.06); box-shadow: none; cursor: default; }
+.jb-tile.used .gdot { width: clamp(14px, 1.4vw, 24px); height: clamp(14px, 1.4vw, 24px); box-shadow: 0 0 0 3px rgba(255,255,255,.25); }
+.jb-tile.none { background: transparent; box-shadow: none; }
+.jt-row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: clamp(6px, .9vw, 14px); }
+.jt { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: .5em .6em .6em; border-radius: 14px; border: 3px solid var(--g-border); background: var(--g-bg); color: var(--g-ink); text-align: center; min-width: 0; transition: transform .2s, box-shadow .2s; }
+.jt-name { display: inline-flex; align-items: center; gap: 7px; font-weight: 750; font-size: clamp(14px, 1.4vw, 24px); }
+.jt-name .gdot { width: .6em; height: .6em; }
+.jt-pts { font-size: clamp(26px, 3.2vw, 58px); font-weight: 900; line-height: 1; }
+.jt-mem { font-size: clamp(11px, .85vw, 15px); opacity: .85; line-height: 1.25; overflow-wrap: anywhere; }
+.jt.turn { transform: translateY(-4px); box-shadow: 0 0 0 4px #f6c945, 0 10px 24px -8px rgba(0,0,0,.5); }
+.jt-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 2px 10px; border-radius: 99px; background: #f6c945; color: #3b2a00; font-size: clamp(11px, .9vw, 15px); font-weight: 800; white-space: nowrap; }
+/* Frage */
+.jq { display: flex; flex-direction: column; gap: clamp(10px, 1.4vw, 20px); text-align: center; }
+.jq-head { display: flex; justify-content: center; gap: 14px; align-items: baseline; margin: 0; color: #fff; font-size: clamp(16px, 1.7vw, 28px); font-weight: 700; }
+.jq-head b { color: #f6c945; }
+.jq-q { min-height: 22vh; }
+.jq-q p { font-size: clamp(24px, 3vw, 50px); }
+.jq-a { background: #fff; color: #25272e; border-radius: 16px; padding: .6em 1em; border-left: 10px solid #f6c945; animation: qs-pop .4s cubic-bezier(.3,1.5,.5,1) both; }
+.jq-a.ok { border-left-color: #3f9a5c; }
+.jq-a small { display: block; color: #8a8b96; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(11px, .9vw, 14px); }
+.jq-a p { margin: 0; font-size: clamp(20px, 2.4vw, 40px); font-weight: 800; }
+.jq-who { margin: 0; color: #fff; font-size: clamp(16px, 1.7vw, 28px); }
+.jq-team { display: inline-flex; align-items: center; gap: 7px; padding: .15em .7em; border-radius: 99px; background: var(--g-bg); color: var(--g-ink); border: 2px solid var(--g-border); font-weight: 750; }
+.jq-ctrl { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.jq-ctrl .btn { font-size: clamp(15px, 1.4vw, 22px); padding: .55em 1.1em; }
+.jq-ok { background: #3f9a5c; border-color: #3f9a5c; color: #fff; } .jq-no { background: #c94a3d; border-color: #c94a3d; color: #fff; }
+.jq-steal { background: var(--g-bg); color: var(--g-ink); border: 2px solid var(--g-border); display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.jeo-stage .btn.ghost { color: #fff; border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.08); }
+.jeo-rest { text-align: center; color: #fff; font-size: clamp(14px, 1.4vw, 22px); font-weight: 600; margin: 14px 0 18px; }
+.jeo-run .pod-names span { display: inline-flex; align-items: center; gap: 8px; }
+.jeo-run .pod-names .jt-mem { color: #fff; text-align: center; }
+body.presenting .jeo-run .run-head .tools { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); z-index: 30; }
+body.presenting .jeo-run .run-head { margin-bottom: 10px; }
+@media (max-width: 760px) {
+  .jt-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jb-cat { font-size: 12px; min-height: 3em; } .jb-tile { font-size: 20px; min-height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) { .jq-a, .jt { animation: none; transition: none; } }

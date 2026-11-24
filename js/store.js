@@ -6,7 +6,7 @@ import { animalName } from './animals.js';
 import { FORM_IDS, bandOf, normRules } from './hallplan.js';
 
 const KEY = 'klassenkompass.v1', ENC_KEY = 'klassenkompass.v1.enc';
-export const SCHEMA = 13;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3); 12 = eigene Sporthallen (sport.gyms), Halle je Hallenplan und Standardhalle je Lerngruppe (2.10.0); 13 = gemeinsame Einteilung für Sitzordnung „Gemischt“ und Teams im Sportteil (2.12.0)
+export const SCHEMA = 14;   // 2 = Lerngruppen, Fach, Themen und Phasen der Hallenpläne (2.0.0); 3 = eigene Themenliste der Hallenpläne (2.1.0); 4 = Spielregeln je Hallenplan (2.2.0); 5 = weitere Bildschirm-Objekte, Vorlagen und Quiz-Differenzierung (2.5.0); 6 = Standardsitzplan (2.6.0); 7 = Raumplaner (2.7.0); 8 = Räume oben wählbar, Organisationsformen je Raum, Standardraum je Klasse (2.8.0); 9 = weitere Raumteile: Bildschirm, Tafel mit Beamer, Glastür, Tisch ohne Plätze (2.9.0); 10 = Tischart je Raum (room.tables, 2.9.2); 11 = Seite der Stühle je Tisch (side, 2.9.3); 12 = eigene Sporthallen (sport.gyms), Halle je Hallenplan und Standardhalle je Lerngruppe (2.10.0); 13 = gemeinsame Einteilung für Sitzordnung „Gemischt“ und Teams im Sportteil (2.12.0); 14 = Jeopardy: Spielbretter und laufendes Spiel im Quiz (2.20.0)
 export const SCREEN_W = 1280, SCREEN_H = 720, SCREEN_W_WIDE = 1680;
 // Bühnenbreite je Format: 16:9 (1280 × 720) oder 21:9 für Ultrawide-Bildschirme (1680 × 720)
 export const stageW = s => (s?.format === 'wide' ? SCREEN_W_WIDE : SCREEN_W);
@@ -60,7 +60,7 @@ export function demoQuiz() {
     q('Mit welchem Werkzeug sägt man Holz quer zur Faser?', ['Feinsäge', 'Feile', 'Raspel', 'Schraubzwinge'], 0),
     q('Wozu dient eine Schraubzwinge?', ['Bohren', 'Werkstück festhalten', 'Messen', 'Schleifen'], 1),
     q('Beim Bohren an der Ständerbohrmaschine trägt man eine Schutzbrille.', ['Richtig', 'Falsch'], 0)] };
-  return { classes: [cls], sets: [set], sessions: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true };
+  return { classes: [cls], sets: [set], sessions: [], boards: [], activeClassId: cls.id, activeSetId: set.id, autoReveal: true };
 }
 export function freshState() {
   const c = demoClass(), g = demoSportGroup();
@@ -328,6 +328,7 @@ function normHallLib(list) {
 }
 const CARD_MAX = 40;
 const IMG_RE = /^img_[0-9a-f]{20}$/;
+export const BOARD_MAX = 60, CAT_MAX = 6, ROW_MAX = 5;   // Jeopardy (seit 2.20.0)
 function normQuiz(q) {
   if (!q || typeof q !== 'object') return demoQuiz();
   // Seit 1.17.0 nur noch Tiernamen: Klassen bestehen aus Name und Kinderzahl. Ältere Klassen mit Vornamen werden
@@ -375,9 +376,41 @@ function normQuiz(q) {
     ...(x?.diff ? { diff: normDiff(x.diff) } : {}), ...(Array.isArray(x?.g) && x.g.length ? { g: x.g.map(String) } : {}),
     questions: (Array.isArray(x?.questions) ? x.questions : []).map(y => ({ ...normQ(y), answers: ansMap(y?.answers),
       ...(y?.first && typeof y.first === 'object' ? { first: ansMap(y.first), round: 2 } : {}) })) }));
-  return { classes, sets, sessions, autoReveal: q.autoReveal !== false, diff: normDiff(q.diff),
+  const boards = normBoards(q.boards), jgame = normJGame(q.jgame, boards);
+  return { classes, sets, sessions, boards, ...(jgame ? { jgame } : {}), autoReveal: q.autoReveal !== false, diff: normDiff(q.diff),
     activeClassId: classes.some(c => c.id === q.activeClassId) ? q.activeClassId : classes[0]?.id ?? null,
     activeSetId: sets.some(t => t.id === q.activeSetId) ? q.activeSetId : sets[0]?.id ?? null };
+}
+// Jeopardy (seit 2.20.0): Spielbretter mit Kategorien (je bis 5 Fragen, Punkte 20–100 nach Zeile) und das laufende Spiel.
+// Das Spiel speichert keine Namen: Teams bestehen aus Kennungen der Kinder einer Lerngruppe (groupId); die Namen liest die
+// Ansicht aus der Lerngruppe. So bleibt das Quiz ohne Namen im Speicher.
+export function normBoards(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).filter(b => b && typeof b === 'object').slice(0, BOARD_MAX).map(b => {
+    const id = ID_RE.test(b.id) && !seen.has(b.id) ? String(b.id) : uid(); seen.add(id);
+    const imgId = v => (typeof v === 'string' && IMG_RE.test(v) ? v : '');
+    const categories = (Array.isArray(b.categories) ? b.categories : []).slice(0, CAT_MAX).map(c => ({ name: str(c?.name, 40),
+      questions: Array.from({ length: ROW_MAX }, (_, r) => { const x = Array.isArray(c?.questions) ? c.questions[r] : null; const img = imgId(x?.img);
+        return { text: str(x?.text, 400), answer: str(x?.answer, 300), ...(img ? { img } : {}) }; }) }));
+    while (categories.length < 2) categories.push({ name: '', questions: Array.from({ length: ROW_MAX }, () => ({ text: '', answer: '' })) });
+    return { id, title: str(b.title, 80) || 'Spielbrett', classId: str(b.classId, 60), categories };
+  });
+}
+function normJGame(g, boards) {
+  if (!g || typeof g !== 'object') return null;
+  const b = boards.find(x => x.id === g.boardId); if (!b) return null;
+  const teams = (Array.isArray(g.teams) ? g.teams : []).slice(0, 8).map((t, i) => ({ id: String(t?.id || uid()), name: str(t?.name, 40) || 'Team ' + (i + 1),
+    members: (Array.isArray(t?.members) ? t.members : []).map(String).slice(0, 80) }));
+  if (teams.length < 2) return null;
+  const ids = new Set(teams.map(t => t.id)), key = /^\d-\d$/;
+  const scores = Object.fromEntries(teams.map(t => [t.id, Math.max(-9999, Math.min(9999, Math.round(Number(g.scores?.[t.id]) || 0)))]));
+  const used = Object.fromEntries(Object.entries(g.used || {}).filter(([k, v]) => key.test(k) && (v === '' || ids.has(v))));
+  const c = g.cur && typeof g.cur === 'object' ? g.cur : null;
+  const cur = c && Number.isInteger(c.c) && Number.isInteger(c.r) && c.c < b.categories.length && c.r < ROW_MAX && ids.has(c.team)
+    ? { c: c.c, r: c.r, team: c.team, tried: (Array.isArray(c.tried) ? c.tried : []).filter(x => ids.has(x)), step: ['q', 'steal', 'a'].includes(c.step) ? c.step : 'q',
+        show: !!c.show, ...(ids.has(c.won) ? { won: c.won } : {}) } : null;
+  return { id: String(g.id || uid()), boardId: b.id, groupId: str(g.groupId, 60), title: str(g.title, 80) || b.title, teams, scores, used,
+    turn: int(g.turn, 0, teams.length - 1, 0), cur, done: !!g.done, at: Number(g.at) > 0 ? Number(g.at) : Date.now(), showNames: g.showNames !== false };
 }
 // Themen der Hallenpläne (seit 2.1.0): eigene, geordnete Liste – auch Themen ohne Plan bleiben stehen. Themen, die in
 // Plänen vorkommen, aber (noch) fehlen, werden hinten ergänzt. Ohne gespeicherte Liste gibt es Vorschläge.
@@ -469,7 +502,7 @@ export function mergeInto(current, incoming, { replaceScreen }) {
   next.sport.gyms = merge(next.sport.gyms || [], incoming.sport.gyms || []);
   next.sport.hallTopics = normTopics([...(next.sport.hallTopics || []), ...(incoming.sport.hallTopics || [])], next.sport.halls);
   const iq = incoming.quiz, nq = next.quiz;
-  nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions);
+  nq.classes = merge(nq.classes, iq.classes); nq.sets = merge(nq.sets, iq.sets); nq.sessions = merge(nq.sessions, iq.sessions); nq.boards = merge(nq.boards || [], iq.boards || []);
   if (!nq.classes.some(c => c.id === nq.activeClassId)) nq.activeClassId = nq.classes[0]?.id ?? null;
   if (!nq.sets.some(t => t.id === nq.activeSetId)) nq.activeSetId = nq.sets[0]?.id ?? null;
   if (replaceScreen) next.screen = incoming.screen;

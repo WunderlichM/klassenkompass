@@ -6,6 +6,7 @@ import * as turniere from './turniere.js';
 import * as hallen from './hallen.js';
 import * as screen from './screen.js';
 import * as quiz from './quiz.js';
+import * as jeopardy from './jeopardy.js';
 import * as delaycam from './delaycam.js';
 import * as backup from './backup.js';
 import * as account from './account.js';
@@ -17,12 +18,13 @@ import * as importer from './importer.js';
 import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.19.2';
+export const VERSION = '2.20.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
 const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   hallenplaene: { mod: hallen, title: 'Hallenpläne', theme: '#2d6f7d', cls: 't-hall' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
+  jeopardy: { mod: jeopardy, title: 'Jeopardy', theme: '#a65a2a', cls: 't-quiz', nav: 'quiz' },
   bildschirm: { mod: screen, title: 'Unterrichtsbildschirm', theme: '#3d5a99', cls: 't-screen' },
   delaycam: { mod: delaycam, title: 'Delay-Cam', theme: '#94650f', cls: 't-dcam' } };
 // Frühere Adressen: #/sport öffnet Gruppen → Teams, #/gruppen ist dasselbe wie #/
@@ -76,7 +78,7 @@ function navigate() {
   unmount?.();
   document.body.classList.remove('presenting');
   document.body.className = document.body.className.replace(/\bt-\w+\b/g, '').trim() + ' ' + r.cls;
-  document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.route === key));
+  document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.route === (r.nav ?? key)));
   document.title = `KlassenKompass · ${r.title}`;
   setThemeColor();
   const view = document.getElementById('view');
@@ -269,6 +271,7 @@ function helpDialog() {
       <li><b>Turniere:</b> aus den Teams ein Turnier erstellen – „Jeder gegen jeden“, „K.-o. mit Platzierung“ (niemand scheidet aus) oder „King of the Court“ (Auf- und Abstieg über mehrere Felder) – und Ergebnisse eintragen. Einzelranglisten addieren Punkte über mehrere Spieltage; ein fertiges Turnier lässt sich übernehmen.</li>
       <li><b>Hallenpläne:</b> eigene Sammlung, nach Themen geordnet und durchsuchbar; Pläne einer Stunde lassen sich als Phasen hintereinander anlegen. Bereiche, Hütchen, Kinder, Lehrkraft und über 50 Geräte aus der Leiste in die schräg gezeichnete Halle (Standard 27 m × 15 m oder eigene Hallen mit festen Geräten) ziehen, verschieben, drehen und in der Größe ändern. Über der Halle schaltet „Elemente“ die Leiste zum Hineinziehen, „Einstellungen“ zeigt alles zum Plan: Name, Thema, Stunde, Halle (auch als Standardhalle der Lerngruppe), Boden, Spielfeldlinien und eingeblendete Geräte; seltene Aktionen (Kopie, Phase, Regeln, Export, Löschen) stehen unter „⋯“; Spielregeln lassen sich auf Wunsch unter der Halle zeigen (auch in der großen Ansicht); mit Umschalt-Klick mehrere Elemente wählen, „Kinder einsetzen“ füllt einen Bereich, „Raster“ richtet beim Verschieben aus. Groß zeigen oder als Schüleransicht (A4 quer) drucken. Optional eigene Bilder – sie bleiben auf deinen Geräten bzw. verschlüsselt in deinem Konto.</li>
       <li><b>Quiz:</b> Kartenquiz – die Kinder antworten mit gedruckten Karten, ohne eigenes Gerät. Im Quiz gibt es keine Namen, nur Tiere: Karte 1 ist immer der Adler, Karte 2 der Biber … – in jeder Klasse gleich, ein Kartensatz reicht für alle Klassen. Quiz-Klasse mit Name und Kinderzahl anlegen (bei weniger Kindern fallen die letzten Tiere weg), Karten und das Zuordnungsblatt drucken (die Kinder schreiben ihren Namen neben ihr Tier; das Blatt bleibt bei dir), Fragensatz anlegen (Fragen und Antworten auch mit Bild), fehlende Kinder als „Fehlt heute“ markieren, „Quiz starten“ und am Beamer zeigen. Das Quiz läuft dort als Bühne mit Tönen und Denkmusik (Lautsprecher-Knopf: an/aus, Lautstärke, Probehören); nach dem Auflösen zeigt „Zwischenstand“ die besten fünf Tiere. Die Kinder halten ihre Karte mit der gewählten Antwort nach oben; das Handy scannt die ganze Klasse auf einmal. Jede Klasse hat eine Rangliste über alle Quiz (sortiert nach Anteil richtiger Antworten), die sich zeigen, als CSV speichern und neu beginnen lässt. Unter „Differenzierung“ lassen sich bei Bedarf einschalten: Zweite Chance (erst nur die Verteilung zeigen, beraten, Karten noch einmal zeigen), G- und M-Fassung einer Frage (je Tier wählbar), Klassenziel, Abschluss ohne Podium und Vorlesen; je Frage außerdem Sternchenfrage, Thema und Tipp. Ausgeschaltet läuft das Quiz wie gewohnt. Mit Konto: Quiz am PC starten, auf dem Handy (gleiches Konto) Quiz → „Karten scannen“. Ohne Konto: Quiz auf dem Gerät mit Kamera starten und „Hier scannen“. Bilder im Quiz: Mit Konto sind sie auf allen deinen Geräten da (einmal geladen, danach auch offline). Ohne Konto bleiben sie auf dem Gerät, auf dem sie eingefügt wurden, und kommen über „Daten exportieren/importieren“ auf andere Geräte.</li>
+      <li><b>Jeopardy</b> (Quiz → Umschalter „Jeopardy“): Spielbrett mit Kategorien und Fragen zu 20–100 Punkten anlegen oder importieren, Lerngruppe wählen (die Teams kommen aus Gruppen → Teams, gedacht sind 4), „Spiel starten“ und am Beamer zeigen. Das Team am Zug wählt ein Feld und antwortet mündlich, du tippst „Richtig“ oder „Falsch“; bei „Falsch“ dürfen die anderen Teams klauen, Minuspunkte gibt es nicht. Punkte per Klick auf den Punktestand korrigieren. Am Ende Siegerehrung mit Podium.</li>
       <li><b>Bildschirm:</b> Timer, Stoppuhren, Intervalltimer, QR-Codes und Hallenpläne frei anordnen und groß zeigen – dazu Zufallsauswahl, Glücksrad, Arbeitsform (auf Wunsch mit Lautstärke-Ampel), Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und eine Tafel zum Schreiben und Malen. Der Endton jedes Timers ist wählbar (Standard: Klangschale; Zahnrad am Timer). „Vorlagen“ speichert Anordnungen und lädt sie wieder. Läuft auf dem Gerät Musik, kann die App sie bei Signalen leiser stellen oder kurz anhalten (Zahnrad → „Musik bei Signalen“).</li>
       <li><b>Delay-Cam:</b> zeigt das Kamerabild mit einstellbarer Verzögerung (1–60 s) – z. B. im Sport: Übung turnen, umdrehen und sich selbst sehen. Tablet oder Handy aufstellen, Verzögerung wählen, „Delay-Cam starten“. Bis die Verzögerung erreicht ist, zeigt ein Countdown das Live-Bild zum Ausrichten. „Pause“ hält an: mit dem Regler durch die letzten Sekunden fahren, Einzelbilder vor und zurück, Zeitlupe (0,25× und 0,5×). „Weiter mit Verzögerung“ startet neu. Dazu Spiegeln, Kamera wechseln, Live-Bild klein in der Ecke und Vollbild; ohne Bedienung blenden sich die Knöpfe aus. Tasten: Leertaste, ← →, + −, F, Esc.</li>
       <li><b>Dark Mode:</b> Zahnrad → „Design“: Automatisch (wie das Gerät), Hell oder Dunkel. Gilt nur für das jeweilige Gerät; Ausdrucke und Antwortkarten bleiben immer hell.</li>
@@ -286,6 +289,7 @@ function helpDialog() {
       <li>Keine Werbung, keine Analyse, keine externen Skripte.</li>
       <li>Bitte nur Vornamen (und bei Bedarf die Klasse) eintragen. Krankmeldungen werden nicht gespeichert.</li>
       <li><b>Kartenquiz:</b> Das Quiz kennt keine Namen, nur Kartennummern und Tiere; die Zuordnung Tier ↔ Kind steht nur auf deinem Papierblatt. Die Kamera wird nur während des Scannens benutzt; die Bilder werden direkt auf dem Gerät ausgewertet und weder gespeichert noch übertragen. Gespeichert werden nur die Antworten (Buchstaben) je Karte. Ist die G- und M-Fassung eingeschaltet, speichert die App zusätzlich, welche Kartennummern die G-Fassung bearbeiten (und im Ergebnis, wer sie bearbeitet hat) – ohne Namen; am Beamer stehen beide Fassungen nebeneinander. Bei sehr wenigen Kindern auf G lässt die Verteilung dort Rückschlüsse auf einzelne Antworten zu. Das sind Leistungsdaten – Ergebnisse, die du nicht mehr brauchst, unter „Ergebnisse“ löschen. „Fehlt heute“ wird im Ergebnis nur als „fehlte“ vermerkt, ohne Grund. Bilder zu Quizfragen werden im Browser des Geräts gespeichert; mit Konto zusätzlich auf dem Gerät verschlüsselt im Dateispeicher von Supabase. Bilder, die in keiner Frage und keinem Ergebnis mehr vorkommen, löscht die App dort nach einigen Tagen automatisch. Lade keine Fotos von Kindern hoch.</li>
+      <li><b>Jeopardy:</b> Am Beamer stehen die Vornamen der Teams (Knopf mit dem Personensymbol blendet sie aus). Gespeichert werden Spielbretter und Punktestände des laufenden Spiels; die Teams nur als Kennungen der Lerngruppe, keine Namen. Nach „Fertig“ ist das Spiel gelöscht.</li>
       <li><b>Bildschirm:</b> Die Lautstärke-Ampel (Objekt „Arbeitsform“) nutzt das Mikrofon nur, nachdem du es gestartet und der Browser es freigegeben hat. Der Ton wird ausschließlich auf dem Gerät zu einem Pegel ausgewertet – nichts wird aufgenommen, gespeichert oder übertragen. Zufallsauswahl, Dienste und Hilfe-Warteliste zeigen Vornamen der gewählten Lerngruppe am Beamer; wer das nicht möchte, wählt dort „Tiere des Kartenquiz“ oder „Nummern“. Was du in Auftragskarte, Warteliste oder Tafel schreibst, wird wie alle Daten gespeichert (mit Konto verschlüsselt abgeglichen) – bitte dort keine Bewertungen oder Angaben über einzelne Kinder notieren.</li>
       <li><b>Delay-Cam:</b> Die Kamera läuft nur, solange die Delay-Cam geöffnet ist. Die Bilder liegen nur kurz im Arbeitsspeicher des Geräts (höchstens Verzögerung plus 10 Sekunden), werden nicht aufgenommen, nicht gespeichert und nicht übertragen und sind beim Beenden weg. Gespeichert werden nur deine Einstellungen (Verzögerung, Kamera, Spiegeln) auf diesem Gerät. Zeige das Bild nur, wenn alle im Bild einverstanden sind.</li>
       <li>Ohne Konto sehen andere Geräte deine Daten nicht. Zum Übertragen „Daten exportieren“ und auf dem anderen Gerät „Importieren“ nutzen. Die Sicherungsdatei ist mit einem eigenen Passwort verschlüsselt (AES-256); ohne Passwort lässt sie sich nicht öffnen. Für Schülerdaten nicht in Cloud-Ordnern wie Google Drive ablegen.</li>
@@ -415,7 +419,7 @@ theme.init(() => { if (document.querySelector('meta[name=theme-color]')) setThem
 addEventListener('hashchange', navigate);
 navigate();
 tour();
-lock.startAutoLock(() => screen.busy() || quiz.busy() || delaycam.busy());
+lock.startAutoLock(() => screen.busy() || quiz.busy() || jeopardy.busy() || delaycam.busy());
 // Daten einer neueren App-Fassung: nichts speichern, neu laden lassen (store.outdated)
 if (store.outdated()) toast('Diese Daten stammen von einer neueren App-Fassung. Änderungen werden nicht gespeichert – bitte neu laden.', { kind: 'warn', action: 'Neu laden', onAction: () => location.reload() });
 // Hinweis auf die App-Sperre, solange eigene Daten unverschlüsselt auf dem Gerät liegen (höchstens einmal pro Woche)

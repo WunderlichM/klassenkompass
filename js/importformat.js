@@ -76,6 +76,33 @@ export function parseSets(text) {
   return normSets(p.sets).map(({ className, ...t }) => t);
 }
 
+// ---------- Jeopardy-Spielbretter (seit 2.20.0) ----------
+// { title, categories: [ { name, questions: [ { text, answer } … bis 5 ] } … 2 bis 6 ] }
+// Die Punkte ergeben sich aus der Zeile: 1. Frage 20, 2. Frage 40 … 5. Frage 100. Auch: q/question, a/antwort, name/kategorie.
+export function normBoards(list) {
+  if (!Array.isArray(list) || !list.length) throw new Error('Es wurde kein Spielbrett gefunden.');
+  return list.slice(0, 30).map((b, k) => {
+    const title = txt(b?.title ?? b?.name, 80) || 'Importiertes Spielbrett', at = `Spielbrett ${k + 1} („${title}“)`;
+    const src = b?.categories ?? b?.kategorien;
+    if (!Array.isArray(src) || src.length < 2) throw new Error(`${at}: Es braucht 2 bis 6 Kategorien in „categories“.`);
+    if (src.length > 6) throw new Error(`${at}: Höchstens 6 Kategorien.`);
+    const categories = src.map((c, i) => {
+      const name = txt(c?.name ?? c?.title ?? c?.kategorie, 40), where = `${at}, Kategorie ${i + 1}${name ? ` („${name}“)` : ''}`;
+      if (!name) throw new Error(`${where}: Der Name („name“) fehlt.`);
+      const qs = c?.questions ?? c?.fragen;
+      if (!Array.isArray(qs) || !qs.length) throw new Error(`${where}: Es braucht 1 bis 5 Fragen in „questions“.`);
+      if (qs.length > 5) throw new Error(`${where}: Höchstens 5 Fragen (20 bis 100 Punkte).`);
+      return { name, questions: qs.map((x, r) => {
+        const text = txt(x?.text ?? x?.q ?? x?.question ?? x?.frage, 400), answer = txt(x?.answer ?? x?.a ?? x?.antwort, 300);
+        if (!text) throw new Error(`${where}, ${(r + 1) * 20} Punkte: Der Fragetext („text“) fehlt.`);
+        if (!answer) throw new Error(`${where}, ${(r + 1) * 20} Punkte: Die Antwort („answer“) fehlt.`);
+        return { text, answer };
+      }) };
+    });
+    return { title, categories };
+  });
+}
+
 // ---------- Lerngruppen ----------
 // { name, subject?, students: ["Anna", "Ben, 6b", { name: "Cem", class: "6a" }], quiz?: true }
 export function personOf(v) {
@@ -99,10 +126,11 @@ export function normGroups(list) {
 const isBackup = raw => raw && !Array.isArray(raw) && (raw.kind === 'backup-encrypted' || (raw.data && typeof raw.data === 'object') || raw.technik || raw.classes || raw.screen
   || (Array.isArray(raw.groups) && raw.groups.some(g => g && typeof g === 'object' && g.id) && !raw.kind));
 function split(raw) {
-  const p = { sets: [], plans: [], groups: [] };
+  const p = { sets: [], plans: [], groups: [], boards: [] };
   const put = v => {
     if (!v || typeof v !== 'object') return false;
-    if (Array.isArray(v.questions)) p.sets.push(v); else if (Array.isArray(v.items)) p.plans.push(v);
+    if (Array.isArray(v.categories) || Array.isArray(v.kategorien)) p.boards.push(v);
+    else if (Array.isArray(v.questions)) p.sets.push(v); else if (Array.isArray(v.items)) p.plans.push(v);
     else if (Array.isArray(v.students) || Array.isArray(v.kinder) || Array.isArray(v.names)) p.groups.push(v); else return false;
     return true;
   };
@@ -110,8 +138,8 @@ function split(raw) {
     if (raw.length && raw.every(v => typeof v === 'string')) p.groups.push({ name: '', students: raw });
     else raw.forEach(put);
   } else if (raw && typeof raw === 'object') {
-    for (const [key, to] of [['sets', p.sets], ['plans', p.plans], ['groups', p.groups]]) if (Array.isArray(raw[key])) to.push(...raw[key].filter(v => v && typeof v === 'object'));
-    if (!p.sets.length && !p.plans.length && !p.groups.length) put(raw);
+    for (const [key, to] of [['sets', p.sets], ['plans', p.plans], ['groups', p.groups], ['boards', p.boards]]) if (Array.isArray(raw[key])) to.push(...raw[key].filter(v => v && typeof v === 'object'));
+    if (!p.sets.length && !p.plans.length && !p.groups.length && !p.boards.length) put(raw);
   }
   return p;
 }
@@ -126,11 +154,11 @@ export function rawParts(text) {
     if (/[{}[\]]/.test(src)) throw new Error('Der Inhalt ist kein gültiges JSON: ' + e.message);
     const names = src.split(/\n/).map(l => l.trim()).filter(Boolean);
     if (names.length < 2) throw new Error('Das ist weder eine KlassenKompass-Datei noch eine Namensliste.');
-    return { sets: [], plans: [], groups: [{ name: '', students: names }] };
+    return { sets: [], plans: [], groups: [{ name: '', students: names }], boards: [] };
   }
   if (isBackup(raw)) return { backup: raw };
   const p = split(raw);
-  if (!p.sets.length && !p.plans.length && !p.groups.length) throw new Error('Darin wurden keine Fragensätze („sets“), Hallenpläne („plans“) oder Lerngruppen („groups“) gefunden.');
+  if (!p.sets.length && !p.plans.length && !p.groups.length && !p.boards.length) throw new Error('Darin wurden keine Fragensätze („sets“), Hallenpläne („plans“), Lerngruppen („groups“) oder Jeopardy-Spielbretter („boards“) gefunden.');
   return p;
 }
 export const bundleText = parts => JSON.stringify({ app: 'KlassenKompass', kind: 'bundle', v: 1, ...Object.fromEntries(Object.entries(parts).filter(([, v]) => v.length)) }, null, 1);
@@ -139,7 +167,8 @@ export const bundleText = parts => JSON.stringify({ app: 'KlassenKompass', kind:
 export function readImport(text) {
   const p = rawParts(text);
   if (p.backup) return { backup: p.backup };
-  return { sets: p.sets.length ? normSets(p.sets) : [], plans: p.plans.length ? parsePlans(JSON.stringify(p.plans)) : [], groups: p.groups.length ? normGroups(p.groups) : [] };
+  return { sets: p.sets.length ? normSets(p.sets) : [], plans: p.plans.length ? parsePlans(JSON.stringify(p.plans)) : [], groups: p.groups.length ? normGroups(p.groups) : [],
+    boards: p.boards.length ? normBoards(p.boards) : [] };
 }
 export const nq = sets => { const n = sets.reduce((a, t) => a + t.questions.length, 0); return n + (n === 1 ? ' Frage' : ' Fragen'); };
 // Kurze Zusammenfassung in Zeilen, z. B. für die Vorschau
@@ -148,6 +177,7 @@ export function summary(c) {
   if (c.groups.length) out.push(`${c.groups.length} Lerngruppe${c.groups.length === 1 ? '' : 'n'}: ` + c.groups.map(g => `${g.name || 'ohne Namen'} (${g.students.length} Kinder)`).join(', '));
   if (c.sets.length) out.push(`${c.sets.length} Fragens${c.sets.length === 1 ? 'atz' : 'ätze'} mit ${nq(c.sets)}: ` + c.sets.map(t => t.title + (t.className && t.className !== '*' ? ` → ${t.className}` : '')).join(', '));
   if (c.plans.length) out.push(`${c.plans.length} Hallenpl${c.plans.length === 1 ? 'an' : 'äne'}: ` + c.plans.map(x => x.title).join(', '));
+  if (c.boards?.length) out.push(`${c.boards.length} Jeopardy-Spielbrett${c.boards.length === 1 ? '' : 'er'}: ` + c.boards.map(b => `${b.title} (${b.categories.length} Kategorien, ${b.categories.reduce((n, k) => n + k.questions.length, 0)} Fragen)`).join(', '));
   return out;
 }
 
@@ -168,11 +198,16 @@ export const FORMAT_HELP = `KlassenKompass-Import (eine JSON-Datei, alle Teile o
                "items": [ { "kind": "zone", "m": [1, 13, 1, 14], "color": "#2e7d4f", "text": "Feld A" },
                           { "kind": "gear", "gear": "bank_lang", "view": "laengs", "at": [13.5, 7.5] },
                           { "kind": "kid", "at": [5, 6], "color": "#c94040" } ],
-               "rules": { "title": "Völkerball", "items": ["Nur unterhalb der Schulter treffen."], "print": true } } ]
+               "rules": { "title": "Völkerball", "items": ["Nur unterhalb der Schulter treffen."], "print": true } } ],
+  "boards": [ { "title": "Klassenarbeit Holz",
+                "categories": [ { "name": "Werkzeuge",
+                                  "questions": [ { "text": "Womit sägst du eine Kurve?", "answer": "Mit der Laubsäge" },
+                                                 { "text": "…", "answer": "…" } ] } ] } ]
 }
 Regeln:
 - groups: nur Vornamen; "Vorname, Klasse" ist möglich; "quiz": true legt eine Quiz-Klasse mit gleicher Kinderzahl an. Gibt es die Lerngruppe schon (gleicher Name), kommen nur fehlende Kinder dazu.
 - sets: 2 bis 4 Antworten je Frage, höchstens 100 Fragen; "correct" = Buchstabe A–D, der Antworttext, true/false (Richtig/Falsch) oder null (Umfrage). "class" = Name der Quiz-Klasse, "allClasses": true = für alle Klassen.
 - sets, Differenzierung (alles optional): "bonus": true = Sternchenfrage (zählt nur, wenn sie richtig ist); "tag" = Thema für die Auswertung; "hint" = Tipp zum Einblenden; "g" = leichtere G-Fassung derselben Frage mit eigenen "options" (höchstens so viele wie die Frage), eigenem "correct" und optional eigenem "text".
 - plans: Maße in Metern auf dem Hallenboden (x 0–27 von links, y 0–15 von vorn nach hinten); optional "gym": { "name", "len", "dep", "items" } = eigene Halle (len 6–60 m, dep 5–40 m; Meterangaben gelten dann darin, items = feste Geräte); kind = zone, gear, cone, kid, teacher, ball, cross, tag, text, arrow, path; lines = basketball, handball, volleyball, badminton, fussball. Alle Geräte: node tools/hallplan.mjs --list
+- boards (Jeopardy): 2 bis 6 Kategorien mit Namen, je 1 bis 5 Fragen mit "text" und "answer"; die Punkte ergeben sich aus der Reihenfolge (20, 40, 60, 80, 100). Jede Frage braucht genau eine eindeutige Antwort.
 - Prüfen vor dem Import: node tools/import-check.mjs datei.json`;
