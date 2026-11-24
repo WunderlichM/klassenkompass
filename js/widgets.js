@@ -107,14 +107,14 @@ function wheelSvg(w, items, won) {
   }).join('');
   const bulbs = Array.from({ length: 24 }, (_, i) => { const [x, y] = pt(i * 15, 97.2); return `<circle class="wh-bulb ${i % 2 ? 'b' : 'a'}" cx="${x}" cy="${y}" r="1.9"/>`; }).join('');
   return `<svg class="wh-svg" viewBox="-104 -112 208 216" role="img" aria-label="Glücksrad – zum Drehen anklicken" data-act="x-wheel-spin">
-    <defs><radialGradient id="wh-shade"><stop offset="0.55" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.2"/></radialGradient></defs>
+    <defs><radialGradient id="wh-shade"><stop offset="0.55" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.2"/></radialGradient><linearGradient id="wh-sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ea5a2c"/><stop offset=".5" stop-color="#f68a34"/><stop offset="1" stop-color="#fcc048"/></linearGradient></defs>
     <circle r="102" class="wh-rim"/>${bulbs}
     <g class="wh-rot" data-live="wheel" transform="rotate(${wheelAngle(w, Date.now()).toFixed(2)})"><circle r="${R}" fill="#fff"/>${segs}
       ${n > 1 ? items.map((_, i) => { const [x, y] = pt(i * step, R); return `<line x1="0" y1="0" x2="${x}" y2="${y}" class="wh-sep"/>`; }).join('') : ''}
       <circle r="${R}" class="wh-shine"/></g>
     <circle r="92.5" class="wh-edge"/>
     <g class="wh-hub"><circle r="20" class="wh-hub-ring"/><circle r="17.2" class="wh-hub-face"/>
-      <g transform="scale(.7) translate(-32 -32)"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#f2b84b"/><circle cx="32" cy="32" r="2.4" class="wh-hub-dot"/></g></g>
+      <g transform="scale(.7) translate(-32 -32)"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#8e1a1a"/><circle cx="32" cy="32" r="2.4" class="wh-hub-dot"/></g></g>
     <path class="wh-pointer" d="M0 -84 L-9.5 -107 Q0 -113 9.5 -107 Z"/><circle class="wh-pin" cx="0" cy="-104" r="3"/>
   </svg>`;
 }

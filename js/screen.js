@@ -203,12 +203,16 @@ const timeColor = frac => {
 function eggSvg() {
   // eigenes, schlichtes Motiv: Ei bekommt mit der Zeit immer mehr Risse und bricht am Ende auf;
   // heraus schaut jedes Mal ein anderes Tier (js/hatch.js)
+  // seit 2.19.2: Schale mit sanftem Verlauf, Schalenrand mit Kante (hell) und Innenseite (dunkler) – Verläufe stehen außerhalb von egg-whole/egg-open, weil diese abwechselnd ausgeblendet sind
   return `<svg viewBox="0 0 120 120" class="egg-svg">
-    <g class="egg-whole"><path d="M60 12c20 0 34 32 34 54a34 34 0 0 1-68 0c0-22 14-54 34-54z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
+    <defs><radialGradient id="egg-g" cx=".38" cy=".3" r=".8"><stop offset="0" stop-color="#fffdf6"/><stop offset=".55" stop-color="#fbf1d9"/><stop offset="1" stop-color="#efdcb2"/></radialGradient>
+      <linearGradient id="egg-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdf6e4"/><stop offset="1" stop-color="#ecd8ab"/></linearGradient></defs>
+    <g class="egg-whole"><path d="M60 12c20 0 34 32 34 54a34 34 0 0 1-68 0c0-22 14-54 34-54z" fill="url(#egg-g)" stroke="#e2cfa3" stroke-width="2"/>
       <g class="cracks" data-live="cracks"><path class="crack" pathLength="1" data-crack="0.02,0.4" d="M61 58l-6 6-5-6-6 6-6-5-6 6-5-2"/><path class="crack" pathLength="1" data-crack="0.12,0.52" d="M61 58l6 6 6-6 6 6 6-5 6 3"/><path class="crack" pathLength="1" data-crack="0.3,0.66" d="M50 58l2-8-4-6 1-7"/><path class="crack" pathLength="1" data-crack="0.42,0.76" d="M73 58l-1-9 5-5-2-8"/><path class="crack" pathLength="1" data-crack="0.52,0.84" d="M38 64l3 8-4 7"/><path class="crack" pathLength="1" data-crack="0.6,0.88" d="M79 64l-2 8 4 7"/><path class="crack" pathLength="1" data-crack="0.72,0.94" d="M49 37l-6-4-1-7"/><path class="crack" pathLength="1" data-crack="0.78,0.97" d="M76 41l6-5 0-7"/></g></g>
     <g class="egg-open"><g transform="translate(0 -4)"><g class="egg-chick" data-live="pet"></g></g>
-      <path class="egg-bottom" d="M30 76l8-8 8 8 8-8 8 8 8-8 8 8 8-8 4 4a34 34 0 0 1-68 4z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2"/>
-      <path class="egg-cap" d="M28 64c2-24 15-52 32-52s30 28 32 52l-5-4-6 6-6-6-6 6-6-6-6 6-6-6-6 6-6-6-6 6z" fill="#fbf3df" stroke="#e2cfa3" stroke-width="2" stroke-linejoin="round"/>
+      <path class="egg-bottom" d="M30 76l8-8 8 8 8-8 8 8 8-8 8 8 8-8 4 4a34 34 0 0 1-68 4z" fill="url(#egg-b)" stroke="#e2cfa3" stroke-width="2" stroke-linejoin="round"/>
+      <path class="egg-rim" d="M31.500 78.500l6.500-6.500 8 8 8-8 8 8 8-8 8 8 8-8 3.500 3.500" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+      <path class="egg-cap" d="M28 64c2-24 15-52 32-52s30 28 32 52l-5-4-6 6-6-6-6 6-6-6-6 6-6-6-6 6-6-6-6 6z" fill="url(#egg-g)" stroke="#e2cfa3" stroke-width="2" stroke-linejoin="round"/>
       <path class="egg-sparks" d="M22 30l4 0M24 28l0 4M96 24l5 0M98.5 21.5l0 5M100 52l4 0M102 50l0 4" stroke="#e0a43c" stroke-width="2.5" stroke-linecap="round"/></g></svg>`;
 }
 

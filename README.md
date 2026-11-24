@@ -2,6 +2,12 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.19.2
+
+- **Neues Logo im Sonnenaufgang (`js/ui.js`, `styles.css`, `icons/`, `manifest.webmanifest`):** Der Logo-Hintergrund ist nicht mehr lila, sondern ein Verlauf wie ein Sonnenaufgang – oben Orange-Rot, unten Goldgelb mit hellem Schein am Horizont. Die Kompassnadel ist weiß mit dunkelroter Nordspitze (#8e1a1a) und dunkelrotem Mittelpunkt, damit sie sich vom Orange abhebt. Das Logo sieht in allen Bereichen und in beiden Designs gleich aus (neue Variable `--sun`; Kopfzeile, App-Sperre, Einführung und Mitte des Glücksrads). Neu erzeugt: `favicon.svg`, `icon-192.png`, `icon-512.png`, `maskable-512.png`, `apple-touch-icon.png`; `theme_color` im Manifest ist jetzt #f68a34. Die Bereichsfarben (Gruppen weiter lila) bleiben unverändert.
+- **Ei-Tiere schöner gezeichnet (`js/hatch.js`):** Alle 30 Tiere haben weiche Konturen in einer dunkleren Stufe ihrer Farbe, eine sanfte Schattierung mit Licht von links oben, Glanzpunkte in den Augen und einen Schatten dort, wo sie in der Schale sitzen; Wolkenfell mit gemeinsamer Außenkontur, geschlossene Augen mit Wimpern. Weiter eigene Zeichnungen, keine bekannten Figuren. Die Verläufe bekommen je Zeichnung eine eigene Nummer, damit mehrere Eier auf dem Bildschirm sich nicht stören. Animation und Auswahl des Tiers (`petIndex`) sind unverändert.
+- **Eierschale (`js/screen.js`):** Schale mit sanftem Verlauf, der gezackte Schalenrand der unteren Hälfte hat eine helle Kante. Kein neuer Datenstand.
+
 ## Neu in 2.19.1
 
 - **Dunkles Design (`styles.css`):** Die neuen Timer und das Glücksrad sind im dunklen Design gut lesbar – helle Ziffern beim digitalen Timer, dunkles Zifferblatt mit hellen Strichen und dunklem Zeitschild beim Kreis-Timer, Farbschein nach Restzeit auch im Dunkeln. Die Warnfarben bei wenig Zeit und abgelaufener Zeit bleiben in beiden Designs erhalten.

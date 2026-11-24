@@ -1,6 +1,8 @@
 :root {
   --ink: #25272e; --muted: #747581; --paper: #f6f5f0; --card: #ffffff; --line: #e7e6df; --soft: #f1f0ea; --surface: #ffffff;
   --accent: #7055a5; --accent-dark: #5d428f; --accent-soft: #efe9f8;
+  /* Logo-Hintergrund (seit 2.19.2): Sonnenaufgang, unabhängig von Bereich und Design */
+  --sun: radial-gradient(60% 60% at 50% 100%, rgba(255,233,160,.7), rgba(255,233,160,0)), linear-gradient(180deg, #ea5a2c, #f68a34 50%, #fcc048);
   --warn: #b5562b; --danger: #b23b3b; --radius: 18px; --shadow: 0 1px 2px rgba(30,30,40,.04), 0 10px 30px -14px rgba(30,30,40,.14);
   --font: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
   color-scheme: light;
@@ -26,7 +28,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.2; }
 /* Kopfzeile */
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px; padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: rgba(255,255,255,.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; min-width: 0; }
-.brand .logo { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--accent); color: #fff; flex: none; transition: background .2s; }
+.brand .logo { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--sun); color: #fff; flex: none; }
 .brand b { display: block; font-size: 19px; letter-spacing: -.02em; }
 .brand small { display: block; font-size: 11px; color: var(--muted); }
 .nav { display: flex; gap: 2px; padding: 3px; margin: 0 auto; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; }
@@ -687,7 +689,7 @@ body.presenting .table small { font-size: 13px; }
 
 /* ---------- 1.5: Feinschliff ---------- */
 .topbar { box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -24px rgba(30,30,40,.4); }
-.brand .logo { box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--accent) 80%, transparent); }
+.brand .logo { box-shadow: 0 6px 14px -6px rgba(226,96,40,.7); }
 .card { transition: box-shadow .2s; }
 .card-head h2 { letter-spacing: -.01em; }
 .eyebrow { color: color-mix(in srgb, var(--accent) 60%, var(--muted)); font-weight: 600; }
@@ -1226,7 +1228,7 @@ body.presenting .quiz-run .qs + .card { margin-top: 12px; padding: 12px 16px; }
    ====================================================================== */
 body { background: radial-gradient(1100px 360px at 12% -150px, color-mix(in srgb, var(--accent) 20%, transparent), transparent 70%) no-repeat, radial-gradient(1200px 400px at 92% -170px, var(--accent-soft), transparent 72%) no-repeat, var(--paper); }
 .topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 3px; pointer-events: none; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #f2c14e) 45%, transparent 92%); }
-.brand .logo { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 82%, #fff), color-mix(in srgb, var(--accent) 78%, #000)); box-shadow: 0 8px 16px -8px color-mix(in srgb, var(--accent) 85%, transparent), inset 0 1px 0 rgba(255,255,255,.3); transition: background .3s, transform .2s; }
+.brand .logo { background: var(--sun); box-shadow: 0 8px 16px -8px rgba(226,96,40,.75), inset 0 1px 0 rgba(255,255,255,.3); transition: transform .2s; }
 .brand:hover .logo { transform: rotate(-8deg) scale(1.05); }
 .nav a { transition: background .18s, color .18s, transform .1s; } .nav a:hover:not(.on) { color: var(--ink); background: color-mix(in srgb, var(--accent) 9%, transparent); } .nav a:active { transform: scale(.96); }
 .nav a.on, [data-theme="dark"] .nav a.on { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 86%, #fff), var(--accent)); color: #fff; font-weight: 650; box-shadow: 0 8px 16px -10px var(--accent), inset 0 1px 0 rgba(255,255,255,.22); }
@@ -1260,7 +1262,7 @@ main:focus-visible { outline: none; }
 /* ---------- App-Sperre (seit 1.27.0, js/lock.js) ---------- */
 .lock-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 14%, var(--paper)), var(--paper) 70%); }
 .lock-card { width: min(380px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; display: grid; gap: 12px; text-align: center; box-shadow: 0 14px 34px -18px rgba(30,30,40,.3); }
-.lock-card .logo { justify-self: center; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 82%, #fff), color-mix(in srgb, var(--accent) 78%, #000)); }
+.lock-card .logo { justify-self: center; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: var(--sun); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
 .lock-card h1 { margin: 0; font-size: 22px; }
 .lock-card .field { text-align: left; }
 .lock-card .btn { justify-content: center; }
@@ -1848,8 +1850,8 @@ body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
 .widget.wheel.won .wh-seg.won path, .widget.wheel.won .wh-seg.won circle { filter: brightness(1.1) saturate(1.25); }
 /* Mitte: KlassenKompass-Logo (Kompass) in der Farbe des Bereichs */
 .wh-hub-ring { fill: #2b3150; }
-.wh-hub-face { fill: var(--accent); stroke: #f5c84c; stroke-width: 1.4; }
-.wh-hub-dot { fill: var(--accent); }
+.wh-hub-face { fill: url(#wh-sun); stroke: #f5c84c; stroke-width: 1.4; }
+.wh-hub-dot { fill: #8e1a1a; }
 .wh-hub { transition: transform .2s; transform-box: fill-box; transform-origin: center; }
 .wh-svg:hover .wh-hub { transform: scale(1.08); }
 .wh-pointer { fill: #ff4757; stroke: #fff; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); transform-box: fill-box; transform-origin: 50% 12%; }
@@ -1885,3 +1887,6 @@ body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto;
   [data-theme="dark"] .wh-rim { stroke: rgba(255,255,255,.14); stroke-width: 1; }
   [data-theme="dark"] .wh-svg { filter: drop-shadow(0 10px 22px rgba(0,0,0,.55)); }
 }
+
+/* ---------- 2.19.2: Logo im Sonnenaufgang auch in der Einführung ---------- */
+.tour-ic:has(.kk-logo) { background: var(--sun); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
