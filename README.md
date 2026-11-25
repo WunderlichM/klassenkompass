@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.22.0
+
+- **Lösungsblatt für Jeopardy (`js/jeopardy.js`, `styles.css`):** Neben „Bearbeiten“ steht der Knopf „Lösungsblatt“. Er öffnet den Druckdialog mit einem A4-Blatt für die Lehrkraft: Titel, je Kategorie eine Tabelle mit Kästchen zum Abhaken, Punkten, Frage (mit Bild, falls vorhanden) und richtiger Antwort, darunter Felder für den Punktestand der vier Teams. Im Druckdialog „Als PDF speichern“ wählen, um es herunterzuladen. Kategorien werden nicht über Seiten getrennt. Gleicher Weg wie das Zuordnungsblatt im Kartenquiz (`#print-cards`, `body.printing-cards`); Bilder werden vor dem Drucken geladen. Kein neuer Datenstand.
+
 ## Neu in 2.21.0
 
 - **Bilder bei Jeopardy-Fragen (`js/jeopardy.js`, `styles.css`):** Im Fenster „Spielbrett bearbeiten“ hat jedes Feld unter der Antwort den Knopf „Bild“ (Datei wählen oder fotografieren; Strg+V fügt ein Bild in das Feld mit dem Cursor ein; × entfernt es). Am Beamer steht das Bild groß unter der Frage, die große Ansicht passt sich nach dem Laden der Bilder neu an. Die Vorschau des Spielbretts zeigt ein kleines Bild. Ein Bild ohne Frage wird abgelehnt. Gespeichert wird wie im Kartenquiz nur die Bildkennung (`q.img`, Bild in IndexedDB); `store.normBoards` kannte das Feld schon, deshalb kein neuer Datenstand.

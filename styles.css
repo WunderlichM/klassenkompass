@@ -1962,3 +1962,23 @@ body.presenting .jeo-run .run-head { margin-bottom: 10px; }
   .jb-cat { font-size: 12px; min-height: 3em; } .jb-tile { font-size: 20px; min-height: 48px; }
 }
 @media (prefers-reduced-motion: reduce) { .jq-a, .jt { animation: none; transition: none; } }
+
+/* ---------- Jeopardy: Lösungsblatt für die Lehrkraft (seit 2.22.0) ---------- */
+@media print {
+  .jl-page { font-family: "Segoe UI", Calibri, Arial, sans-serif; color: #111; padding: 2mm 4mm; }
+  .jl-page h1 { font-size: 18pt; color: #2f5d7c; margin: 0 0 1mm; -webkit-text-fill-color: currentColor; background: none; }
+  .jl-title { font-size: 12pt; font-weight: 700; margin: 0 0 1mm; }
+  .jl-sub { font-size: 8.5pt; color: #555; margin: 0 0 4mm; }
+  .jl-cat { break-inside: avoid; page-break-inside: avoid; margin-bottom: 4mm; }
+  .jl-cat h2 { font-size: 12pt; color: #2f5d7c; margin: 0 0 1.5mm; break-after: avoid; }
+  .jl-page table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .jl-page th { background: #427697; color: #fff; text-align: left; padding: 1.2mm 2mm; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .jl-page td { border: 0.25mm solid #b8c7d3; padding: 1.2mm 2mm; vertical-align: middle; }
+  .jl-page tr { break-inside: avoid; page-break-inside: avoid; }
+  .jl-ok { width: 7mm; text-align: center !important; } .jl-pts { width: 11mm; text-align: center !important; font-weight: 700; color: #2f5d7c; }
+  .jl-box { display: inline-block; width: 3.6mm; height: 3.6mm; border: 0.3mm solid #333; border-radius: 0.6mm; }
+  .jl-a { width: 40%; font-weight: 700; }
+  .jl-img img { display: block; max-width: 38mm; max-height: 26mm; margin-top: 1.2mm; object-fit: contain; }
+  .jl-score td { height: 18mm; vertical-align: top; width: 25%; }
+}
+@media print { html:has(body.printing-cards) { background: #fff !important; } }

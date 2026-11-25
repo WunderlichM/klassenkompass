@@ -94,6 +94,7 @@ function drawHome() {
             <div><p class="eyebrow">Spielbrett</p>
               <div class="picker-row"><select id="jeo-board" class="select">${boards().map(x => `<option value="${esc(x.id)}" ${x.id === b?.id ? 'selected' : ''}>${esc(x.title)}</option>`).join('') || '<option>Noch kein Spielbrett</option>'}</select>
               ${b ? `<button class="btn ghost sm" data-act="edit">${icon('edit', 15)} Bearbeiten</button>` : ''}
+              ${b ? `<button class="btn ghost sm" data-act="solution" title="Lösungsblatt für die Lehrkraft drucken oder als PDF speichern">${icon('print', 15)} Lösungsblatt</button>` : ''}
               <button class="btn ghost sm" data-act="new">${icon('plus', 15)} Neu</button>
               <button class="btn ghost sm" data-act="import" title="Spielbretter aus einer Datei oder eingefügtem Text übernehmen">${icon('upload', 15)} Importieren</button></div>
             </div>
@@ -120,6 +121,7 @@ function drawHome() {
           <li>Das Team am Zug wählt ein Feld und antwortet mündlich. Du tippst <b>Richtig</b> oder <b>Falsch</b>.</li>
           <li>Bei „Falsch“ dürfen die anderen Teams klauen – es gibt keine Minuspunkte. Danach ist das nächste Team dran.</li>
           <li>Sind alle Felder gespielt, zeigt „Siegerehrung“ das Podium. Punkte lassen sich jederzeit per Klick auf den Punktestand korrigieren.</li>
+          <li>„Lösungsblatt“ druckt alle Fragen mit Antworten für dich – oder speichert sie im Druckdialog als PDF.</li>
         </ol>`)}
       </aside>
     </div>
@@ -241,6 +243,7 @@ async function onClick(e) {
     case 'new': return editDialog(null);
     case 'edit': return curBoard() && editDialog(curBoard());
     case 'import': return hooks.importDialog?.();
+    case 'solution': return curBoard() && printSolution(curBoard());
     case 'four': { const lg = groups.active(); if (lg) store.update(s => { groups.sportPart(s, lg.id).teamCount = 4; }); return; }
     case 'mix': return mixTeams();
     case 'start': return start();
@@ -354,6 +357,31 @@ function editDialog(b) {
       toast(b ? 'Gespeichert.' : 'Spielbrett angelegt.');
     } });
 }
+// Lösungsblatt (seit 2.22.0): alle Fragen mit Antwort und Bild, Kästchen zum Abhaken, Punktestand der Teams –
+// über den Druckdialog des Browsers drucken oder als PDF speichern. Gleicher Weg wie das Zuordnungsblatt im Kartenquiz.
+async function printSolution(b) {
+  document.getElementById('print-cards')?.remove();
+  const n = fields(b).length, wrap = document.createElement('div');
+  wrap.id = 'print-cards'; wrap.className = 'jl';
+  wrap.innerHTML = `<section class="jl-page">
+    <h1>Jeopardy – Lösungsblatt</h1>
+    <p class="jl-title">${esc(b.title)}</p>
+    <p class="jl-sub">Für die Lehrkraft · ${b.categories.length} Kategorien · ${n} Fragen · je Kategorie von leicht (20) nach schwer (100). Sinngemäß richtige Antworten gelten. Gespielte Felder abhaken. Datum: ____________</p>
+    ${b.categories.map(c => { const qs = c.questions.map((q, r) => ({ q, r })).filter(x => filled(x.q)); if (!qs.length) return '';
+      return `<div class="jl-cat"><h2>${esc(c.name) || '(ohne Namen)'}</h2><table><thead><tr><th class="jl-ok">✓</th><th class="jl-pts">Pkt.</th><th>Frage</th><th>Richtige Antwort</th></tr></thead><tbody>
+      ${qs.map(({ q, r }) => `<tr><td class="jl-ok"><span class="jl-box"></span></td><td class="jl-pts">${POINTS[r]}</td><td>${esc(q.text)}${q.img ? `<div class="jl-img">${images.imgTag(q.img)}</div>` : ''}</td><td class="jl-a">${esc(q.answer)}</td></tr>`).join('')}
+      </tbody></table></div>`; }).join('')}
+    <div class="jl-cat"><h2>Punktestand (falls die App ausfällt)</h2><table class="jl-score"><tr>${[1, 2, 3, 4].map(i => `<td><b>Team ${i}</b></td>`).join('')}</tr></table></div>
+  </section>`;
+  document.body.append(wrap); document.body.classList.add('printing-cards');
+  images.hydrate(wrap);
+  // Bilder fertig laden lassen (höchstens 3 s), sonst fehlen sie im Ausdruck
+  await Promise.race([Promise.all([...wrap.querySelectorAll('img')].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))), new Promise(r => setTimeout(r, 3000))]);
+  const done = () => { wrap.remove(); document.body.classList.remove('printing-cards'); removeEventListener('afterprint', done); };
+  addEventListener('afterprint', done);
+  setTimeout(() => print(), 60);
+}
+
 // Bildfelder im Bearbeiten-Fenster: Datei, Kamera, Entfernen, Einfügen mit Strg+V in das Feld mit dem Cursor
 function imgEvents(el, imgs, slot) {
   const form = el.querySelector('form'), err = el.querySelector('.form-error');
