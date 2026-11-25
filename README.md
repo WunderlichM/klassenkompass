@@ -2,6 +2,12 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.23.0
+
+- **Größeres Logo (`styles.css`, `js/app.js`):** Die Logo-Kachel in der Kopfzeile ist 48 px statt 38 px groß (große Bildschirme 58 px, Handy quer 40 px), der Kompass wächst mit (79 % der Kachel). Farben und Verlauf bleiben.
+- **Gruppen im Orange des Logos (`styles.css`, `js/app.js`, `index.html`):** Der Bereich Gruppen (`body.t-technik`) hat statt Lila ein eigenes Orange – hell `#c4501e`, dunkel `#e0622a` –, röter als das Braunorange von Quiz. Die Browserleiste (`theme-color`) folgt.
+- **Weniger Text in der Sitzordnung (`js/gruppen.js`):** Die Erklärsätze zu Tischen und Plätzen im Raum entfallen (Raumplaner weiter über den Stift neben „Raum“). Fester Sitzplan: Die Karte „Tische“ erscheint nur noch, wenn es Tische einzustellen gibt (Organisationsform mit Tischen, Raum ohne fest angeordnete Plätze); die Überzeile nennt nur noch den Raum. Gemischte Gruppen: Die Karte heißt „Gruppen“ und zeigt Tisch-Regler nur, wenn es welche gibt.
+
 ## Neu in 2.22.0
 
 - **Lösungsblatt für Jeopardy (`js/jeopardy.js`, `styles.css`):** Neben „Bearbeiten“ steht der Knopf „Lösungsblatt“. Er öffnet den Druckdialog mit einem A4-Blatt für die Lehrkraft: Titel, je Kategorie eine Tabelle mit Kästchen zum Abhaken, Punkten, Frage (mit Bild, falls vorhanden) und richtiger Antwort, darunter Felder für den Punktestand der vier Teams. Im Druckdialog „Als PDF speichern“ wählen, um es herunterzuladen. Kategorien werden nicht über Seiten getrennt. Gleicher Weg wie das Zuordnungsblatt im Kartenquiz (`#print-cards`, `body.printing-cards`); Bilder werden vor dem Drucken geladen. Kein neuer Datenstand.

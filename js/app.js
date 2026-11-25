@@ -18,9 +18,9 @@ import * as importer from './importer.js';
 import { hooks } from './ui.js';
 import { MUSIC_MODES, musicMode, musicSupported, setMusicMode, testMusic } from './sound.js';
 
-export const VERSION = '2.22.0';
+export const VERSION = '2.23.0';
 // Bereiche (seit 2.0.0 nach Werkzeugen statt nach Fächern)
-const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#7055a5', cls: 't-technik' },
+const ROUTES = { '': { mod: gruppen, title: 'Gruppen', theme: '#c4501e', cls: 't-technik' },
   turniere: { mod: turniere, title: 'Turniere & Ranglisten', theme: '#2f6b55', cls: 't-sport' },
   hallenplaene: { mod: hallen, title: 'Hallenpläne', theme: '#2d6f7d', cls: 't-hall' },
   quiz: { mod: quiz, title: 'Kartenquiz', theme: '#a65a2a', cls: 't-quiz' },
@@ -54,7 +54,7 @@ const NAV = cls => `<nav class="${cls}" aria-label="Bereiche">
 function shell() {
   document.getElementById('app').innerHTML = `
   <header class="topbar no-present">
-    <a class="brand" href="#/"><span class="logo">${logo(26)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
+    <a class="brand" href="#/"><span class="logo">${logo(38)}</span><span><b>KlassenKompass</b><small>Dein Unterricht. Gut organisiert.</small></span></a>
     ${NAV('nav')}
     <div class="top-tools">
       <button type="button" class="status" id="status" title="Alle Daten bleiben auf diesem Gerät">${icon('check', 14)} Auf diesem Gerät gespeichert</button>

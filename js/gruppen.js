@@ -304,9 +304,6 @@ function seatHtml(g) {
             <button class="${mode === 'mix' ? 'on' : ''}" data-act="seat-mode" data-v="mix" title="Gruppen werden nach Anwesenheit neu gemischt">Gemischte Gruppen</button></div>`;
   const flipBtn = `<button class="btn ghost sm" data-act="flip" aria-pressed="${flip}" title="Den Raum von der Tafel aus zeigen (für dich) oder von hinten (für die Klasse)">${icon('repeat', 15)} ${flip ? 'Blick von der Tafel' : 'Blick von hinten'}</button>`;
   const title = `<p class="print-only print-title">${esc(g.name)} · ${mode === 'std' ? 'Fester Sitzplan' : esc(layout.name)}${r ? ' · ' + esc(r.name) : ''}${flip ? ' · Blick von der Tafel' : ''} · ${new Date().toLocaleDateString('de-DE')}</p>`;
-  const where = r ? `${esc(r.name)} · ${esc(layout.name)}` : esc(layout.name);
-  // Hinweis zu den Plätzen im Raum (angepasst oder automatisch)
-  const roomNote = r ? `<p class="muted small-text">${cus ? `Die Plätze für ${esc(layout.name)} sind im Raum „${esc(r.name)}“ fest angeordnet (${rooms.seatCount(rooms.compose(r, cus))} Plätze).` : `Im Raum „${esc(r.name)}“ stellt die App ${esc(layout.name)} selbst passend auf.`} <button class="linkish" data-act="room-edit">Im Raumplaner ${cus ? 'ändern' : 'anpassen'}</button></p>` : '';
 
   // ----- Standardsitzplan -----
   if (mode === 'std') {
@@ -318,7 +315,7 @@ function seatHtml(g) {
     return `<div class="work-grid">
     <div class="card room-card print-area">
       <div class="card-head">
-        <div><p class="eyebrow">Dein Raum · ${where}</p><h2>Fester Sitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
+        <div><p class="eyebrow">Dein Raum${r ? ' · ' + esc(r.name) : ''}</p><h2>Fester Sitzplan ${d ? `<span class="badge">${seated} Plätze belegt</span>` : ''}</h2></div>
         <div class="tools no-print">${d ? flipBtn : ''}${head}</div>
       </div>
       ${title}
@@ -330,14 +327,12 @@ function seatHtml(g) {
           <p class="muted small-text">Danach ordnest du die Kinder durch Ziehen an ihre Plätze.</p></div></div>`}
     </div>
     <aside class="side no-print">
-      ${d ? sec('tables', `${icon('grid', 16)} Tische`, usesTables && !cus ? `${d.tables} Tische` : '', `
-        ${cus ? '' : `<div class="num-row">
-          ${stepper('Anzahl Tische', 'tables', d.tables, { min: d.tables > Math.max(1, used), max: d.tables < 40, disabled: !usesTables })}
+      ${d && usesTables ? sec('tables', `${icon('grid', 16)} Tische`, `${d.tables} Tische`, `
+        <div class="num-row">
+          ${stepper('Anzahl Tische', 'tables', d.tables, { min: d.tables > Math.max(1, used), max: d.tables < 40 })}
           ${L === 'omnibus' ? stepper('Tische nebeneinander', 'cols', colsOf(d.cols, d.tables), { min: colsOf(d.cols, d.tables) > 2, max: colsOf(d.cols, d.tables) < 5 }) : ''}
           ${L === 'gruppen' ? stepper('Tischgruppen', 'groups', d.groups, { min: d.groups > 1, max: d.groups < Math.min(20, d.tables) }) + stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
-        </div>`}
-        ${roomNote}
-        <p class="muted small-text">${cus ? 'Die Reihenfolge der Plätze bleibt in jedem Raum und jeder Organisationsform gleich (von vorn links nach hinten rechts).' : usesTables ? 'Ein Tisch hat zwei Plätze. Leere Tische am Ende lassen sich wieder entfernen.' : 'Diese Organisationsform braucht keine Tische; die Reihenfolge der Plätze bleibt.'}</p>`) : ''}
+        </div>`) : ''}
       ${d ? layoutCard(L) : ''}
       ${groups.peopleCardHtml(g, search)}
       ${d ? `<div class="card">
@@ -367,15 +362,13 @@ function seatHtml(g) {
       ${c.plan ? `<p class="hint no-print no-present">${icon('check', 14)} Die Farben zeigen die Gruppen – dieselben wie unter Teams. Ziehe ein Kind auf ein anderes, um die beiden zu tauschen.</p>` : ''}
     </div>
     <aside class="side no-print">
-      ${sec('groups', `${icon('users', 16)} Gruppen und Tische`, `${c.settings.groups} Gruppen${usesTables && !cus ? ` · ${c.settings.tables} Tische` : ''}`, `
+      ${sec('groups', `${icon('users', 16)} ${usesTables ? 'Gruppen und Tische' : 'Gruppen'}`, `${c.settings.groups} Gruppen${usesTables ? ` · ${c.settings.tables} Tische` : ''}`, `
         <div class="num-row">
           ${stepper('Anzahl Gruppen', 'groups', c.settings.groups, { min: c.settings.groups > 2, max: c.settings.groups < 20 })}
-          ${cus ? '' : stepper('Anzahl Tische', 'tables', c.settings.tables, { min: c.settings.tables > minT, disabled: !usesTables })}
-          ${L === 'omnibus' && !cus ? stepper('Tische nebeneinander', 'cols', cols, { min: cols > 2, max: cols < 5 }) : ''}
-          ${L === 'gruppen' && !cus ? stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
-        </div>
-        <p class="muted small-text">${cus ? `Die Plätze kommen aus dem Raumplaner; jede Gruppe bekommt eigene Tische.` : usesTables ? `Ein Tisch hat zwei Plätze. Für ${present} Anwesende in ${c.settings.groups} Gruppen sind mindestens ${minT} Tische nötig.` : 'Diese Organisationsform braucht keine Tische.'} Die Gruppen werden möglichst gleich groß.</p>
-        ${roomNote}`)}
+          ${usesTables ? stepper('Anzahl Tische', 'tables', c.settings.tables, { min: c.settings.tables > minT }) : ''}
+          ${L === 'omnibus' && usesTables ? stepper('Tische nebeneinander', 'cols', cols, { min: cols > 2, max: cols < 5 }) : ''}
+          ${L === 'gruppen' && usesTables ? stepper('Tischgruppen nebeneinander', 'icols', ic, { min: ic > 1, max: ic < Math.min(6, nIsl) }) : ''}
+        </div>`)}
       ${layoutCard(L)}
       ${groups.peopleCardHtml(g, search)}
       <div class="card">
