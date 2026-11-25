@@ -114,7 +114,7 @@ function wheelSvg(w, items, won) {
       <circle r="${R}" class="wh-shine"/></g>
     <circle r="92.5" class="wh-edge"/>
     <g class="wh-hub"><circle r="20" class="wh-hub-ring"/><circle r="17.2" class="wh-hub-face"/>
-      <g transform="scale(.7) translate(-32 -32)"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#8e1a1a"/><circle cx="32" cy="32" r="2.4" class="wh-hub-dot"/></g></g>
+      <g transform="scale(.62) translate(-32 -32)"><circle cx="32" cy="32" r="23" fill="none" stroke="#fff" stroke-width="5"/><path d="M32 13 40.5 32 32 51 23.5 32z" fill="#fff"/><path d="M32 13 40.5 32h-17z" fill="#8e1a1a"/><circle cx="32" cy="32" r="3.2" fill="#fff"/></g></g>
     <path class="wh-pointer" d="M0 -84 L-9.5 -107 Q0 -113 9.5 -107 Z"/><circle class="wh-pin" cx="0" cy="-104" r="3"/>
   </svg>`;
 }

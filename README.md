@@ -2,6 +2,10 @@
 
 Web-App (PWA) für den Unterricht mit sechs Bereichen: **Gruppen** (Sitzordnung und Teams), **Turniere** (mit Einzelranglisten), **Hallenpläne**, ein **Kartenquiz** und ein **Unterrichtsbildschirm** mit Timern, Stoppuhren, Intervalltimer, QR-Codes, Hallenplänen und – seit 2.5.0 – Zufallsauswahl, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Diensten, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel – sowie seit 2.13.0 eine **Delay-Cam** (Kamerabild mit Verzögerung).
 
+## Neu in 2.24.0
+
+- **Kompass besser lesbar und größer (`icons/`, `js/ui.js`, `js/widgets.js`):** Ring dicker (Strich 5 statt 3,5) und größer (Radius 23 statt 20), Nadel breiter (17 statt 11 Einheiten), Mittelpunkt weiß; in den App-Symbolen dazu ein leichter Schatten, damit sich der weiße Kompass auch unten im Gelb abhebt. Der Kompass füllt die Kachel jetzt zu etwa 80 % statt 62 %; Farben und Verlauf bleiben. Neu erzeugt: `favicon.svg` und die PNG-Symbole – mit neuem Namen (`*-v2.png`), damit installierte Apps das neue Symbol sicher übernehmen. Kopfzeile, App-Sperre, Einführung und Glücksrad zeigen dieselbe Form.
+
 ## Neu in 2.23.0
 
 - **Größeres Logo (`styles.css`, `js/app.js`):** Die Logo-Kachel in der Kopfzeile ist 48 px statt 38 px groß (große Bildschirme 58 px, Handy quer 40 px), der Kompass wächst mit (79 % der Kachel). Farben und Verlauf bleiben.

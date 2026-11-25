@@ -62,7 +62,7 @@ const ICONS = {
 };
 // Logo: Kompass (Ring, Nadel mit goldener Nordspitze); Hintergrund kommt aus der Bereichsfarbe
 // Logo (seit 2.19.2): weiße Kompassnadel mit dunkelroter Nordspitze; den Sonnenaufgangs-Hintergrund gibt das umgebende Element (.kk-sun in styles.css)
-export const logo = (size = 24) => `<svg class="kk-logo" width="${size}" height="${size}" viewBox="8 8 48 48" aria-hidden="true"><circle cx="32" cy="32" r="20" fill="none" stroke="#fff" stroke-width="3.5"/><path d="M32 15.5 37.5 32 32 48.5 26.5 32z" fill="#fff"/><path d="M32 15.5 37.5 32h-11z" fill="#8e1a1a"/><circle cx="32" cy="32" r="2.4" fill="#8e1a1a"/></svg>`;
+export const logo = (size = 24) => `<svg class="kk-logo" width="${size}" height="${size}" viewBox="5 5 54 54" aria-hidden="true"><circle cx="32" cy="32" r="23" fill="none" stroke="#fff" stroke-width="5"/><path d="M32 13 40.5 32 32 51 23.5 32z" fill="#fff"/><path d="M32 13 40.5 32h-17z" fill="#8e1a1a"/><circle cx="32" cy="32" r="3.2" fill="#fff"/></svg>`;
 export const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 
 // Haken, die app.js füllt (vermeidet gegenseitige Importe): hooks.importDialog öffnet den gemeinsamen Import

@@ -1855,7 +1855,6 @@ body.presenting .hall-board:has(.h-rules-scr) .hall-note { flex: none; }
 /* Mitte: KlassenKompass-Logo (Kompass) in der Farbe des Bereichs */
 .wh-hub-ring { fill: #2b3150; }
 .wh-hub-face { fill: url(#wh-sun); stroke: #f5c84c; stroke-width: 1.4; }
-.wh-hub-dot { fill: #8e1a1a; }
 .wh-hub { transition: transform .2s; transform-box: fill-box; transform-origin: center; }
 .wh-svg:hover .wh-hub { transform: scale(1.08); }
 .wh-pointer { fill: #ff4757; stroke: #fff; stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); transform-box: fill-box; transform-origin: 50% 12%; }
