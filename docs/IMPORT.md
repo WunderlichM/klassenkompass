@@ -70,7 +70,9 @@ Beispiel mit Differenzierung:
   "g": { "text": "Ist das Werkstück im Bild 12 cm lang?", "options": ["Ja", "Nein"], "correct": "A" } }
 ```
 
-Bilder sind nicht Teil der Datei. Für gute Fragen gelten die Quizregeln aus `KWS/AGENTS.md` Abschnitt 10 (wenige Fragen, genau eine eindeutig richtige Antwort).
+| `questions[].img` | Optional (seit 2.21.0). Bild zur Frage als data:-URL (`data:image/png;base64,…`, auch JPEG, WebP, GIF; höchstens etwa 6 MB), auch `image`/`bild`. Die App verkleinert es beim Import auf höchstens 1280 px und speichert es wie ein hochgeladenes Bild (mit Konto auch im Konto). Bilder an den Antworten gibt es nur im Editor der App. |
+
+Ohne `img` sind keine Bilder in der Datei. Für gute Fragen gelten die Quizregeln aus `KWS/AGENTS.md` Abschnitt 10 (wenige Fragen, genau eine eindeutig richtige Antwort).
 
 ## Hallenpläne (`plans`)
 
@@ -120,6 +122,8 @@ Die verschlüsselte Sicherung („Daten exportieren“) und ältere unverschlüs
 | `categories[].questions` | 1 bis 5 Fragen. Die Reihenfolge bestimmt die Punkte: 20, 40, 60, 80, 100. |
 | `questions[].text` | Frage (bis 400 Zeichen), auch `q`/`question`. |
 | `questions[].answer` | Die richtige Antwort (bis 300 Zeichen), auch `a`/`antwort`. Am Beamer erst nach „Richtig“, „Niemand“ oder „Antwort zeigen“ sichtbar. |
+| `questions[].img` | Optional (seit 2.21.0). Bild zur Frage als data:-URL wie bei den Fragensätzen. Es steht am Beamer groß unter der Frage. Das Bild soll die Frage erklären (Zeichnung, Werkzeug, Maße), aber die Antwort nicht verraten. Beim Export eines Spielbretts kommen die Bilder als data:-URL mit. |
 
-- Gespielt wird unter **Quiz → Jeopardy**; die Teams kommen aus Gruppen → Teams. Bilder sind nicht enthalten.
+- Gespielt wird unter **Quiz → Jeopardy**; die Teams kommen aus Gruppen → Teams.
+- Fragen je Kategorie **von leicht (20) nach schwer (100)** ordnen: oben Wissen aus dem Alltag, dann Fachbegriffe und mehrteilige Antworten, unten Begründen oder Rechnen in mehreren Schritten.
 - Jede Frage braucht genau **eine** eindeutige Antwort, die die Lehrkraft mündlich prüfen kann.

@@ -4,11 +4,13 @@
 // Bei falscher Antwort dürfen die anderen Teams klauen (keine Minuspunkte). Danach ist das nächste Team am Zug.
 // Gespeichert werden Spielbretter (quiz.boards) und das laufende Spiel (quiz.jgame) – ohne Namen: Teams bestehen aus
 // Kennungen der Kinder, die Namen liest die Ansicht aus der Lerngruppe.
+// Seit 2.21.0 kann jede Frage ein Bild haben (q.img = Bildkennung wie im Kartenquiz, Bild in IndexedDB bzw. im Konto).
 import * as store from './store.js';
 import * as groups from './groups.js';
 import { uid, mixGroups } from './engine.js';
 import { esc, icon, dialog, confirmDialog, toast, downloadFile, toggleFullscreen, hooks, helpCard, onViewportChange, fitZoom, palStyle } from './ui.js';
 import * as sound from './sound.js';
+import * as images from './images.js';
 
 const ROWS = store.ROW_MAX, POINTS = Array.from({ length: ROWS }, (_, r) => (r + 1) * 20);
 const Q = () => store.get().quiz;
@@ -27,11 +29,13 @@ function pickBoard(id) { boardId = id; try { localStorage.setItem('klassenkompas
 export function mount(el) {
   root = el;
   const off = store.subscribe(() => draw());
+  const onImages = () => draw();
+  addEventListener('kk-images', onImages);
   root.onclick = onClick;
   root.onchange = onChange;
   draw();
   const offView = onViewportChange(fit);
-  return () => { off(); offView(); keepAwake(false); root.onclick = root.onchange = null; root = null; };
+  return () => { off(); offView(); removeEventListener('kk-images', onImages); keepAwake(false); root.onclick = root.onchange = null; root = null; };
 }
 // Läuft ein Spiel? (für die automatische App-Sperre)
 export const busy = () => !!(root && game());
@@ -41,12 +45,15 @@ function draw() {
   const g = game();
   if (g && board(g.boardId)) { g.done ? drawPodium(g) : drawRun(g); keepAwake(true); }
   else { drawHome(); keepAwake(false); }
+  images.hydrate(root);
   fit();
 }
 function fit() {
   const el = root?.querySelector('.jeo-run .qs'); if (!el) return;
   if (!document.body.classList.contains('presenting')) { el.style.zoom = ''; return; }
   if (!fitZoom(el, { own: true, max: 2.2 })) el.style.zoom = '0.3';
+  // Bilder, die erst noch laden, ändern die Höhe: danach noch einmal einpassen
+  el.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', () => fit(), { once: true }); });
 }
 let wakeLock = null;
 function keepAwake(want) {
@@ -119,7 +126,7 @@ function drawHome() {
   </section>`;
 }
 function boardPreview(b) {
-  return `<div class="jeo-prev" style="--cols:${b.categories.length}">${b.categories.map(c => `<div class="jp-col"><b class="jp-cat">${esc(c.name) || '<span class="muted">(ohne Namen)</span>'}</b>${c.questions.map((q, r) => `<div class="jp-q ${filled(q) ? '' : 'empty'}"><span class="jp-pts">${POINTS[r]}</span>${filled(q) ? `<span>${esc(q.text)}</span><small>→ ${esc(q.answer)}</small>` : '<span class="muted">leer</span>'}</div>`).join('')}</div>`).join('')}</div>`;
+  return `<div class="jeo-prev" style="--cols:${b.categories.length}">${b.categories.map(c => `<div class="jp-col"><b class="jp-cat">${esc(c.name) || '<span class="muted">(ohne Namen)</span>'}</b>${c.questions.map((q, r) => `<div class="jp-q ${filled(q) ? '' : 'empty'}"><span class="jp-pts">${POINTS[r]}</span>${filled(q) ? `${q.img ? images.imgTag(q.img, 'jp-thumb') : ''}<span>${esc(q.text)}</span><small>→ ${esc(q.answer)}</small>` : '<span class="muted">leer</span>'}</div>`).join('')}</div>`).join('')}</div>`;
 }
 
 // ======================================================================
@@ -179,7 +186,7 @@ function questionHtml(g, b) {
       <div class="jq-ctrl"><button class="btn primary big" data-act="back">${icon('grid', 18)} Zurück zum Brett</button></div>`;
   return `<div class="jq">
     <p class="jq-head"><span>${esc(cat.name)}</span><b>${pts} Punkte</b></p>
-    <div class="qs-q jq-q"><p>${esc(q.text)}</p></div>
+    <div class="qs-q jq-q ${q.img ? 'with-img' : ''}"><p>${esc(q.text)}</p>${q.img ? `<div class="qs-img jq-img">${images.imgTag(q.img)}</div>` : ''}</div>
     ${c.show || c.step === 'a' ? `<div class="jq-a ${c.won ? 'ok' : ''}"><small>Antwort</small><p>${esc(q.answer)}</p></div>` : ''}
     ${ctrl}
   </div>`;
@@ -311,26 +318,34 @@ function scoreDialog(g, id) {
 // ---------- Spielbrett bearbeiten ----------
 function editDialog(b) {
   const src = b ? structuredClone(b) : { title: '', categories: Array.from({ length: 4 }, () => ({ name: '', questions: Array.from({ length: ROWS }, () => ({ text: '', answer: '' })) })) };
+  // Bilder je Feld (seit 2.21.0): Kennung in imgs[ci][r], wählen, fotografieren oder mit Strg+V in das Feld mit dem Cursor
+  const imgs = src.categories.map(c => c.questions.map(q => q.img || ''));
+  const slot = (ci, r) => { const id = imgs[ci][r], k = `${ci}-${r}`;
+    return id ? `${images.imgTag(id, 'img-thumb')}<button type="button" class="icon-btn xs" data-img-del="${k}" title="Bild entfernen" aria-label="Bild entfernen">${icon('x', 14)}</button>`
+      : `<label class="btn ghost sm img-pick" title="Bild zur Frage wählen, fotografieren oder mit Strg+V einfügen">${icon('camera', 15)} Bild<input type="file" accept="image/*" data-img-file="${k}" hidden></label>`; };
   const catHtml = (c, ci) => `<fieldset class="jeo-ed-cat"><legend><input name="cat${ci}" class="input" maxlength="40" placeholder="Kategorie ${ci + 1}" value="${esc(c.name)}" aria-label="Name der Kategorie ${ci + 1}"></legend>
-    ${c.questions.map((q, r) => `<div class="jeo-ed-row"><span class="jp-pts">${POINTS[r]}</span><textarea name="q${ci}-${r}" class="input" rows="2" maxlength="400" placeholder="Frage">${esc(q.text)}</textarea><input name="a${ci}-${r}" class="input" maxlength="300" placeholder="Richtige Antwort" value="${esc(q.answer)}"></div>`).join('')}</fieldset>`;
+    ${c.questions.map((q, r) => `<div class="jeo-ed-row" data-row="${ci}-${r}"><span class="jp-pts">${POINTS[r]}</span><textarea name="q${ci}-${r}" class="input" rows="2" maxlength="400" placeholder="Frage">${esc(q.text)}</textarea><input name="a${ci}-${r}" class="input" maxlength="300" placeholder="Richtige Antwort" value="${esc(q.answer)}"><div class="img-slot jeo-ed-img" data-slot="${ci}-${r}">${slot(ci, r)}</div></div>`).join('')}</fieldset>`;
   dialog({ title: b ? 'Spielbrett bearbeiten' : 'Neues Spielbrett', wide: true, submit: 'Speichern', body: `
     <label class="field">Titel<input name="title" class="input" maxlength="80" required placeholder="z. B. Klassenarbeit Holz – Klasse 6" value="${esc(src.title)}"></label>
-    <p class="muted small-text">Je Kategorie bis zu fünf Fragen – oben 20 Punkte, unten 100. Leere Felder erscheinen im Spiel nicht. Jede Frage braucht genau eine eindeutige Antwort.</p>
+    <p class="muted small-text">Je Kategorie bis zu fünf Fragen von leicht (20 Punkte) nach schwer (100 Punkte). Leere Felder erscheinen im Spiel nicht. Jede Frage braucht genau eine eindeutige Antwort. Ein Bild zur Frage ist möglich – es darf die Antwort nicht verraten.</p>
     <div class="jeo-ed">${src.categories.map(catHtml).join('')}</div>
     ${b ? `<div class="jeo-ed-tools"><button type="button" class="btn ghost sm" data-x="export">${icon('download', 15)} Exportieren</button><button type="button" class="btn ghost sm" data-x="copy">${icon('plus', 15)} Kopie anlegen</button><button type="button" class="btn ghost sm danger-text" data-x="delete">${icon('trash', 15)} Löschen</button></div>` : ''}`,
-    onOpen: (el, close) => el.querySelectorAll('[data-x]').forEach(x => x.onclick = async () => {
-      if (x.dataset.x === 'export') return downloadFile(`jeopardy-${(b.title || 'spielbrett').replace(/[^\wäöüß-]+/gi, '_')}.json`, exportText([b]));
+    onOpen: (el, close) => { imgEvents(el, imgs, slot); el.querySelectorAll('[data-x]').forEach(x => x.onclick = async () => {
+      if (x.dataset.x === 'export') return downloadFile(`jeopardy-${(b.title || 'spielbrett').replace(/[^\wäöüß-]+/gi, '_')}.json`, await exportText([b]));
       if (x.dataset.x === 'copy') { const id = uid(); store.update(s => { s.quiz.boards.push({ ...structuredClone(b), id, title: b.title + ' (Kopie)' }); }); pickBoard(id); close(); return toast('Kopie angelegt.'); }
       if (x.dataset.x === 'delete') {
         if (game()?.boardId === b.id) return toast('Mit diesem Spielbrett läuft gerade ein Spiel.', { kind: 'warn' });
         if (await confirmDialog('Spielbrett löschen', `„${b.title}“ löschen?`)) { store.update(s => { s.quiz.boards = s.quiz.boards.filter(z => z.id !== b.id); }); pickBoard(''); close(); }
       }
-    }),
+    }); },
     onSubmit: fd => {
       const title = String(fd.get('title') || '').trim(); if (!title) throw new Error('Bitte einen Titel eingeben.');
       const categories = src.categories.map((c, ci) => ({ name: String(fd.get('cat' + ci) || '').trim().slice(0, 40),
-        questions: c.questions.map((q, r) => ({ ...q, text: String(fd.get(`q${ci}-${r}`) || '').trim().slice(0, 400), answer: String(fd.get(`a${ci}-${r}`) || '').trim().slice(0, 300) })) }));
+        questions: c.questions.map((q, r) => { const { img: _old, ...rest } = q, img = imgs[ci][r];
+          return { ...rest, text: String(fd.get(`q${ci}-${r}`) || '').trim().slice(0, 400), answer: String(fd.get(`a${ci}-${r}`) || '').trim().slice(0, 300), ...(img ? { img } : {}) }; }) }));
       const half = categories.flatMap(c => c.questions).filter(q => !!q.text !== !!q.answer).length;
+      const lone = categories.flatMap(c => c.questions).filter(q => q.img && !q.text).length;
+      if (lone) throw new Error(`${lone === 1 ? 'Ein Bild hat' : lone + ' Bilder haben'} keine Frage – bitte Frage und Antwort ergänzen oder das Bild entfernen.`);
       if (half) throw new Error(`${half === 1 ? 'Ein Feld hat' : half + ' Felder haben'} nur Frage oder nur Antwort – bitte ergänzen oder ganz leeren.`);
       const id = b?.id || uid();
       store.update(s => { const list = (s.quiz.boards ||= []), i = list.findIndex(z => z.id === id), v = { id, title: title.slice(0, 80), classId: b?.classId || '', categories };
@@ -339,21 +354,56 @@ function editDialog(b) {
       toast(b ? 'Gespeichert.' : 'Spielbrett angelegt.');
     } });
 }
-const exportText = list => JSON.stringify({ app: 'KlassenKompass', kind: 'bundle', v: 1, boards: list.map(b => ({ title: b.title,
-  categories: b.categories.map(c => ({ name: c.name, questions: c.questions.filter(filled).map(q => ({ text: q.text, answer: q.answer })) })) })) }, null, 1);
+// Bildfelder im Bearbeiten-Fenster: Datei, Kamera, Entfernen, Einfügen mit Strg+V in das Feld mit dem Cursor
+function imgEvents(el, imgs, slot) {
+  const form = el.querySelector('form'), err = el.querySelector('.form-error');
+  const set = (k, id) => { const [ci, r] = k.split('-').map(Number), box = el.querySelector(`[data-slot="${k}"]`); if (!box) return;
+    imgs[ci][r] = id; box.innerHTML = slot(ci, r); images.hydrate(box); };
+  const add = async (k, file) => { try { err.hidden = true; set(k, await images.add(file)); } catch (e) { err.textContent = e.message; err.hidden = false; } };
+  form.addEventListener('change', e => { const k = e.target.dataset?.imgFile; if (k && e.target.files?.[0]) add(k, e.target.files[0]); });
+  form.addEventListener('click', e => { const k = e.target.closest('[data-img-del]')?.dataset.imgDel; if (k) { e.preventDefault(); set(k, ''); } });
+  form.addEventListener('paste', e => {
+    const file = [...(e.clipboardData?.items || [])].find(x => x.kind === 'file' && x.type.startsWith('image/'))?.getAsFile(); if (!file) return;
+    const k = document.activeElement?.closest?.('.jeo-ed-row')?.dataset.row; if (!k) return;
+    e.preventDefault(); add(k, file);
+  });
+  images.hydrate(el);
+}
 
-// Import (aus dem gemeinsamen Import-Dialog): Spielbretter kommen dazu, gleiche Titel bekommen „(2)“
+// Export als Datei – mit Bildern als data:-URL (seit 2.21.0), damit Spielbretter samt Bildern auf ein anderes Gerät passen
+async function exportText(list) {
+  const out = [];
+  for (const b of list) out.push({ title: b.title, categories: await Promise.all(b.categories.map(async c => ({ name: c.name,
+    questions: await Promise.all(c.questions.filter(filled).map(async q => { const img = q.img ? await images.toDataUrl(q.img) : '';
+      return { text: q.text, answer: q.answer, ...(img ? { img } : {}) }; })) }))) });
+  return JSON.stringify({ app: 'KlassenKompass', kind: 'bundle', v: 1, boards: out }, null, 1);
+}
+
+// Import (aus dem gemeinsamen Import-Dialog): Spielbretter kommen dazu, gleiche Titel bekommen „(2)“.
+// Bilder (data:-URL) werden danach auf dem Gerät gespeichert und als Kennung eingetragen.
 export function applyBoards(list) {
-  let last = null;
+  let last = null; const todo = [];
   store.update(s => {
     s.quiz.boards ||= [];
     const titles = new Set(s.quiz.boards.map(b => b.title));
     for (const b of list) {
       let title = b.title, n = 2; while (titles.has(title)) title = `${b.title} (${n++})`; titles.add(title);
       last = uid();
+      b.categories.forEach((c, ci) => c.questions.forEach((q, r) => { if (q.img) todo.push({ id: last, ci, r, data: q.img }); }));
       s.quiz.boards.push({ id: last, title, classId: '', categories: b.categories.map(c => ({ name: c.name,
         questions: Array.from({ length: ROWS }, (_, r) => ({ text: c.questions[r]?.text || '', answer: c.questions[r]?.answer || '' })) })) });
     }
   });
   if (last) pickBoard(last);
+  if (todo.length) attachImages(todo);
+  return todo.length;
+}
+async function attachImages(todo) {
+  let bad = 0;
+  for (const t of todo) {
+    try { const img = await images.fromDataUrl(t.data);
+      store.update(s => { const q = s.quiz.boards?.find(b => b.id === t.id)?.categories[t.ci]?.questions[t.r]; if (q) q.img = img; }); }
+    catch { bad++; }
+  }
+  if (bad) toast(`${bad === 1 ? 'Ein Bild' : bad + ' Bilder'} ließ${bad === 1 ? '' : 'en'} sich nicht übernehmen.`, { kind: 'warn' });
 }

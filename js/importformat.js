@@ -6,6 +6,16 @@ import { parsePlans } from './hallplan.js';
 
 const LETTERS = 'ABCD';
 const txt = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+// Bild zur Frage (seit 2.21.0, optional): als data:-URL (PNG, JPEG, WebP, GIF) direkt in der Datei, höchstens etwa 6 MB.
+// Beim Import wird es auf dem Gerät gespeichert und wie ein hochgeladenes Bild verkleinert.
+export const IMG_DATA_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/;
+function imgOf(x, at) {
+  const v = x?.img ?? x?.image ?? x?.bild;
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v !== 'string' || !IMG_DATA_RE.test(v)) throw new Error(`${at}: „img“ muss ein Bild als data:-URL sein (data:image/png;base64,…).`);
+  if (v.length > 8e6) throw new Error(`${at}: Das Bild ist zu groß (höchstens etwa 6 MB).`);
+  return v.replace(/\s+/g, '');
+}
 
 // Nachsichtiges JSON: BOM, Markdown-Codeblock (```json … ```), Text vor/nach dem JSON und Kommas vor } oder ] stören nicht.
 export function looseJson(text) {
@@ -49,6 +59,7 @@ export function normSets(list) {
       const text = txt(x?.text ?? x?.q ?? x?.question, 400);
       if (!text) throw new Error(`${where(i)}: Der Fragetext („text“) fehlt.`);
       const q = { id: uid(), text, options, correct };
+      const img = imgOf(x, where(i)); if (img) q.img = img;
       // Differenzierung (seit 2.5.0, alles optional): bonus = Sternchenfrage, tag = Thema, hint = Tipp, g = G-Fassung
       if (x?.bonus === true) { if (correct === null) throw new Error(`${where(i)}: „bonus“ geht nur bei Fragen mit richtiger Antwort.`); q.bonus = true; }
       const tag = txt(x?.tag ?? x?.topic ?? x?.thema, 40), hint = txt(x?.hint ?? x?.tipp, 160);
@@ -96,7 +107,8 @@ export function normBoards(list) {
         const text = txt(x?.text ?? x?.q ?? x?.question ?? x?.frage, 400), answer = txt(x?.answer ?? x?.a ?? x?.antwort, 300);
         if (!text) throw new Error(`${where}, ${(r + 1) * 20} Punkte: Der Fragetext („text“) fehlt.`);
         if (!answer) throw new Error(`${where}, ${(r + 1) * 20} Punkte: Die Antwort („answer“) fehlt.`);
-        return { text, answer };
+        const img = imgOf(x, `${where}, ${(r + 1) * 20} Punkte`);
+        return { text, answer, ...(img ? { img } : {}) };
       }) };
     });
     return { title, categories };
@@ -175,9 +187,11 @@ export const nq = sets => { const n = sets.reduce((a, t) => a + t.questions.leng
 export function summary(c) {
   const out = [];
   if (c.groups.length) out.push(`${c.groups.length} Lerngruppe${c.groups.length === 1 ? '' : 'n'}: ` + c.groups.map(g => `${g.name || 'ohne Namen'} (${g.students.length} Kinder)`).join(', '));
-  if (c.sets.length) out.push(`${c.sets.length} Fragens${c.sets.length === 1 ? 'atz' : 'ätze'} mit ${nq(c.sets)}: ` + c.sets.map(t => t.title + (t.className && t.className !== '*' ? ` → ${t.className}` : '')).join(', '));
+  if (c.sets.length) { const im = c.sets.reduce((n, t) => n + t.questions.filter(q => q.img).length, 0);
+    out.push(`${c.sets.length} Fragens${c.sets.length === 1 ? 'atz' : 'ätze'} mit ${nq(c.sets)}${im ? ` (${im} mit Bild)` : ''}: ` + c.sets.map(t => t.title + (t.className && t.className !== '*' ? ` → ${t.className}` : '')).join(', ')); }
   if (c.plans.length) out.push(`${c.plans.length} Hallenpl${c.plans.length === 1 ? 'an' : 'äne'}: ` + c.plans.map(x => x.title).join(', '));
-  if (c.boards?.length) out.push(`${c.boards.length} Jeopardy-Spielbrett${c.boards.length === 1 ? '' : 'er'}: ` + c.boards.map(b => `${b.title} (${b.categories.length} Kategorien, ${b.categories.reduce((n, k) => n + k.questions.length, 0)} Fragen)`).join(', '));
+  if (c.boards?.length) out.push(`${c.boards.length} Jeopardy-Spielbrett${c.boards.length === 1 ? '' : 'er'}: ` + c.boards.map(b => { const qs = b.categories.flatMap(k => k.questions), im = qs.filter(q => q.img).length;
+    return `${b.title} (${b.categories.length} Kategorien, ${qs.length} Fragen${im ? `, ${im} mit Bild` : ''})`; }).join(', '));
   return out;
 }
 
@@ -202,6 +216,7 @@ export const FORMAT_HELP = `KlassenKompass-Import (eine JSON-Datei, alle Teile o
   "boards": [ { "title": "Klassenarbeit Holz",
                 "categories": [ { "name": "Werkzeuge",
                                   "questions": [ { "text": "Womit sägst du eine Kurve?", "answer": "Mit der Laubsäge" },
+                                                 { "text": "Wie breit ist das Teil im Bild?", "answer": "54 mm", "img": "data:image/png;base64,…" },
                                                  { "text": "…", "answer": "…" } ] } ] } ]
 }
 Regeln:
@@ -209,5 +224,6 @@ Regeln:
 - sets: 2 bis 4 Antworten je Frage, höchstens 100 Fragen; "correct" = Buchstabe A–D, der Antworttext, true/false (Richtig/Falsch) oder null (Umfrage). "class" = Name der Quiz-Klasse, "allClasses": true = für alle Klassen.
 - sets, Differenzierung (alles optional): "bonus": true = Sternchenfrage (zählt nur, wenn sie richtig ist); "tag" = Thema für die Auswertung; "hint" = Tipp zum Einblenden; "g" = leichtere G-Fassung derselben Frage mit eigenen "options" (höchstens so viele wie die Frage), eigenem "correct" und optional eigenem "text".
 - plans: Maße in Metern auf dem Hallenboden (x 0–27 von links, y 0–15 von vorn nach hinten); optional "gym": { "name", "len", "dep", "items" } = eigene Halle (len 6–60 m, dep 5–40 m; Meterangaben gelten dann darin, items = feste Geräte); kind = zone, gear, cone, kid, teacher, ball, cross, tag, text, arrow, path; lines = basketball, handball, volleyball, badminton, fussball. Alle Geräte: node tools/hallplan.mjs --list
-- boards (Jeopardy): 2 bis 6 Kategorien mit Namen, je 1 bis 5 Fragen mit "text" und "answer"; die Punkte ergeben sich aus der Reihenfolge (20, 40, 60, 80, 100). Jede Frage braucht genau eine eindeutige Antwort.
+- boards (Jeopardy): 2 bis 6 Kategorien mit Namen, je 1 bis 5 Fragen mit "text" und "answer"; die Punkte ergeben sich aus der Reihenfolge (20, 40, 60, 80, 100). Jede Frage braucht genau eine eindeutige Antwort. Fragen je Kategorie von leicht (20) nach schwer (100) ordnen.
+- Bilder (sets und boards, optional): "img" = Bild als data:-URL (PNG, JPEG, WebP, GIF), z. B. eine Zeichnung, die die Frage erklärt; das Bild darf die Antwort nicht verraten.
 - Prüfen vor dem Import: node tools/import-check.mjs datei.json`;

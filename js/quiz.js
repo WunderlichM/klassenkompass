@@ -889,10 +889,21 @@ export function applySets(sets, classId = Q().activeClassId ?? '') {
     const own = className === '*' ? '*' : className ? Q().classes.find(c => c.name.toLowerCase() === className.toLowerCase())?.id : null;
     return { ...t, classId: own ?? classId ?? '' };
   });
+  // Bilder als data:-URL (seit 2.21.0): erst ohne Bild speichern, dann auf dem Gerät ablegen und die Kennung eintragen
+  const todo = [];
+  out.forEach(t => t.questions.forEach(q => { if (typeof q.img === 'string' && q.img.startsWith('data:')) { todo.push({ set: t.id, q: q.id, data: q.img }); delete q.img; } }));
   store.update(s => {
     s.quiz.sets.push(...out);
     const show = out.find(t => fits(t, s.quiz.activeClassId)); if (show) s.quiz.activeSetId = show.id;
   });
+  if (todo.length) (async () => {
+    let bad = 0;
+    for (const x of todo) {
+      try { const img = await images.fromDataUrl(x.data); store.update(s => { const q = s.quiz.sets.find(t => t.id === x.set)?.questions.find(y => y.id === x.q); if (q) q.img = img; }); }
+      catch { bad++; }
+    }
+    if (bad) toast(`${bad === 1 ? 'Ein Bild' : bad + ' Bilder'} ließ${bad === 1 ? '' : 'en'} sich nicht übernehmen.`, { kind: 'warn' });
+  })();
   return out;
 }
 function questionDialog(t, index = -1) {

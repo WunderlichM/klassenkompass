@@ -1909,6 +1909,9 @@ body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto;
 .jeo-ed-row { display: grid; grid-template-columns: 36px 1fr; gap: 4px 8px; margin-top: 8px; align-items: start; }
 .jeo-ed-row .jp-pts { margin-top: 8px; } .jeo-ed-row .input { grid-column: 2; }
 .jeo-ed-row textarea.input { resize: vertical; min-height: 44px; }
+.jeo-ed-img { grid-column: 2; justify-self: start; min-height: 30px; }
+.jeo-ed-img .img-thumb { width: 96px; height: 64px; }
+.jp-thumb { width: 100%; max-height: 64px; object-fit: contain; border-radius: 6px; background: #fff; margin: 2px 0; }
 .jeo-ed-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .jeo-adj { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
 /* Spielbrett auf der Bühne */
@@ -1935,6 +1938,9 @@ body.presenting .stage-wrap.stack .widget.wheel .wh-box { flex: 1; height: auto;
 .jq-head b { color: #f6c945; }
 .jq-q { min-height: 22vh; }
 .jq-q p { font-size: clamp(24px, 3vw, 50px); }
+.jq-q.with-img { display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 1.2vw, 18px); }
+.jq-img img, .jq-img .img-missing { max-height: 38vh; background: #fff; padding: 6px; }
+body.presenting .jq-img img { max-height: 42vh; }
 .jq-a { background: #fff; color: #25272e; border-radius: 16px; padding: .6em 1em; border-left: 10px solid #f6c945; animation: qs-pop .4s cubic-bezier(.3,1.5,.5,1) both; }
 .jq-a.ok { border-left-color: #3f9a5c; }
 .jq-a small { display: block; color: #8a8b96; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: clamp(11px, .9vw, 14px); }

@@ -102,6 +102,7 @@ export function idsIn(quiz) {
   const ids = new Set(), take = q => { if (q?.img) ids.add(q.img); (q?.optImgs || []).forEach(x => x && ids.add(x)); };
   (quiz?.sets || []).forEach(t => t.questions.forEach(take));
   (quiz?.sessions || []).forEach(s => s.questions.forEach(take));
+  (quiz?.boards || []).forEach(b => b.categories.forEach(c => c.questions.forEach(take)));   // Jeopardy (seit 2.21.0)
   return [...ids].filter(x => ID_RE.test(x));
 }
 
@@ -114,6 +115,20 @@ export function hallIdsIn(sport) {
 }
 // Alles, was die App an Bildern braucht (Quiz und Hallenpläne) – für Sicherung, Konto-Abgleich und Aufräumen
 export const usedIds = state => [...new Set([...idsIn(state?.quiz), ...hallIdsIn(state?.sport)])];
+
+// Import/Export mit Bildern (seit 2.21.0): Bild als data:-URL in der Datei ↔ Kennung auf dem Gerät.
+// Beim Import wird wie beim Hochladen verkleinert (längste Seite 1280 px); gleiche Bilder ergeben dieselbe Kennung.
+export const DATA_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/;
+export async function fromDataUrl(data) {
+  if (typeof data !== 'string' || !DATA_RE.test(data)) throw new Error('Das Bild in der Datei ist keine gültige data:-URL.');
+  const blob = await (await fetch(data.replace(/\s+/g, ''))).blob();
+  return add(blob);
+}
+export async function toDataUrl(id) {
+  const rec = await getRecord(id).catch(() => null) || (ID_RE.test(id) ? await fromRemote(id) : null);
+  if (!rec) return '';
+  return new Promise(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || '')); fr.onerror = () => res(''); fr.readAsDataURL(rec.blob); });
+}
 
 // Für die Sicherung: { id: dataURL }
 export async function pack(ids) {
