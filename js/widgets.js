@@ -11,6 +11,7 @@ import { ANIMALS, animalSvg } from './animals.js';
 import { play, TONES, DEFAULT_INTERVAL_TONES } from './sound.js';
 import * as account from './account.js';
 import { scene as modeScene, glyph as modeGlyph } from './modeart.js';
+import * as micsync from './micsync.js';
 
 export const ADD = [
   { kind: 'pick', label: 'Zufallsauswahl', ic: 'dice' },
@@ -170,12 +171,25 @@ async function micStart() {
   if (!navigator.mediaDevices?.getUserMedia) { mic.state = 'error'; return toast('Dieser Browser gibt das Mikrofon nicht frei.', { kind: 'warn' }); }
   mic.state = 'starting';
   try {
-    mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const dev = micDevice(), audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    try { mic.stream = await navigator.mediaDevices.getUserMedia({ audio: dev ? { ...audio, deviceId: { exact: dev } } : audio }); }
+    catch (e) { if (!dev || e?.name !== 'OverconstrainedError') throw e; mic.stream = await navigator.mediaDevices.getUserMedia({ audio }); }   // gewähltes Mikrofon fehlt – Standard nehmen
     const C = window.AudioContext || window.webkitAudioContext; mic.ctx = new C();
     mic.analyser = mic.ctx.createAnalyser(); mic.analyser.fftSize = 1024; mic.buf = new Float32Array(mic.analyser.fftSize);
     mic.ctx.createMediaStreamSource(mic.stream).connect(mic.analyser);
     mic.state = 'on'; mic.level = 0;
   } catch (e) { mic.state = 'error'; toast('Das Mikrofon wurde nicht freigegeben.', { kind: 'warn' }); }
+}
+// Gewählter Eingang (seit 2.27.0), z. B. ein Funkmikrofon: gilt nur auf diesem Gerät, wird nicht abgeglichen
+const MIC_DEV_KEY = 'klassenkompass.micDevice';
+const micDevice = () => { try { return localStorage.getItem(MIC_DEV_KEY) || ''; } catch { return ''; } };
+async function micDeviceOptions(sel) {
+  let list = [];
+  try { list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch { /* egal */ }
+  const cur = micDevice();
+  sel.innerHTML = `<option value="">Standard des Geräts</option>${list.map((d, i) => `<option value="${esc(d.deviceId)}" ${d.deviceId === cur ? 'selected' : ''}>${esc(d.label || 'Mikrofon ' + (i + 1))}</option>`).join('')}`;
+  if (cur && !list.some(d => d.deviceId === cur)) sel.insertAdjacentHTML('beforeend', '<option value="' + esc(cur) + '" selected>Gewähltes Mikrofon (gerade nicht angeschlossen)</option>');
+  return list.some(d => !d.label);
 }
 export function micStop() {
   sendStop();
@@ -197,52 +211,51 @@ function micRead() {
 // Ein Gerät (meist das Handy) misst und schickt nur den Pegel – verschlüsselt über das Konto (Tabelle live_mic) –
 // etwa jede 0,7 Sekunden. Die Geräte, die die Ampel zeigen (z. B. der PC am Beamer), holen ihn ab und spielen den Ton.
 // Wer sendet, gilt nur für diesen Tab und wird nicht gespeichert.
-const remote = { sending: false, sendT: 0, readT: 0, sendBusy: false, sendErr: '', poll: 0, pollBusy: false, want: 0, level: 0, shown: 0, lastAt: 0, recv: 0, err: '' };
+const remote = { sending: false, sampleT: 0, sendT: 0, sendBusy: false, sendErr: '', pk: null, poll: 0, pollBusy: false, want: 0, pl: null, err: '' };
 const SETUP_MSG = 'Die Datenbank kennt die Übertragung vom Handy noch nicht – supabase/setup.sql einmal ausführen.';
 const remoteErr = e => (e?.status === 404 || e?.code === 'PGRST202' || e?.code === 'PGRST205' || e?.code === '42P01' ? SETUP_MSG : 'Keine Verbindung zum Konto.');
+// Seit 2.27.0: Das Handy misst alle 100 ms und schickt alle 0,3 s die letzten 3 s mit laufender Nummer (js/micsync.js).
+// Der PC setzt die Kurve lückenlos zusammen und spielt sie im selben Takt ab – Werte wie am Handy, nur verzögert.
 async function sendStart() {
   if (!account.loggedIn()) return toast('Melde dich auf beiden Geräten mit demselben Konto an (Zahnrad → Konto).', { kind: 'warn' });
   await micStart(); if (mic.state !== 'on') return;
-  remote.sending = true; remote.sendErr = '';
-  clearInterval(remote.readT); clearInterval(remote.sendT);
-  remote.readT = setInterval(micRead, 50);
+  remote.sending = true; remote.sendErr = ''; remote.pk = micsync.packer();
+  clearInterval(remote.sampleT); clearInterval(remote.sendT);
+  remote.sampleT = setInterval(() => { micRead(); remote.pk.push(mic.level); }, micsync.STEP);
   remote.sendT = setInterval(async () => {
-    if (remote.sendBusy) return; remote.sendBusy = true;
-    try { await account.micPut({ lv: Math.round(mic.level), at: Date.now() }); remote.sendErr = ''; }
+    if (remote.sendBusy || !remote.pk.seq) return; remote.sendBusy = true;
+    try { await account.micPut(remote.pk.packet()); remote.sendErr = ''; }
     catch (e) { remote.sendErr = remoteErr(e); }
     finally { remote.sendBusy = false; }
-  }, 700);
+  }, micsync.SEND_MS);
 }
-function sendStop() { clearInterval(remote.readT); clearInterval(remote.sendT); remote.sending = false; remote.sendErr = ''; }
+function sendStop() { clearInterval(remote.sampleT); clearInterval(remote.sendT); remote.sending = false; remote.sendErr = ''; remote.pk = null; }
 // Empfang: läuft nur, solange ein Objekt mit „Handy als Mikrofon“ zu sehen ist
 function wantRemote(now) {
   remote.want = now;
+  remote.pl ||= micsync.player();
   if (remote.poll) return;
   remote.poll = setInterval(async () => {
     if (Date.now() - remote.want > 3000) { clearInterval(remote.poll); remote.poll = 0; return; }
     if (remote.pollBusy || !account.loggedIn() || document.visibilityState !== 'visible') return;
     remote.pollBusy = true;
-    try { const d = await account.micGet(); if (d && d.at !== remote.lastAt) { remote.lastAt = d.at; remote.level = clamp(Number(d.lv) || 0, 0, 100); remote.recv = Date.now(); } remote.err = ''; }
+    try { const d = await account.micGet(); if (d) remote.pl.add(d, performance.now()); remote.err = ''; }
     catch (e) { remote.err = remoteErr(e); }
     finally { remote.pollBusy = false; }
-  }, 800);
+  }, micsync.POLL_MS);
 }
-const remoteFresh = () => Date.now() - remote.recv < 4000;
+const remoteLevel = () => remote.pl?.level(performance.now()) ?? null;
+const remoteFresh = () => !!remote.pl?.connected(performance.now());
 const usesPhone = w => w.src === 'phone';
 // Aktueller Pegel für ein Objekt; null = (noch) kein Wert
 function levelOf(w, now) {
-  if (usesPhone(w) && !remote.sending) {
-    wantRemote(now);
-    if (!remoteFresh()) return null;
-    remote.shown += (remote.level - remote.shown) * 0.25;   // weich zum neuen Wert gleiten
-    return remote.shown;
-  }
+  if (usesPhone(w) && !remote.sending) { wantRemote(now); return remoteLevel(); }
   return mic.state === 'on' ? micRead() : null;
 }
 function remoteText() {
   if (!account.loggedIn()) return 'Auf PC und Handy mit demselben Konto anmelden.';
   if (remote.err) return remote.err;
-  return remoteFresh() ? 'Handy ist verbunden.' : 'Wartet auf das Handy … Dort dieses Objekt öffnen und „Dieses Gerät als Mikrofon“ tippen.';
+  return remoteFresh() ? `Handy ist verbunden · Anzeige ${(remote.pl.lag / 1000).toFixed(1).replace('.', ',')} s später als am Handy.` : 'Wartet auf das Handy … Dort dieses Objekt öffnen und „Dieses Gerät als Mikrofon“ tippen.';
 }
 
 function micCtrl(w, small) {
@@ -599,7 +612,7 @@ const volField = v => `<label class="field">Lautstärke <output>${v} %</output><
 const secOpts = (list, cur) => list.map(v => `<option value="${v}" ${Number(cur) === v ? 'selected' : ''}>${v < 60 ? `${v} Sekunde${v === 1 ? '' : 'n'}` : `${v / 60} Minute${v === 60 ? '' : 'n'}`}</option>`).join('');
 const srcSelect = w => `<label class="field">Mikrofon<select name="src" class="select"><option value="here" ${usesPhone(w) ? '' : 'selected'}>Mikrofon dieses Geräts</option><option value="phone" ${usesPhone(w) ? 'selected' : ''}>Handy als Mikrofon (über das Konto)</option></select></label>
   <p class="muted small-text" data-src-hint ${usesPhone(w) ? '' : 'hidden'}>Auf PC und Handy mit demselben Konto anmelden. Auf dem Handy den Bildschirm öffnen und bei diesem Objekt „Dieses Gerät als Mikrofon“ tippen, das Handy offen liegen lassen. Übertragen wird nur die Lautstärke als Zahl – verschlüsselt, etwa jede Sekunde. Ton und Anzeige kommen vom PC.</p>`;
-const levelPreview = () => `<div class="nz-prev"><span>Jetzt gemessen</span><span class="md-bar"><i data-prev-level></i></span><output data-prev-val>–</output><button type="button" class="btn ghost sm" data-prev-mic>${icon('mic', 14)} Messen</button></div>`;
+const levelPreview = () => `<label class="field">Eingang auf diesem Gerät<span class="tone-row"><select name="micdev" class="select" data-micdev><option value="">Standard des Geräts</option></select></span><small class="muted" data-micdev-hint hidden>Namen erscheinen, sobald das Mikrofon einmal freigegeben ist („Messen“).</small></label><div class="nz-prev"><span>Jetzt gemessen</span><span class="md-bar"><i data-prev-level></i></span><output data-prev-val>–</output><button type="button" class="btn ghost sm" data-prev-mic>${icon('mic', 14)} Messen</button></div>`;
 const limitSlider = (name, label, val, color) => `<label class="field nz-lim" style="--c:${color}"><span>${label} <output>${val}</output></span><input type="range" min="10" max="95" step="1" name="${name}" value="${val}" oninput="this.parentElement.querySelector('output').value=this.value"></label>`;
 const alarmFields = w => `<fieldset class="nz-set"><legend>Wenn es zu laut ist</legend>
     <label class="field">Zu laut gilt, wenn es so lange über der Grenze ist<select name="delay" class="select">${secOpts([1, 2, 3, 5, 8, 10, 15], opt(w, 'delay'))}</select></label>
@@ -620,13 +633,20 @@ function noiseDialog(el) {
   const src = el.querySelector('[name=src]'), hint = el.querySelector('[data-src-hint]'), micBtn = el.querySelector('[data-prev-mic]');
   const sync = () => { hint.hidden = src.value !== 'phone'; micBtn.style.display = src.value === 'phone' || mic.state === 'on' ? 'none' : ''; };
   src.onchange = sync; sync();
-  micBtn.onclick = () => micStart().then(sync);
+  const devSel = el.querySelector('[data-micdev]'), devHint = el.querySelector('[data-micdev-hint]');
+  const fill = () => micDeviceOptions(devSel).then(noNames => { devHint.hidden = !noNames; });
+  fill();
+  devSel.onchange = async () => {
+    try { devSel.value ? localStorage.setItem(MIC_DEV_KEY, devSel.value) : localStorage.removeItem(MIC_DEV_KEY); } catch { /* egal */ }
+    if (mic.state === 'on') { const was = remote.sending; micStop(); if (was) await sendStart(); else await micStart(); sync(); }
+  };
+  micBtn.onclick = () => micStart().then(() => { sync(); fill(); });
   const bar = el.querySelector('[data-prev-level]'), val = el.querySelector('[data-prev-val]');
   const t = setInterval(() => {
     if (!el.isConnected) return clearInterval(t);
     const phone = src.value === 'phone' && !remote.sending;
     if (phone) wantRemote(Date.now());
-    const lv = phone ? (remoteFresh() ? remote.level : null) : mic.state === 'on' ? micRead() : null;
+    const lv = phone ? remoteLevel() : mic.state === 'on' ? micRead() : null;
     bar.style.width = (lv ?? 0).toFixed(0) + '%'; val.value = lv === null ? '–' : Math.round(lv);
   }, 100);
 }
