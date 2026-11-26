@@ -10,6 +10,7 @@ import * as hall from './hall.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { play, TONES, DEFAULT_INTERVAL_TONES } from './sound.js';
 import * as account from './account.js';
+import { scene as modeScene, glyph as modeGlyph } from './modeart.js';
 
 export const ADD = [
   { kind: 'pick', label: 'Zufallsauswahl', ic: 'dice' },
@@ -148,27 +149,7 @@ function readSrc(fd, x) {
 }
 
 // ---------- Arbeitsform ----------
-// Bilder (seit 2.25.0): flächige Zeichnungen auf einem hellen Kreis in der Farbe der Arbeitsform.
-// Klassen: bg = Kreis, f = Figur (Farbe), l = helle Fläche, w = Weiß. Farben setzt styles.css (.md-art).
-const fig = (x, y, s = 1, cls = 'f', face = 'front') => {
-  const r = 8.5 * s, dx = face === 'left' ? -2.6 * s : face === 'right' ? 2.6 * s : 0, n = v => v.toFixed(1);
-  const eyes = face ? `<g class="eye"><circle cx="${n(x + dx - 3 * s)}" cy="${n(y - 0.6 * s)}" r="${n(1.25 * s)}"/><circle cx="${n(x + dx + 3 * s)}" cy="${n(y - 0.6 * s)}" r="${n(1.25 * s)}"/></g><path class="mouth" d="M${n(x + dx - 2.6 * s)} ${n(y + 3 * s)}q${n(2.6 * s)} ${n(2.4 * s)} ${n(5.2 * s)} 0"/>` : '';
-  return `<g class="${cls}"><circle cx="${x}" cy="${y}" r="${n(r)}"/><path d="M${n(x - 14 * s)} ${n(y + 27 * s)}q0-15.5 ${n(14 * s)}-15.5q${n(14 * s)} 0 ${n(14 * s)} 15.5z"/></g>${eyes}`;
-};
-const MODE_ART = {
-  stille: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(44, 42, 1.7, 'f', 'front').replace(/<path class="mouth"[^>]*>/, '')}
-    <rect class="hand" x="41.6" y="41.5" width="4.8" height="16" rx="2.4"/>
-    <path class="w" d="M66 14h20a5 5 0 0 1 5 5v9a5 5 0 0 1-5 5h-11l-6 5 1-5a5 5 0 0 1-4-5v-9a5 5 0 0 1 5-5z"/><text class="tx" x="76" y="27.3" text-anchor="middle">Pst!</text>`,
-  fluestern: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(33, 46, 1.2, 'f', 'right')}${fig(67, 46, 1.2, 'l2', 'front')}
-    <circle class="hand" cx="44.5" cy="48" r="4.2"/><path class="snd" d="M50 40q3 3 0 6M54 37q5 6 0 12"/>`,
-  partner: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(30, 50, 1.3, 'f', 'right')}${fig(70, 50, 1.3, 'l2', 'left')}
-    <path class="w" d="M38 12h24a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6h-9l-6 6 .5-6H38a6 6 0 0 1-6-6v-8a6 6 0 0 1 6-6z"/>
-    <g class="f"><circle cx="42" cy="22" r="2.4"/><circle cx="50" cy="22" r="2.4"/><circle cx="58" cy="22" r="2.4"/></g>`,
-  gruppe: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(37, 28, 0.95, 'l2', 'front')}${fig(63, 28, 0.95, 'l2', 'front')}${fig(20, 49, 1.05, 'f', 'right')}${fig(80, 49, 1.05, 'f', 'left')}
-    <ellipse class="l" cx="50" cy="71" rx="28" ry="10.5"/><ellipse class="w" cx="50" cy="69" rx="21" ry="6.5"/><rect class="f" x="40" y="66" width="12" height="5" rx="1.5" opacity=".55"/><rect class="l" x="54" y="65.5" width="8" height="6" rx="1.5"/>`,
-  plenum: `<circle class="bg" cx="50" cy="50" r="48"/><rect class="f" x="20" y="13" width="60" height="35" rx="5"/><rect class="w" x="24" y="17" width="52" height="27" rx="3"/>
-    <path class="st" d="M30 26h22M30 34h32"/>${fig(25, 67, 0.95, 'l2', null)}${fig(50, 64, 1.05, 'f', null)}${fig(75, 67, 0.95, 'l2', null)}`,
-};
+// Bilder der Arbeitsformen: Szenen und Symbole in js/modeart.js (seit 2.26.0)
 const MODES = {
   stille: { name: 'Stille', sub: 'Ich arbeite allein und leise.', limit: 38, color: '#3d6c8a' },
   fluestern: { name: 'Flüstern', sub: 'Nur mein Nachbar hört mich.', limit: 50, color: '#4e713a' },
@@ -176,7 +157,6 @@ const MODES = {
   gruppe: { name: 'Gruppenarbeit', sub: 'Wir arbeiten im Team.', limit: 68, color: '#b25125' },
   plenum: { name: 'Alle hören zu', sub: 'Eine Person spricht, alle schauen nach vorn.', limit: 55, color: '#6a4c9c' },
 };
-const artSvg = (k, cls = 'md-art') => `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true">${MODE_ART[k]}</svg>`;
 const modeOf = w => (MODES[w.mode] ? w.mode : 'stille');
 // Grenze je Arbeitsform: seit 2.25.0 frei einstellbar (w.limits); ältere Objekte verschieben die Vorgabe mit w.adj
 const limitFor = (w, k) => clamp(Number(w.limits?.[k]) || MODES[k].limit + (Number(w.adj) || 0), 10, 95);
@@ -406,9 +386,12 @@ export function html(w, { ctrl }) {
     }
     case 'mode': {
       const id = modeOf(w), m = MODES[id];
-      return [`<div class="md-sym" style="--md:${m.color}">${artSvg(id)}<span class="loud-badge" aria-hidden="true">Zu laut!</span></div><p class="md-name" style="--md:${m.color}">${m.name}</p><p class="md-sub">${m.sub}</p>
-        ${w.mic ? `<div class="md-meter" data-live="meter" data-zone="off"><span class="md-lamps"><i class="r"></i><i class="y"></i><i class="g"></i></span><span class="md-bar"><i data-live="level"></i><b style="left:${limitOf(w)}%"></b></span>${micCtrl(w, true)}</div>${usesPhone(w) ? '<p class="w-state no-present md-remote" data-live="remote"></p>' : ''}` : ''}
-        <div class="md-pick no-present" role="group" aria-label="Arbeitsform wählen">${Object.keys(MODES).map(k => `<button class="md-btn ${k === id ? 'on' : ''}" data-act="x-mode" data-mode="${k}" style="--md:${MODES[k].color}" title="${MODES[k].name}" aria-label="${MODES[k].name}">${artSvg(k)}</button>`).join('')}</div>`, 'mode'];
+      return [`<div class="md" style="--md:${m.color}">
+        <div class="md-sym">${modeScene(id)}<span class="loud-badge" aria-hidden="true">Zu laut!</span></div>
+        <div class="md-text"><p class="md-name">${m.name}</p><p class="md-sub">${m.sub}</p>
+        ${w.mic ? `<div class="md-meter" data-live="meter" data-zone="off"><span class="md-lamps"><i class="r"></i><i class="y"></i><i class="g"></i></span><span class="md-bar"><i data-live="level"></i><b style="left:${limitOf(w)}%"></b></span>${micCtrl(w, true)}</div>${usesPhone(w) ? '<p class="w-state no-present md-remote" data-live="remote"></p>' : ''}` : ''}</div>
+        <div class="md-pick no-present" role="group" aria-label="Arbeitsform wählen">${Object.keys(MODES).map(k => `<button class="md-btn ${k === id ? 'on' : ''}" data-act="x-mode" data-mode="${k}" style="--md:${MODES[k].color}" title="${MODES[k].name}" aria-label="${MODES[k].name}" aria-pressed="${k === id}">${modeGlyph(k)}</button>`).join('')}</div>
+      </div>`, 'mode'];
     }
     case 'noise': {
       const lim = limitOf(w), wb = warnOf(w);

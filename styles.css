@@ -321,43 +321,56 @@ textarea.input { resize: vertical; min-height: 80px; }
 .pk-wait { color: var(--muted); opacity: .5; animation: none !important; }
 @keyframes pk-in { from { transform: scale(.4); opacity: 0; } }
 /* Arbeitsform */
-.widget.mode .w-body { gap: 4px; }
-.md-sym { position: relative; flex: 1; min-height: 40px; width: 100%; display: grid; place-items: center; color: var(--md); }
-.md-sym svg { height: 100%; max-width: 100%; aspect-ratio: 1; }
-/* Bilder der Arbeitsformen (seit 2.25.0): flächig, Kreis in hellem Ton der Farbe */
-.md-art .bg { fill: color-mix(in srgb, var(--md) 15%, #fff); }
-.md-art .f, .md-art .f circle, .md-art .f path { fill: var(--md); }
-.md-art .l2 circle, .md-art .l2 path { fill: color-mix(in srgb, var(--md) 62%, #fff); }
-.md-art .l { fill: color-mix(in srgb, var(--md) 38%, #fff); }
-.md-art .w { fill: #fff; }
-.md-art .st { fill: none; stroke: var(--md); stroke-width: 3.6; stroke-linecap: round; }
-.md-art .eye { fill: #fff; } .md-art .mouth { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
-.md-art .hand { fill: color-mix(in srgb, var(--md) 45%, #fff); stroke: var(--md); stroke-width: 1.2; }
-.md-art .snd { fill: none; stroke: var(--md); stroke-width: 2.6; stroke-linecap: round; }
-.md-art .tx { fill: var(--md); font: 800 9.5px/1 system-ui, sans-serif; }
-.md-sym .md-art { filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--md) 25%, transparent)); transition: transform .3s; }
-.md-name { margin: 0; font-weight: 700; font-size: clamp(20px, min(10cqw, 12cqh), 72px); line-height: 1.1; color: var(--md); text-align: center; }
-.md-sub { margin: 0 0 4px; font-size: clamp(12px, min(4.4cqw, 5cqh), 26px); color: var(--muted); text-align: center; }
-.md-pick { display: flex; gap: 6px; }
-.md-btn { width: 40px; height: 40px; padding: 2px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
-.md-btn svg { width: 100%; height: 100%; display: block; }
-.md-btn.on { background: var(--md); border-color: transparent; box-shadow: 0 4px 10px -4px var(--md); }
-.md-btn.on .md-art .bg { fill: rgba(255,255,255,.18); }
-.md-btn.on .md-art .f circle, .md-btn.on .md-art .f path { fill: #fff; }
-.md-btn.on .md-art .l2 circle, .md-btn.on .md-art .l2 path, .md-btn.on .md-art .l { fill: rgba(255,255,255,.65); }
-.md-btn.on .md-art .w { fill: var(--md); stroke: var(--md); }
-.md-btn.on .md-art .st, .md-btn.on .md-art .snd { stroke: #fff; } .md-btn.on .md-art .eye { fill: var(--md); } .md-btn.on .md-art .mouth { stroke: var(--md); } .md-btn.on .md-art .tx { fill: var(--md); } .md-btn.on .md-art .hand { fill: #fff; }
-.md-meter { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 440px; min-height: 30px; }
+/* ---------- Arbeitsform (neu gestaltet in 2.26.0) ----------
+   Das ganze Objekt trägt die Farbe der Arbeitsform: heller Verlauf, große Szene, Name groß, Auswahl als Leiste mit Symbolen. */
+.stage-wrap .widget.mode .w-body { padding: 0; gap: 0; }
+.md { flex: 1; width: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px 12px;
+  background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--md) 11%, var(--surface)) 100%); transition: background .4s; }
+.md-sym { position: relative; flex: 1; min-height: 60px; width: 100%; display: grid; place-items: center; }
+.md-scene { width: 100%; height: 100%; display: block; filter: drop-shadow(0 3px 5px color-mix(in srgb, var(--md) 22%, transparent)); }
+.ma-w1 { stop-color: color-mix(in srgb, var(--md) 9%, #fff); } .ma-w2 { stop-color: color-mix(in srgb, var(--md) 24%, #fff); }
+.ma-tx { font: 800 9px/1 system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--md); } .ma-tx.sm { font-size: 7.5px; }
+.md-text { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.md-name { margin: 0; font-weight: 800; letter-spacing: -.015em; line-height: 1.02; color: var(--md); text-align: center; font-size: clamp(22px, min(11cqw, 10cqh), 84px); }
+.md-sub { margin: 0; font-size: clamp(12px, min(4.6cqw, 4.6cqh), 28px); color: color-mix(in srgb, var(--md) 45%, var(--muted)); text-align: center; line-height: 1.25; text-wrap: balance; }
+.md-pick { display: flex; gap: 3px; padding: 3px; border-radius: 14px; background: color-mix(in srgb, var(--md) 12%, var(--surface)); }
+.md-btn { display: grid; place-items: center; width: 40px; height: 34px; padding: 0; border: 0; border-radius: 11px; background: var(--surface); color: var(--md); box-shadow: 0 1px 2px rgba(0,0,0,.06); transition: background .2s, transform .15s; }
+.md-btn:hover { transform: translateY(-1px); }
+.md-btn:focus-visible { outline: 2px solid var(--md); outline-offset: 2px; }
+.md-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.md-glyph .cut { fill: var(--surface); stroke: var(--surface); stroke-width: 1.6; stroke-linecap: round; } .md-glyph .fing { stroke: var(--surface); stroke-width: 1.5; } .md-glyph .ln { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.md-btn.on { background: var(--md); color: #fff; box-shadow: 0 4px 10px -4px var(--md); }
+.md-btn.on .md-glyph .cut { fill: var(--md); stroke: var(--md); } .md-btn.on .md-glyph .fing { stroke: var(--md); }
+.md-meter { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 440px; min-height: 32px; margin-top: 4px; padding: 4px 6px 4px 5px; border-radius: 99px; background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md) 16%, transparent); }
 .md-lamps { flex: none; display: flex; gap: 3px; padding: 3px 5px; border-radius: 99px; background: #2b2e38; }
-.md-lamps i { width: 13px; height: 13px; border-radius: 50%; background: #4a4d57; transition: background .25s, box-shadow .25s; }
+.md-lamps i { width: 12px; height: 12px; border-radius: 50%; background: #4a4d57; transition: background .25s, box-shadow .25s; }
 .md-meter[data-zone="red"] .md-lamps .r { background: #ff4d40; box-shadow: 0 0 8px #ff4d40; }
 .md-meter[data-zone="yellow"] .md-lamps .y { background: #ffc21a; box-shadow: 0 0 8px #ffc21a; }
 .md-meter[data-zone="green"] .md-lamps .g { background: #3fcf6e; box-shadow: 0 0 8px #3fcf6e; }
-.md-bar { position: relative; flex: 1; height: 12px; border-radius: 99px; background: var(--soft); overflow: hidden; }
+.md-bar { position: relative; flex: 1; height: 10px; border-radius: 99px; background: var(--soft); overflow: hidden; }
 .md-bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: #3f9a5c; border-radius: 99px; transition: background .25s; }
 .md-meter[data-zone="yellow"] .md-bar i { background: #e3a312; } .md-meter[data-zone="red"] .md-bar i { background: #d0453a; }
 .md-bar b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: .55; }
-.md-remote { max-width: 440px; text-align: center; }
+.md-meter .btn.sm, .md-meter .icon-btn { flex: none; }
+.md-remote { max-width: 440px; text-align: center; margin: 0; }
+.widget.mode.too-loud .md { background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, #d63a3a 16%, var(--surface)) 100%); }
+.widget.mode.too-loud .md-scene { filter: drop-shadow(0 3px 6px rgba(214,58,58,.35)) saturate(.7); }
+/* Breites Objekt: Szene links, Name und Anzeige rechts */
+@container (min-aspect-ratio: 3 / 2) {
+  .md { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: 1fr auto; column-gap: 16px; align-items: center; }
+  .md-sym { grid-row: 1 / 3; height: 100%; }
+  .md-text { align-items: flex-start; } .md-name, .md-sub { text-align: left; }
+  .md-pick { justify-self: start; }
+  .md-name { font-size: clamp(20px, min(5.2cqw, 15cqh), 84px); } .md-sub { font-size: clamp(12px, min(2.4cqw, 6cqh), 26px); }
+}
+/* Große Ansicht: Name noch größer, Szene füllt den Rest */
+body.presenting .md-name { font-size: clamp(28px, min(12cqw, 12cqh), 120px); }
+[data-theme="dark"] .md { background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--md) 16%, transparent) 100%); }
+[data-theme="dark"] .md-name { color: color-mix(in srgb, var(--md) 55%, #fff); }
+[data-theme="dark"] .md-sub { color: color-mix(in srgb, var(--md) 25%, var(--muted)); }
+[data-theme="dark"] .md-pick { background: color-mix(in srgb, var(--md) 18%, var(--surface)); }
+[data-theme="dark"] .md-btn:not(.on) { color: color-mix(in srgb, var(--md) 50%, #fff); }
+[data-theme="dark"] .md-scene { filter: none; }
 /* Auftragskarte */
 .widget.task .w-body { align-items: stretch; justify-content: flex-start; }
 .tk { flex: 1; min-height: 0; display: grid; gap: 4cqw; overflow: auto; font-size: clamp(14px, min(3.2cqw, 6cqh), 34px); line-height: 1.3; color: var(--ink); }
@@ -450,7 +463,6 @@ textarea.input { resize: vertical; min-height: 80px; }
 .widget.too-loud .loud-badge { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: loud-wiggle .6s ease-in-out infinite; }
 .widget.too-loud { animation: loud-frame 1s ease-in-out infinite; }
 .widget.too-loud::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; border: 5px solid #d63a3a; background: rgba(214,58,58,.10); animation: blink 1s steps(2) infinite; }
-.widget.mode.too-loud .md-sym .md-art { transform: scale(.94); filter: grayscale(.3) drop-shadow(0 6px 10px rgba(214,58,58,.4)); }
 @keyframes loud-frame { 0%, 100% { box-shadow: 0 0 0 0 rgba(214,58,58,.6), 0 8px 30px rgba(30,40,60,.12); } 50% { box-shadow: 0 0 0 16px rgba(214,58,58,0), 0 8px 30px rgba(30,40,60,.12); } }
 @keyframes loud-wiggle { 0%, 100% { transform: translate(-50%, -50%) rotate(-3deg) scale(1); } 50% { transform: translate(-50%, -50%) rotate(3deg) scale(1.06); } }
 @media (prefers-reduced-motion: reduce) { .widget.too-loud, .widget.too-loud .loud-badge, .widget.too-loud::after { animation: none; } }
@@ -525,7 +537,8 @@ body.presenting .stage-wrap.stack .na-light { flex: 1; height: auto; }
 .stations[data-stage="pause"] .stn-t td { color: #c0602c; }
 .stage-wrap.stack .stn.with-plan { grid-template-columns: 1fr; }
 .stage-wrap.stack .sig-btn { width: 140px; flex: none; }
-.stage-wrap.stack .md-sym { height: 150px; flex: none; }
+.stage-wrap.stack .md-sym { height: min(54vw, 240px); flex: none; }
+.stage-wrap.stack .md-name { font-size: min(10cqw, 44px); } .stage-wrap.stack .md-sub { font-size: 15px; }
 .dock { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .add-row { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .add-btn { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 14px 16px; border: 0; background: var(--surface); font-size: 13.5px; color: #4a4b55; white-space: nowrap; }
