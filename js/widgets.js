@@ -1,4 +1,5 @@
-// Weitere Objekte für den Unterrichtsbildschirm (seit 2.5.0): Zufallsauswahl, Arbeitsform mit Lautstärke-Ampel,
+// Weitere Objekte für den Unterrichtsbildschirm (seit 2.5.0): Zufallsauswahl, Arbeitsform mit Lautstärke-Ampel (seit 2.25.0
+// auch als eigenes Objekt „Lautstärke-Ampel“, Mikrofon wahlweise auf dem Handy),
 // Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.
 // js/screen.js bindet sie ein: Rahmen, Ziehen, Größe und Speichern liegen dort, Inhalt und Bedienung hier.
 import * as store from './store.js';
@@ -8,11 +9,13 @@ import * as groups from './groups.js';
 import * as hall from './hall.js';
 import { ANIMALS, animalSvg } from './animals.js';
 import { play, TONES, DEFAULT_INTERVAL_TONES } from './sound.js';
+import * as account from './account.js';
 
 export const ADD = [
   { kind: 'pick', label: 'Zufallsauswahl', ic: 'dice' },
   { kind: 'wheel', label: 'Glücksrad', ic: 'wheel' },
   { kind: 'mode', label: 'Arbeitsform', ic: 'mic' },
+  { kind: 'noise', label: 'Lautstärke-Ampel', ic: 'light' },
   { kind: 'task', label: 'Auftragskarte', ic: 'clipboard' },
   { kind: 'agenda', label: 'Stundenablauf', ic: 'list' },
   { kind: 'signal', label: 'Ruhezeichen', ic: 'bell' },
@@ -23,7 +26,7 @@ export const ADD = [
   { kind: 'board', label: 'Tafel', ic: 'edit' },
 ];
 export const TYPES = ADD.map(a => a.kind);
-export const MIN = { pick: [240, 220], wheel: [240, 280], mode: [240, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330], board: [300, 240] };
+export const MIN = { pick: [240, 220], wheel: [240, 280], mode: [240, 240], noise: [200, 240], task: [300, 220], agenda: [280, 240], signal: [180, 180], duty: [260, 220], queue: [240, 260], score: [380, 240], stations: [320, 330], board: [300, 240] };
 
 const arr = v => (Array.isArray(v) ? v : []);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -38,7 +41,8 @@ export function create(kind) {
   switch (kind) {
     case 'pick': return { type: 'pick', ...src, n: 1, drawn: [], current: [], width: 340, height: 300 };
     case 'wheel': return { type: 'wheel', preset: 'bewegung', items: WHEEL_PRESETS.bewegung.items.join('\n'), remove: false, sound: true, used: [], spin: null, rot: 0, label: 'Glücksrad – ' + WHEEL_PRESETS.bewegung.name, width: 440, height: 520 };
-    case 'mode': return { type: 'mode', mode: 'stille', mic: false, adj: 0, alarm: false, width: 320, height: 330 };
+    case 'mode': return { type: 'mode', mode: 'stille', mic: false, adj: 0, alarm: false, src: 'here', ...ALARM_DEFAULTS, width: 320, height: 330 };
+    case 'noise': return { type: 'noise', limit: 60, warn: 10, alarm: true, src: 'here', ...ALARM_DEFAULTS, width: 300, height: 470 };
     case 'task': return { type: 'task', must: '', extra: '', material: '', help: '', width: 620, height: 380 };
     case 'agenda': return { type: 'agenda', start: '', items: [{ min: 10, text: 'Einstieg' }, { min: 25, text: 'Arbeitsphase' }, { min: 10, text: 'Aufräumen und Abschluss' }], tone: 'none', width: 380, height: 330 };
     case 'signal': return { type: 'signal', tone: 'bowl', volume: 90, width: 240, height: 250 };
@@ -144,18 +148,43 @@ function readSrc(fd, x) {
 }
 
 // ---------- Arbeitsform ----------
-const MODES = {
-  stille: { name: 'Stille', sub: 'Ich arbeite allein und leise.', limit: 38, color: '#3d6c8a', svg: '<circle cx="50" cy="38" r="17"/><path d="M22 86a28 28 0 0 1 56 0"/><path d="M50 44v12" stroke-width="7"/>' },
-  fluestern: { name: 'Flüstern', sub: 'Nur mein Nachbar hört mich.', limit: 50, color: '#4e713a', svg: '<circle cx="34" cy="40" r="15"/><path d="M10 86a24 24 0 0 1 48 0"/><path d="M66 34q8 8 0 16M76 26q16 16 0 32"/>' },
-  partner: { name: 'Partnerarbeit', sub: 'Wir arbeiten zu zweit.', limit: 60, color: '#b8862b', svg: '<circle cx="32" cy="38" r="14"/><circle cx="68" cy="38" r="14"/><path d="M8 84a24 24 0 0 1 48 0M44 84a24 24 0 0 1 48 0"/>' },
-  gruppe: { name: 'Gruppenarbeit', sub: 'Wir arbeiten im Team.', limit: 68, color: '#b25125', svg: '<circle cx="50" cy="26" r="11"/><circle cx="24" cy="50" r="11"/><circle cx="76" cy="50" r="11"/><path d="M32 46a18 18 0 0 1 36 0M6 90a18 18 0 0 1 36 0M58 90a18 18 0 0 1 36 0"/>' },
-  plenum: { name: 'Alle hören zu', sub: 'Eine Person spricht, alle schauen nach vorn.', limit: 55, color: '#6a4c9c', svg: '<rect x="14" y="14" width="72" height="44" rx="6"/><path d="M50 58v14M30 86h40"/><circle cx="50" cy="36" r="9"/>' },
+// Bilder (seit 2.25.0): flächige Zeichnungen auf einem hellen Kreis in der Farbe der Arbeitsform.
+// Klassen: bg = Kreis, f = Figur (Farbe), l = helle Fläche, w = Weiß. Farben setzt styles.css (.md-art).
+const fig = (x, y, s = 1, cls = 'f', face = 'front') => {
+  const r = 8.5 * s, dx = face === 'left' ? -2.6 * s : face === 'right' ? 2.6 * s : 0, n = v => v.toFixed(1);
+  const eyes = face ? `<g class="eye"><circle cx="${n(x + dx - 3 * s)}" cy="${n(y - 0.6 * s)}" r="${n(1.25 * s)}"/><circle cx="${n(x + dx + 3 * s)}" cy="${n(y - 0.6 * s)}" r="${n(1.25 * s)}"/></g><path class="mouth" d="M${n(x + dx - 2.6 * s)} ${n(y + 3 * s)}q${n(2.6 * s)} ${n(2.4 * s)} ${n(5.2 * s)} 0"/>` : '';
+  return `<g class="${cls}"><circle cx="${x}" cy="${y}" r="${n(r)}"/><path d="M${n(x - 14 * s)} ${n(y + 27 * s)}q0-15.5 ${n(14 * s)}-15.5q${n(14 * s)} 0 ${n(14 * s)} 15.5z"/></g>${eyes}`;
 };
+const MODE_ART = {
+  stille: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(44, 42, 1.7, 'f', 'front').replace(/<path class="mouth"[^>]*>/, '')}
+    <rect class="hand" x="41.6" y="41.5" width="4.8" height="16" rx="2.4"/>
+    <path class="w" d="M66 14h20a5 5 0 0 1 5 5v9a5 5 0 0 1-5 5h-11l-6 5 1-5a5 5 0 0 1-4-5v-9a5 5 0 0 1 5-5z"/><text class="tx" x="76" y="27.3" text-anchor="middle">Pst!</text>`,
+  fluestern: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(33, 46, 1.2, 'f', 'right')}${fig(67, 46, 1.2, 'l2', 'front')}
+    <circle class="hand" cx="44.5" cy="48" r="4.2"/><path class="snd" d="M50 40q3 3 0 6M54 37q5 6 0 12"/>`,
+  partner: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(30, 50, 1.3, 'f', 'right')}${fig(70, 50, 1.3, 'l2', 'left')}
+    <path class="w" d="M38 12h24a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6h-9l-6 6 .5-6H38a6 6 0 0 1-6-6v-8a6 6 0 0 1 6-6z"/>
+    <g class="f"><circle cx="42" cy="22" r="2.4"/><circle cx="50" cy="22" r="2.4"/><circle cx="58" cy="22" r="2.4"/></g>`,
+  gruppe: `<circle class="bg" cx="50" cy="50" r="48"/>${fig(37, 28, 0.95, 'l2', 'front')}${fig(63, 28, 0.95, 'l2', 'front')}${fig(20, 49, 1.05, 'f', 'right')}${fig(80, 49, 1.05, 'f', 'left')}
+    <ellipse class="l" cx="50" cy="71" rx="28" ry="10.5"/><ellipse class="w" cx="50" cy="69" rx="21" ry="6.5"/><rect class="f" x="40" y="66" width="12" height="5" rx="1.5" opacity=".55"/><rect class="l" x="54" y="65.5" width="8" height="6" rx="1.5"/>`,
+  plenum: `<circle class="bg" cx="50" cy="50" r="48"/><rect class="f" x="20" y="13" width="60" height="35" rx="5"/><rect class="w" x="24" y="17" width="52" height="27" rx="3"/>
+    <path class="st" d="M30 26h22M30 34h32"/>${fig(25, 67, 0.95, 'l2', null)}${fig(50, 64, 1.05, 'f', null)}${fig(75, 67, 0.95, 'l2', null)}`,
+};
+const MODES = {
+  stille: { name: 'Stille', sub: 'Ich arbeite allein und leise.', limit: 38, color: '#3d6c8a' },
+  fluestern: { name: 'Flüstern', sub: 'Nur mein Nachbar hört mich.', limit: 50, color: '#4e713a' },
+  partner: { name: 'Partnerarbeit', sub: 'Wir arbeiten zu zweit.', limit: 60, color: '#b8862b' },
+  gruppe: { name: 'Gruppenarbeit', sub: 'Wir arbeiten im Team.', limit: 68, color: '#b25125' },
+  plenum: { name: 'Alle hören zu', sub: 'Eine Person spricht, alle schauen nach vorn.', limit: 55, color: '#6a4c9c' },
+};
+const artSvg = (k, cls = 'md-art') => `<svg class="${cls}" viewBox="0 0 100 100" aria-hidden="true">${MODE_ART[k]}</svg>`;
 const modeOf = w => (MODES[w.mode] ? w.mode : 'stille');
-const limitOf = w => clamp(MODES[modeOf(w)].limit + (Number(w.adj) || 0), 10, 95);
+// Grenze je Arbeitsform: seit 2.25.0 frei einstellbar (w.limits); ältere Objekte verschieben die Vorgabe mit w.adj
+const limitFor = (w, k) => clamp(Number(w.limits?.[k]) || MODES[k].limit + (Number(w.adj) || 0), 10, 95);
+const limitOf = w => (w.type === 'noise' ? clamp(Number(w.limit) || 60, 10, 95) : limitFor(w, modeOf(w)));
+const warnOf = w => clamp(Number(w.warn) || 10, 3, 30);
 
 // Mikrofon der Lautstärke-Ampel: läuft nur in diesem Tab, es wird nichts aufgenommen oder gesendet
-const mic = { state: 'off', level: 0, stream: null, ctx: null, analyser: null, buf: null, loudSince: 0, lastAlarm: 0 };
+const mic = { state: 'off', level: 0, stream: null, ctx: null, analyser: null, buf: null, readAt: 0 };
 async function micStart() {
   if (mic.state === 'on' || mic.state === 'starting') return;
   if (!navigator.mediaDevices?.getUserMedia) { mic.state = 'error'; return toast('Dieser Browser gibt das Mikrofon nicht frei.', { kind: 'warn' }); }
@@ -169,17 +198,103 @@ async function micStart() {
   } catch (e) { mic.state = 'error'; toast('Das Mikrofon wurde nicht freigegeben.', { kind: 'warn' }); }
 }
 export function micStop() {
+  sendStop();
   mic.stream?.getTracks().forEach(t => t.stop()); mic.ctx?.close().catch(() => {});
-  mic.stream = mic.ctx = mic.analyser = null; mic.state = 'off'; mic.level = 0; mic.loudSince = 0;
+  mic.stream = mic.ctx = mic.analyser = null; mic.state = 'off'; mic.level = 0;
 }
-// Pegel 0–100 (grob: −60 dB … 0 dB), geglättet
+// Pegel 0–100 (grob: −60 dB … 0 dB), geglättet; höchstens einmal je Bild gemessen, auch wenn mehrere Objekte lesen
 function micRead() {
   if (mic.state !== 'on') return 0;
+  const t = performance.now(); if (t - mic.readAt < 12) return mic.level; mic.readAt = t;
   mic.analyser.getFloatTimeDomainData(mic.buf);
   let sum = 0; for (const v of mic.buf) sum += v * v;
   const db = 20 * Math.log10(Math.sqrt(sum / mic.buf.length) || 1e-6), lv = clamp((db + 60) / 60 * 100, 0, 100);
   mic.level += (lv - mic.level) * (lv > mic.level ? 0.35 : 0.06);
   return mic.level;
+}
+
+// ---------- Handy als Mikrofon (seit 2.25.0) ----------
+// Ein Gerät (meist das Handy) misst und schickt nur den Pegel – verschlüsselt über das Konto (Tabelle live_mic) –
+// etwa jede 0,7 Sekunden. Die Geräte, die die Ampel zeigen (z. B. der PC am Beamer), holen ihn ab und spielen den Ton.
+// Wer sendet, gilt nur für diesen Tab und wird nicht gespeichert.
+const remote = { sending: false, sendT: 0, readT: 0, sendBusy: false, sendErr: '', poll: 0, pollBusy: false, want: 0, level: 0, shown: 0, lastAt: 0, recv: 0, err: '' };
+const SETUP_MSG = 'Die Datenbank kennt die Übertragung vom Handy noch nicht – supabase/setup.sql einmal ausführen.';
+const remoteErr = e => (e?.status === 404 || e?.code === 'PGRST202' || e?.code === 'PGRST205' || e?.code === '42P01' ? SETUP_MSG : 'Keine Verbindung zum Konto.');
+async function sendStart() {
+  if (!account.loggedIn()) return toast('Melde dich auf beiden Geräten mit demselben Konto an (Zahnrad → Konto).', { kind: 'warn' });
+  await micStart(); if (mic.state !== 'on') return;
+  remote.sending = true; remote.sendErr = '';
+  clearInterval(remote.readT); clearInterval(remote.sendT);
+  remote.readT = setInterval(micRead, 50);
+  remote.sendT = setInterval(async () => {
+    if (remote.sendBusy) return; remote.sendBusy = true;
+    try { await account.micPut({ lv: Math.round(mic.level), at: Date.now() }); remote.sendErr = ''; }
+    catch (e) { remote.sendErr = remoteErr(e); }
+    finally { remote.sendBusy = false; }
+  }, 700);
+}
+function sendStop() { clearInterval(remote.readT); clearInterval(remote.sendT); remote.sending = false; remote.sendErr = ''; }
+// Empfang: läuft nur, solange ein Objekt mit „Handy als Mikrofon“ zu sehen ist
+function wantRemote(now) {
+  remote.want = now;
+  if (remote.poll) return;
+  remote.poll = setInterval(async () => {
+    if (Date.now() - remote.want > 3000) { clearInterval(remote.poll); remote.poll = 0; return; }
+    if (remote.pollBusy || !account.loggedIn() || document.visibilityState !== 'visible') return;
+    remote.pollBusy = true;
+    try { const d = await account.micGet(); if (d && d.at !== remote.lastAt) { remote.lastAt = d.at; remote.level = clamp(Number(d.lv) || 0, 0, 100); remote.recv = Date.now(); } remote.err = ''; }
+    catch (e) { remote.err = remoteErr(e); }
+    finally { remote.pollBusy = false; }
+  }, 800);
+}
+const remoteFresh = () => Date.now() - remote.recv < 4000;
+const usesPhone = w => w.src === 'phone';
+// Aktueller Pegel für ein Objekt; null = (noch) kein Wert
+function levelOf(w, now) {
+  if (usesPhone(w) && !remote.sending) {
+    wantRemote(now);
+    if (!remoteFresh()) return null;
+    remote.shown += (remote.level - remote.shown) * 0.25;   // weich zum neuen Wert gleiten
+    return remote.shown;
+  }
+  return mic.state === 'on' ? micRead() : null;
+}
+function remoteText() {
+  if (!account.loggedIn()) return 'Auf PC und Handy mit demselben Konto anmelden.';
+  if (remote.err) return remote.err;
+  return remoteFresh() ? 'Handy ist verbunden.' : 'Wartet auf das Handy … Dort dieses Objekt öffnen und „Dieses Gerät als Mikrofon“ tippen.';
+}
+
+function micCtrl(w, small) {
+  if (usesPhone(w)) return remote.sending
+    ? `<button class="btn ghost sm" data-act="x-send-off" title="Dieses Gerät sendet die Lautstärke">${icon('x', 14)} Senden beenden</button>`
+    : `<button class="btn ghost sm" data-act="x-send" title="Dieses Gerät misst und schickt die Lautstärke an die anderen Geräte">${icon('mic', 14)} ${small ? 'Hier messen' : 'Dieses Gerät als Mikrofon'}</button>`;
+  return mic.state === 'on'
+    ? (small ? `<button class="icon-btn xs" data-act="x-mic-off" title="Mikrofon aus" aria-label="Mikrofon aus">${icon('x', 13)}</button>` : `<button class="btn ghost sm" data-act="x-mic-off">${icon('x', 14)} Mikrofon aus</button>`)
+    : `<button class="btn ${small ? 'ghost' : 'primary'} sm" data-act="x-mic">${icon('mic', 14)} ${small ? 'Start' : 'Mikrofon starten'}</button>`;
+}
+
+// ---------- Zu laut: Ton und rotes Aufleuchten (Arbeitsform und Lautstärke-Ampel) ----------
+const loud = new Map();   // je Objekt: seit wann zu laut, letzter Ton, Alarm sichtbar
+const ALARM_DEFAULTS = { delay: 3, pause: 20, tone: 'bowl', volume: 90, flash: true };
+const opt = (w, k) => w[k] ?? ALARM_DEFAULTS[k];
+function noiseTick(w, el, lv, now, { withSound, muted }) {
+  const st = loud.get(w.id) || { since: 0, quiet: 0, last: 0, on: false }; loud.set(w.id, st);
+  const lim = limitOf(w);
+  if (lv === null) { st.since = 0; st.on = false; }
+  else if (lv >= lim) {
+    st.quiet = 0; st.since ||= now;
+    if (now - st.since >= opt(w, 'delay') * 1000) {
+      st.on = true;
+      if (w.alarm && withSound && !muted && !(usesPhone(w) && remote.sending) && now - st.last >= opt(w, 'pause') * 1000) { st.last = now; play(TONES[w.tone] ? w.tone : 'bowl', opt(w, 'volume') / 100); }
+    }
+  } else {
+    st.since = 0;
+    if (st.on && lv < lim - 3) { st.quiet ||= now; if (now - st.quiet > 1200) { st.on = false; st.quiet = 0; } }
+  }
+  const zone = lv === null ? 'off' : lv >= lim ? 'red' : lv >= lim - warnOf(w) ? 'yellow' : 'green';
+  el.classList.toggle('too-loud', st.on && opt(w, 'flash') !== false);
+  return zone;
 }
 
 // ---------- Stundenablauf ----------
@@ -291,9 +406,17 @@ export function html(w, { ctrl }) {
     }
     case 'mode': {
       const id = modeOf(w), m = MODES[id];
-      return [`<div class="md-sym" style="--md:${m.color}"><svg viewBox="0 0 100 100" aria-hidden="true">${m.svg}</svg></div><p class="md-name" style="--md:${m.color}">${m.name}</p><p class="md-sub">${m.sub}</p>
-        ${w.mic ? `<div class="md-meter" data-live="meter"><span class="md-lamp"></span><span class="md-bar"><i data-live="level"></i><b style="left:${limitOf(w)}%"></b></span>${mic.state === 'on' ? `<button class="icon-btn xs" data-act="x-mic-off" title="Mikrofon aus" aria-label="Mikrofon aus">${icon('x', 13)}</button>` : `<button class="btn ghost sm" data-act="x-mic">${icon('mic', 14)} Start</button>`}</div>` : ''}
-        <div class="md-pick no-present" role="group" aria-label="Arbeitsform wählen">${Object.entries(MODES).map(([k, v]) => `<button class="md-btn ${k === id ? 'on' : ''}" data-act="x-mode" data-mode="${k}" style="--md:${v.color}" title="${v.name}"><svg viewBox="0 0 100 100" aria-hidden="true">${v.svg}</svg></button>`).join('')}</div>`, 'mode'];
+      return [`<div class="md-sym" style="--md:${m.color}">${artSvg(id)}<span class="loud-badge" aria-hidden="true">Zu laut!</span></div><p class="md-name" style="--md:${m.color}">${m.name}</p><p class="md-sub">${m.sub}</p>
+        ${w.mic ? `<div class="md-meter" data-live="meter" data-zone="off"><span class="md-lamps"><i class="r"></i><i class="y"></i><i class="g"></i></span><span class="md-bar"><i data-live="level"></i><b style="left:${limitOf(w)}%"></b></span>${micCtrl(w, true)}</div>${usesPhone(w) ? '<p class="w-state no-present md-remote" data-live="remote"></p>' : ''}` : ''}
+        <div class="md-pick no-present" role="group" aria-label="Arbeitsform wählen">${Object.keys(MODES).map(k => `<button class="md-btn ${k === id ? 'on' : ''}" data-act="x-mode" data-mode="${k}" style="--md:${MODES[k].color}" title="${MODES[k].name}" aria-label="${MODES[k].name}">${artSvg(k)}</button>`).join('')}</div>`, 'mode'];
+    }
+    case 'noise': {
+      const lim = limitOf(w), wb = warnOf(w);
+      return [`<div class="na">
+        <div class="na-light" data-live="light" data-zone="off" aria-hidden="true"><span class="na-visor"></span><i class="na-lamp r"></i><i class="na-lamp y"></i><i class="na-lamp g"></i></div>
+        <div class="na-info"><p class="na-msg" data-live="msg" aria-live="polite"></p>
+          <div class="na-bar" data-live="meter" data-zone="off"><i data-live="level"></i><b class="na-y" style="left:${lim - wb}%"></b><b style="left:${lim}%"></b></div>
+          <div class="w-ctrl no-present">${micCtrl(w, false)}</div>${usesPhone(w) ? '<p class="w-state no-present" data-live="remote"></p>' : ''}</div></div>`, 'noise'];
     }
     case 'task': {
       const must = lines(w.must), extra = lines(w.extra), mat = lines(w.material), help = lines(w.help);
@@ -374,12 +497,15 @@ export function live(w, el, q, now, { withSound, muted, st }) {
     }
     return;
   }
-  if (w.type === 'mode' && w.mic) {
-    const lv = micRead(), lim = limitOf(w), meter = q('meter'); if (!meter) return;
-    const bar = q('level'); if (bar) bar.style.width = lv.toFixed(0) + '%';
-    const zone = mic.state !== 'on' ? 'off' : lv >= lim ? 'red' : lv >= lim - 10 ? 'yellow' : 'green';
-    if (meter.dataset.zone !== zone) meter.dataset.zone = zone;
-    if (zone === 'red') { mic.loudSince ||= now; if (w.alarm && withSound && !muted && now - mic.loudSince > 2500 && now - mic.lastAlarm > 20000) { mic.lastAlarm = now; play('bowl', 0.9); } } else mic.loudSince = 0;
+  if ((w.type === 'mode' && w.mic) || w.type === 'noise') {
+    const lv = levelOf(w, now), zone = noiseTick(w, el, lv, now, { withSound, muted });
+    const bar = q('level'); if (bar) bar.style.width = (lv ?? 0).toFixed(0) + '%';
+    for (const k of ['meter', 'light']) { const m = q(k); if (m && m.dataset.zone !== zone) m.dataset.zone = zone; }
+    const msg = q('msg');
+    if (msg) { const t = lv === null ? (usesPhone(w) && !remote.sending ? 'Handy-Mikrofon' : 'Mikrofon aus') : el.classList.contains('too-loud') ? 'Zu laut!' : zone === 'red' ? 'Leiser!' : zone === 'yellow' ? 'Etwas leiser' : 'Gut so!';
+      if (msg.textContent !== t) { msg.textContent = t; msg.dataset.zone = zone; } }
+    const rt = q('remote');
+    if (rt) { const t = remote.sending ? (remote.sendErr || 'Dieses Gerät misst und sendet die Lautstärke. Bildschirm anlassen.') : remoteText(); if (rt.textContent !== t) rt.textContent = t; }
   } else if (w.type === 'agenda') {
     const a = agendaState(w, now), foot = q('agfoot');
     el.querySelectorAll('.ag li').forEach((li, i) => {
@@ -401,7 +527,7 @@ export function live(w, el, q, now, { withSound, muted, st }) {
     });
   }
 }
-export const wantsFrame = w => (w.type === 'mode' && w.mic && mic.state === 'on') || (w.type === 'wheel' && !wheelDone(w, Date.now()));
+export const wantsFrame = w => (((w.type === 'mode' && w.mic) || w.type === 'noise') && (mic.state === 'on' || usesPhone(w))) || (w.type === 'wheel' && !wheelDone(w, Date.now()));
 
 // ======================================================================
 // Bedienung
@@ -456,6 +582,8 @@ export function click(act, w, b) {
     case 'x-mode': patch(id, x => { x.mode = b.dataset.mode; }); return true;
     case 'x-mic': micStart().then(() => patch(id, () => {})); return true;
     case 'x-mic-off': micStop(); patch(id, () => {}); return true;
+    case 'x-send': sendStart().then(() => patch(id, () => {})); return true;
+    case 'x-send-off': micStop(); patch(id, () => {}); return true;
     case 'x-agenda-now': patch(id, x => { x.start = hhmm(new Date()); }); return true;
     case 'x-signal': play(TONES[w.tone] ? w.tone : 'bowl', (w.volume ?? 90) / 100); return true;
     case 'x-duty': { const p = dutyPlan(w); if (p.total) patch(id, x => { x.offset = (((Number(x.offset) || 0) + Number(b.dataset.d) * Math.max(1, Math.min(p.slots, p.total))) % p.total + p.total) % p.total; }); return true; }
@@ -483,6 +611,42 @@ const toneSelect = (name, cur, none = false) => `<span class="tone-row"><select 
 const bindToneTest = el => el.querySelectorAll('[data-tone-test]').forEach(btn => btn.onclick = () => { const v = el.querySelector(`[name="${btn.dataset.toneTest}"]`).value; if (v !== 'none') play(v, Number(el.querySelector('[name=volume]')?.value ?? 80) / 100); });
 const area = (name, label, val, rows = 4, ph = '') => `<label class="field">${label}<textarea name="${name}" class="input" rows="${rows}" placeholder="${esc(ph)}">${esc(val || '')}</textarea></label>`;
 const volField = v => `<label class="field">Lautstärke <output>${v} %</output><input type="range" min="0" max="100" step="5" name="volume" value="${v}" oninput="this.previousElementSibling.value=this.value+' %'"></label>`;
+
+// ---------- Einstellungen der Lautstärke (Arbeitsform und Lautstärke-Ampel) ----------
+const secOpts = (list, cur) => list.map(v => `<option value="${v}" ${Number(cur) === v ? 'selected' : ''}>${v < 60 ? `${v} Sekunde${v === 1 ? '' : 'n'}` : `${v / 60} Minute${v === 60 ? '' : 'n'}`}</option>`).join('');
+const srcSelect = w => `<label class="field">Mikrofon<select name="src" class="select"><option value="here" ${usesPhone(w) ? '' : 'selected'}>Mikrofon dieses Geräts</option><option value="phone" ${usesPhone(w) ? 'selected' : ''}>Handy als Mikrofon (über das Konto)</option></select></label>
+  <p class="muted small-text" data-src-hint ${usesPhone(w) ? '' : 'hidden'}>Auf PC und Handy mit demselben Konto anmelden. Auf dem Handy den Bildschirm öffnen und bei diesem Objekt „Dieses Gerät als Mikrofon“ tippen, das Handy offen liegen lassen. Übertragen wird nur die Lautstärke als Zahl – verschlüsselt, etwa jede Sekunde. Ton und Anzeige kommen vom PC.</p>`;
+const levelPreview = () => `<div class="nz-prev"><span>Jetzt gemessen</span><span class="md-bar"><i data-prev-level></i></span><output data-prev-val>–</output><button type="button" class="btn ghost sm" data-prev-mic>${icon('mic', 14)} Messen</button></div>`;
+const limitSlider = (name, label, val, color) => `<label class="field nz-lim" style="--c:${color}"><span>${label} <output>${val}</output></span><input type="range" min="10" max="95" step="1" name="${name}" value="${val}" oninput="this.parentElement.querySelector('output').value=this.value"></label>`;
+const alarmFields = w => `<fieldset class="nz-set"><legend>Wenn es zu laut ist</legend>
+    <label class="field">Zu laut gilt, wenn es so lange über der Grenze ist<select name="delay" class="select">${secOpts([1, 2, 3, 5, 8, 10, 15], opt(w, 'delay'))}</select></label>
+    <label class="check"><input type="checkbox" name="flash" ${opt(w, 'flash') !== false ? 'checked' : ''}> Rot aufleuchten und groß „Zu laut!“ zeigen</label>
+    <label class="check"><input type="checkbox" name="alarm" ${w.alarm ? 'checked' : ''}> Ton spielen</label>
+    <div class="two"><label class="field">Ton${toneSelect('tone', TONES[w.tone] ? w.tone : 'bowl')}</label>${volField(opt(w, 'volume'))}</div>
+    <label class="field">Ton höchstens alle<select name="pause" class="select">${secOpts([5, 10, 20, 30, 60, 120], opt(w, 'pause'))}</select></label></fieldset>
+  <p class="muted small-text">Das Mikrofon wird nur ausgewertet – nichts wird aufgenommen oder gespeichert. Der Browser fragt beim ersten Start nach der Freigabe.</p>`;
+function readAlarm(fd, x) {
+  x.src = fd.get('src') === 'phone' ? 'phone' : 'here';
+  x.delay = clamp(Number(fd.get('delay')) || 3, 1, 15); x.pause = clamp(Number(fd.get('pause')) || 20, 5, 120);
+  x.flash = fd.get('flash') === 'on'; x.alarm = fd.get('alarm') === 'on';
+  x.tone = TONES[fd.get('tone')] ? String(fd.get('tone')) : 'bowl'; x.volume = clamp(Number(fd.get('volume')), 0, 100);
+}
+// Im Fenster: gemessene Lautstärke laufend zeigen, damit sich die Grenze passend einstellen lässt
+function noiseDialog(el) {
+  bindToneTest(el);
+  const src = el.querySelector('[name=src]'), hint = el.querySelector('[data-src-hint]'), micBtn = el.querySelector('[data-prev-mic]');
+  const sync = () => { hint.hidden = src.value !== 'phone'; micBtn.style.display = src.value === 'phone' || mic.state === 'on' ? 'none' : ''; };
+  src.onchange = sync; sync();
+  micBtn.onclick = () => micStart().then(sync);
+  const bar = el.querySelector('[data-prev-level]'), val = el.querySelector('[data-prev-val]');
+  const t = setInterval(() => {
+    if (!el.isConnected) return clearInterval(t);
+    const phone = src.value === 'phone' && !remote.sending;
+    if (phone) wantRemote(Date.now());
+    const lv = phone ? (remoteFresh() ? remote.level : null) : mic.state === 'on' ? micRead() : null;
+    bar.style.width = (lv ?? 0).toFixed(0) + '%'; val.value = lv === null ? '–' : Math.round(lv);
+  }, 100);
+}
 
 export function settings(w, { durField, readDur, toneFields, readTone }) {
   switch (w.type) {
@@ -517,11 +681,24 @@ export function settings(w, { durField, readDur, toneFields, readTone }) {
     case 'pick': return { body: `${srcField(w)}<label class="field">Wie viele auf einmal?<select name="n" class="select">${[1, 2, 3, 4, 5, 6].map(n => `<option ${Number(w.n) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <p class="muted small-text">Wer gezogen wurde, kommt erst wieder dran, wenn alle an der Reihe waren.</p>`,
       apply: (fd, x) => { readSrc(fd, x); x.n = clamp(Number(fd.get('n')) || 1, 1, 6); } };
-    case 'mode': return { body: `<label class="check"><input type="checkbox" name="mic" ${w.mic ? 'checked' : ''}> Lautstärke-Ampel mit dem Mikrofon dieses Geräts</label>
-      <label class="field">Empfindlichkeit der Ampel <output>${Number(w.adj) || 0}</output><input type="range" min="-25" max="25" step="5" name="adj" value="${Number(w.adj) || 0}" oninput="this.previousElementSibling.value=this.value"></label>
-      <label class="check"><input type="checkbox" name="alarm" ${w.alarm ? 'checked' : ''}> Klangschale, wenn es länger zu laut ist (höchstens alle 20 Sekunden)</label>
-      <p class="muted small-text">Jede Arbeitsform hat eine eigene Grenze (Stille streng, Gruppenarbeit großzügig). Der Regler verschiebt sie: nach links strenger, nach rechts großzügiger. Das Mikrofon wird nur ausgewertet – nichts wird aufgenommen, gespeichert oder gesendet. Der Browser fragt beim Start nach der Freigabe.</p>`,
-      apply: (fd, x) => { x.mic = fd.get('mic') === 'on'; x.adj = clamp(Number(fd.get('adj')) || 0, -25, 25); x.alarm = fd.get('alarm') === 'on'; if (!x.mic) micStop(); } };
+    case 'mode': return { wide: true, body: `<label class="check"><input type="checkbox" name="mic" ${w.mic ? 'checked' : ''}> Lautstärke-Ampel unter der Arbeitsform zeigen</label>
+      <div data-noise-opts ${w.mic ? '' : 'hidden'}>${srcSelect(w)}
+      <fieldset class="nz-set"><legend>Ab wann ist es zu laut? <small class="muted">(je Arbeitsform; links strenger, rechts großzügiger)</small></legend>
+        ${levelPreview()}
+        ${Object.keys(MODES).map(k => limitSlider('lim_' + k, MODES[k].name, limitFor(w, k), MODES[k].color)).join('')}
+        <p class="muted small-text">Gelb leuchtet es 10 Punkte unter der Grenze. <button type="button" class="link" data-lim-reset>Vorgaben wiederherstellen</button></p></fieldset>
+      ${alarmFields(w)}</div>`,
+      onOpen: el => { const box = el.querySelector('[name=mic]'); box.onchange = () => { el.querySelector('[data-noise-opts]').hidden = !box.checked; };
+        el.querySelector('[data-lim-reset]').onclick = () => Object.keys(MODES).forEach(k => { const i = el.querySelector(`[name=lim_${k}]`); i.value = MODES[k].limit; i.dispatchEvent(new Event('input')); });
+        noiseDialog(el); },
+      apply: (fd, x) => { x.mic = fd.get('mic') === 'on'; if (fd.has('lim_stille')) { x.limits = Object.fromEntries(Object.keys(MODES).map(k => [k, clamp(Number(fd.get('lim_' + k)) || MODES[k].limit, 10, 95)])); x.adj = 0; } readAlarm(fd, x); if (!x.mic && !remote.sending) micStop(); } };
+    case 'noise': return { wide: true, body: `${srcSelect(w)}
+      <fieldset class="nz-set"><legend>Ab wann ist es zu laut?</legend>${levelPreview()}
+        ${limitSlider('limit', 'Grenze (Rot)', limitOf(w), '#d0453a')}
+        <label class="field">Gelb schon <output>${warnOf(w)}</output> Punkte vorher<input type="range" min="3" max="30" step="1" name="warn" value="${warnOf(w)}" oninput="this.parentElement.querySelector('output').value=this.value"></label></fieldset>
+      ${alarmFields(w)}`,
+      onOpen: noiseDialog,
+      apply: (fd, x) => { x.limit = clamp(Number(fd.get('limit')) || 60, 10, 95); x.warn = clamp(Number(fd.get('warn')) || 10, 3, 30); readAlarm(fd, x); } };
     case 'task': return { wide: true, body: `<div class="two">${area('must', 'Pflicht <small class="muted">(eine Zeile je Schritt)</small>', w.must, 6, 'Werkstück anreißen\nSägen\nKanten feilen')}${area('material', 'Material und Werkzeug', w.material, 6, 'Feinsäge\nSchraubzwinge')}</div>
       <div class="two">${area('extra', 'Zusatz <small class="muted">(für Schnelle)</small>', w.extra, 3)}${area('help', 'Hilfe', w.help, 3, 'Hilfeheft Seite 4\nErst Partner fragen')}</div>`,
       apply: (fd, x) => { for (const k of ['must', 'extra', 'material', 'help']) x[k] = lines(fd.get(k), 12, 80).join('\n'); } };

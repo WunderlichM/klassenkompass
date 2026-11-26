@@ -8,7 +8,7 @@
 import * as store from './store.js';
 import * as groups from './groups.js';
 import { uid, mixGroups } from './engine.js';
-import { esc, icon, dialog, confirmDialog, toast, downloadFile, toggleFullscreen, hooks, helpCard, onViewportChange, fitZoom, palStyle } from './ui.js';
+import { esc, icon, dialog, confirmDialog, toast, displayDate, downloadFile, toggleFullscreen, hooks, helpCard, onViewportChange, fitZoom, palStyle } from './ui.js';
 import * as sound from './sound.js';
 import * as images from './images.js';
 
@@ -105,6 +105,7 @@ function drawHome() {
             <div class="tools"><button class="btn primary big" data-act="start" ${b && n && teamOk ? '' : 'disabled'}>${icon('play', 16)} Spiel starten</button></div>
           </div>
         </div>
+        ${resultsCard(lg)}
       </div>
       <aside class="side">
         <div class="card">
@@ -127,6 +128,32 @@ function drawHome() {
     </div>
   </section>`;
 }
+// ---------- Ergebnisse (seit 2.25.0) ----------
+const results = () => (Q().jresults || []).slice().sort((a, b) => b.at - a.at);
+const resultRow = r => { const win = r.teams.filter(t => t.place === 1);
+  return `<li><button class="result-row" data-act="result" data-id="${esc(r.id)}"><span class="r-date">${esc(displayDate(r.date))}</span><span class="r-title"><b>${esc(r.title)}</b><small>${r.groupName ? esc(r.groupName) + ' · ' : ''}${r.teams.length} Teams · ${r.played} von ${r.total} Feldern</small></span><span class="r-score jr-win" title="Platz 1">${icon('trophy', 14)} ${win.map(t => esc(t.name)).join(' / ')} · ${win[0]?.pts ?? 0}</span></button></li>`; };
+function resultsCard(lg) {
+  const all = results(), mine = lg ? all.filter(r => r.groupId === lg.id) : all, list = mine.slice(0, 5);
+  return `<div class="card"><h3>${icon('chart', 16)} Ergebnisse${lg ? ` <span class="badge">${mine.length}</span>` : ''}</h3>
+    ${list.length ? `<ul class="result-list">${list.map(resultRow).join('')}</ul>` : `<p class="muted small-text">Noch keine Ergebnisse${lg ? ' für diese Lerngruppe' : ''}. Nach jeder Siegerehrung erscheint das Spiel hier.</p>`}
+    ${all.length > list.length ? `<button class="btn ghost sm" data-act="results-all" style="margin-top:8px">Alle ${all.length} Ergebnisse</button>` : ''}</div>`;
+}
+const resultTable = r => `<div class="table-scroll"><table class="table-std rank-table"><thead><tr><th>Platz</th><th>Team</th><th>Kinder</th><th>Punkte</th></tr></thead>
+  <tbody>${r.teams.map(t => `<tr class="${t.place === 1 ? 'gold' : t.place === 2 ? 'silver' : t.place === 3 ? 'bronze' : ''}"><td class="place">${t.place}</td><td><b>${esc(t.name)}</b></td><td>${t.n || '–'}</td><td>${t.pts}</td></tr>`).join('')}</tbody></table></div>`;
+function resultDialog(id) {
+  const r = results().find(x => x.id === id); if (!r) return;
+  dialog({ title: r.title, submit: null, cancel: 'Schließen', body: `<p class="muted small-text">${esc(displayDate(r.date))}${r.groupName ? ' · ' + esc(r.groupName) : ''} · ${r.played} von ${r.total} Feldern gespielt</p>${resultTable(r)}
+    <div class="jeo-ed-tools"><button type="button" class="btn ghost sm" data-x="csv">${icon('download', 15)} CSV</button><button type="button" class="btn ghost sm danger-text" data-x="del">${icon('trash', 15)} Löschen</button></div>`,
+    onOpen: (el, close) => {
+      el.querySelector('[data-x=csv]').onclick = () => downloadFile(`jeopardy-${r.date}-${r.title.replace(/[^\wäöüß-]+/gi, '_')}.csv`, '\ufeffPlatz;Team;Kinder;Punkte\n' + r.teams.map(t => [t.place, '"' + t.name.replace(/"/g, '""') + '"', t.n, t.pts].join(';')).join('\n'));
+      el.querySelector('[data-x=del]').onclick = async () => { if (await confirmDialog('Ergebnis löschen', `Das Ergebnis „${r.title}“ vom ${displayDate(r.date)} löschen?`)) { store.update(s => { s.quiz.jresults = (s.quiz.jresults || []).filter(x => x.id !== id); }); close(); toast('Ergebnis gelöscht.'); } };
+    } });
+}
+function resultsDialog() {
+  dialog({ title: 'Jeopardy-Ergebnisse', submit: null, cancel: 'Schließen', body: `<ul class="result-list">${results().map(resultRow).join('')}</ul>`,
+    onOpen: (el, close) => el.querySelectorAll('[data-act=result]').forEach(x => x.onclick = () => { close(); resultDialog(x.dataset.id); }) });
+}
+
 function boardPreview(b) {
   return `<div class="jeo-prev" style="--cols:${b.categories.length}">${b.categories.map(c => `<div class="jp-col"><b class="jp-cat">${esc(c.name) || '<span class="muted">(ohne Namen)</span>'}</b>${c.questions.map((q, r) => `<div class="jp-q ${filled(q) ? '' : 'empty'}"><span class="jp-pts">${POINTS[r]}</span>${filled(q) ? `${q.img ? images.imgTag(q.img, 'jp-thumb') : ''}<span>${esc(q.text)}</span><small>→ ${esc(q.answer)}</small>` : '<span class="muted">leer</span>'}</div>`).join('')}</div>`).join('')}</div>`;
 }
@@ -194,11 +221,28 @@ function questionHtml(g, b) {
   </div>`;
 }
 
+// Platz je Team: nach Punkten, Gleichstand teilt sich einen Platz
+function places(g) {
+  const levels = [...new Set(g.teams.map(t => g.scores[t.id] ?? 0))].sort((a, b) => b - a);
+  return t => levels.indexOf(g.scores[t.id] ?? 0) + 1;
+}
+// Ergebnis speichern (seit 2.25.0), sobald die Siegerehrung kommt. Wird das Spiel wieder geöffnet und erneut beendet,
+// ersetzt das neue Ergebnis das alte (gleiche Spielkennung). Keine Namen von Kindern – nur Teamname und Zahl der Kinder.
+function recordResult(g, s) {
+  const b = (s.quiz.boards || []).find(x => x.id === g.boardId), place = places(g), all = b ? fields(b) : [];
+  const d = new Date(g.at || Date.now()), date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const r = { id: g.id, gameId: g.id, at: Date.now(), date, title: g.title, boardId: g.boardId, groupId: g.groupId, groupName: groups.byId(g.groupId)?.name || '',
+    played: all.filter(k => k in g.used).length, total: all.length,
+    teams: g.teams.map(t => ({ name: t.name, pts: g.scores[t.id] ?? 0, place: place(t), n: t.members.length })).sort((a, b) => a.place - b.place || b.pts - a.pts) };
+  const list = (s.quiz.jresults ||= []), i = list.findIndex(x => x.id === r.id);
+  if (i >= 0) list[i] = r; else list.push(r);
+  if (list.length > store.JRESULT_MAX) list.splice(0, list.length - store.JRESULT_MAX);
+}
+
 // Siegerehrung: Teams nach Punkten, Gleichstand teilt sich einen Platz
 function drawPodium(g) {
   const members = teamNames(g), ti = id => g.teams.findIndex(t => t.id === id);
-  const levels = [...new Set(g.teams.map(t => g.scores[t.id] ?? 0))].sort((a, b) => b - a);
-  const place = t => levels.indexOf(g.scores[t.id] ?? 0) + 1;
+  const place = places(g);
   const sorted = g.teams.slice().sort((a, b) => (g.scores[b.id] ?? 0) - (g.scores[a.id] ?? 0));
   const step = n => { const ts = sorted.filter(t => place(t) === n); if (!ts.length) return '<div class="pod-col empty"></div>';
     return `<div class="pod-col p${n}"><div class="pod-names">${ts.map(t => `<span style="${palStyle(ti(t.id))}"><span class="gdot"></span> ${esc(t.name)}</span>${g.showNames ? `<small class="jt-mem">${members(t).map(esc).join(' · ')}</small>` : ''}`).join('')}</div>
@@ -269,15 +313,17 @@ async function onClick(e) {
     case 'nobody': return play(x => { const c = x.cur; if (!c) return; x.used[key(c.c, c.r)] = ''; delete c.won; c.step = 'a'; c.show = true; });
     case 'back': return play(x => { if (!x.cur || x.cur.step !== 'a') return; x.cur = null; x.turn = (x.turn + 1) % x.teams.length; });
     case 'score': return g && scoreDialog(g, b.dataset.id);
-    case 'finish': return play(x => { x.cur = null; x.done = true; });
+    case 'finish': return play((x, st) => { x.cur = null; x.done = true; recordResult(x, st); });
     case 'reopen': confettiFor = ''; return play(x => { x.done = false; });
     case 'end': {
       if (!g) return;
       const any = Object.keys(g.used).length;
       if (!any) { if (await confirmDialog('Spiel beenden', 'Das Spiel hat noch nicht begonnen. Beenden?', 'Beenden')) store.update(s => { delete s.quiz.jgame; }); return; }
-      if (await confirmDialog('Spiel beenden', 'Spiel jetzt beenden und die Siegerehrung zeigen?', 'Siegerehrung')) play(x => { x.cur = null; x.done = true; });
+      if (await confirmDialog('Spiel beenden', 'Spiel jetzt beenden und die Siegerehrung zeigen? Das Ergebnis wird unter „Ergebnisse“ gespeichert.', 'Siegerehrung')) play((x, st) => { x.cur = null; x.done = true; recordResult(x, st); });
       return;
     }
+    case 'result': return resultDialog(b.dataset.id);
+    case 'results-all': return resultsDialog();
     case 'close': confettiFor = ''; if (document.body.classList.contains('presenting')) toggleFullscreen(); return store.update(s => { delete s.quiz.jgame; });
   }
 }

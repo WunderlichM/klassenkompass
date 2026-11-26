@@ -123,6 +123,39 @@ $$;
 revoke all on function public.clear_live_quiz() from public, anon;
 grant execute on function public.clear_live_quiz() to authenticated;
 
+-- ---------- Handy als Mikrofon (ab Version 2.25.0) ----------
+-- Das Handy schreibt etwa jede Sekunde den gemessenen Pegel (verschlüsselt), der PC liest ihn. Eine Zeile je Konto.
+create table if not exists public.live_mic (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  data       text,
+  iv         text,
+  updated_at timestamptz not null default now(),
+  constraint live_mic_size check (coalesce(length(data), 0) <= 2000)
+);
+
+alter table public.live_mic enable row level security;
+
+drop policy if exists "eigenes Mikrofon lesen" on public.live_mic;
+create policy "eigenes Mikrofon lesen" on public.live_mic for select to authenticated using ((select auth.uid()) = user_id);
+revoke insert, update, delete on public.live_mic from anon, authenticated;
+
+create or replace function public.set_live_mic(p_ciphertext text, p_iv text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then raise exception 'nicht angemeldet' using errcode = '28000'; end if;
+  insert into public.live_mic (user_id, data, iv) values (v_uid, p_ciphertext, p_iv)
+  on conflict (user_id) do update set data = excluded.data, iv = excluded.iv, updated_at = now();
+end;
+$$;
+revoke all on function public.set_live_mic(text, text) from public, anon;
+grant execute on function public.set_live_mic(text, text) to authenticated;
+
 -- ---------- Quiz-Bilder im Konto (ab Version 1.8.0) ----------
 -- Bilder liegen im Dateispeicher (nicht in der Datenbank), je Konto im Ordner <user_id>/.
 -- Sie werden auf dem Gerät verschlüsselt; der Server speichert nur unlesbare Daten.

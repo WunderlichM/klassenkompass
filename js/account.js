@@ -186,6 +186,18 @@ export async function livePut(part, obj) {
   await call('/rest/v1/rpc/set_live_quiz', { method: 'POST', body: { p_part: part, p_ciphertext: payload.ciphertext, p_iv: payload.iv } });
 }
 export async function liveClear() { if (loggedIn()) await call('/rest/v1/rpc/clear_live_quiz', { method: 'POST', body: {} }); }
+// Handy als Mikrofon (seit 2.25.0): nur der Pegel (Zahl 0–100) mit Zeitstempel, verschlüsselt, eine Zeile je Konto
+export async function micGet() {
+  if (!loggedIn() || !navigator.onLine) return null;
+  const rows = await call(`/rest/v1/live_mic?select=data,iv&user_id=eq.${session.user.id}`);
+  const row = rows?.[0];
+  return row?.data ? decrypt({ ciphertext: row.data, iv: row.iv }) : null;
+}
+export async function micPut(obj) {
+  if (!loggedIn()) return;
+  const p = await encrypt(obj);
+  await call('/rest/v1/rpc/set_live_mic', { method: 'POST', body: { p_ciphertext: p.ciphertext, p_iv: p.iv } });
+}
 
 // ---------- Abgleich ----------
 async function pull() {

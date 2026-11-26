@@ -29,7 +29,7 @@ const allAdd = [...ADD, ...extra.ADD];
 // Leiste unten nach Art geordnet (seit 2.17.0); Objekte, die hier fehlen, landen unter „Weitere“
 const ADD_GROUPS = (() => {
   const g = [['Zeit', ['digital', 'circle', 'egg', 'stopwatch', 'people', 'interval']],
-    ['Ablauf', ['agenda', 'mode', 'task', 'signal', 'stations']],
+    ['Ablauf', ['agenda', 'mode', 'noise', 'task', 'signal', 'stations']],
     ['Klasse', ['pick', 'wheel', 'duty', 'queue', 'score']],
     ['Anzeige', ['board', 'qr', 'hall']]];
   const rest = allAdd.map(a => a.kind).filter(k => !g.some(([, ks]) => ks.includes(k)));
@@ -604,14 +604,15 @@ function layoutsDialog() {
 function helpDialog() {
   dialog({ title: 'Unterrichtsbildschirm – Hilfe', submit: null, cancel: 'Schließen', wide: true, body: `
     <ul class="help-list">
-      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Glücksrad, Arbeitsform, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.</li>
+      <li><b>Hinzufügen:</b> Unten ein Objekt wählen (bis zu 30). Obere Reihe: Timer, Stoppuhren, QR-Code und Hallenplan; untere Reihe: Zufallsauswahl, Glücksrad, Arbeitsform, Lautstärke-Ampel, Auftragskarte, Stundenablauf, Ruhezeichen, Dienste, Hilfe-Warteliste, Anzeigetafel, Stationen und Tafel.</li>
       <li><b>Verschieben:</b> Objekt an einer freien Stelle oder an der Kopfzeile ziehen – mit Maus oder Stift; mit dem Finger an der Kopfzeile. Auf dem Handy stehen die Objekte untereinander; für die freie Anordnung unten „Ansicht: Alles anzeigen“ wählen. Am Tablett hochkant stehen die Objekte in der großen Ansicht ebenfalls groß untereinander. Pfeiltasten verschieben ein ausgewähltes Objekt, Umschalt + Pfeiltaste ändert die Größe.</li>
       <li><b>Größe:</b> Die Ecke unten rechts ziehen oder im Zahnrad Breite und Höhe eingeben.</li>
       <li><b>Timer:</b> Am Zahnrad Titel, Dauer, Darstellung (Digital, Kreis, Ei) und den Endton einstellen: Klangschale (Standard), Glockenspiel, Windspiel, Gong, Wecker oder Pfiff – mit Probehören, Lautstärke, Wiederholungen und leisem Vorwarnton. Beim Ei-Timer schlüpft am Ende jedes Mal ein anderes Tier – echte und erfundene. Laufende Timer behalten ihre Endzeit auch nach dem Neuladen.</li>
       <li><b>Mehrpersonen-Stoppuhr:</b> Uhr starten, optional Vorname oder Startnummer eintragen und „Zeit speichern“ drücken. Die Uhr läuft weiter. Die Zeiten gibt es auch als Tabelle (CSV).</li>
       <li><b>Glücksrad:</b> Ein Klick bzw. Tippen aufs Rad dreht es. Im Zahnrad wählst du, wofür das Rad gilt – Bewegung, Retrospektive, Meckerrunde, Honigdusche, Zahlen 1–8, deine Lerngruppe oder eigene Felder – und kannst die Felder ändern oder einfügen (eine Zeile je Feld). Auf Wunsch werden gezogene Felder herausgenommen, bis alle dran waren.</li>
       <li><b>Zufallsauswahl:</b> Zieht ein Kind (oder mehrere) aus einer Lerngruppe, aus den Tieren des Kartenquiz oder aus Nummern – ohne Wiederholung, bis alle dran waren. Kinder, die im Bereich Gruppen als „fehlt heute“ markiert sind, werden übersprungen.</li>
-      <li><b>Arbeitsform:</b> Zeigt groß Stille, Flüstern, Partnerarbeit, Gruppenarbeit oder „Alle hören zu“. Am Zahnrad lässt sich eine Lautstärke-Ampel mit dem Mikrofon zuschalten; es wird nichts aufgenommen.</li>
+      <li><b>Arbeitsform:</b> Zeigt groß Stille, Flüstern, Partnerarbeit, Gruppenarbeit oder „Alle hören zu“. Am Zahnrad lässt sich eine Lautstärke-Ampel mit dem Mikrofon zuschalten – mit eigener Grenze je Arbeitsform, Ton nach Wahl und rotem Aufleuchten, wenn es zu laut ist; es wird nichts aufgenommen.</li>
+      <li><b>Lautstärke-Ampel:</b> Große Ampel mit Grün, Gelb und Rot. Grenze, Wartezeit und Ton am Zahnrad. Mit „Handy als Mikrofon“ misst das Handy (gleiches Konto) und der PC zeigt die Ampel und spielt den Ton.</li>
       <li><b>Auftragskarte:</b> Pflicht, Zusatz, Material und Hilfe – bleibt die ganze Arbeitsphase sichtbar.</li>
       <li><b>Stundenablauf:</b> Phasen mit Minuten; die laufende Phase ist hervorgehoben („noch 12 min · dann: Aufräumen“).</li>
       <li><b>Ruhezeichen:</b> Ein Knopf, der sofort einen Ton spielt (Standard: Klangschale).</li>
